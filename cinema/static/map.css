@@ -1,0 +1,3 @@
+html,body,#map { margin:0; width:100%; height:100%; }
+body { font-family:system-ui,sans-serif; background:#f3f5f7; }
+#map-error { position:absolute; inset:24px; padding:20px; background:#fff; z-index:1000; height:fit-content; }

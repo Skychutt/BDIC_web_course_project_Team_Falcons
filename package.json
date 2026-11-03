@@ -1,0 +1,18 @@
+{
+  "name": "falcons-cinema-browser-checks",
+  "private": true,
+  "description": "Optional browser verification; the website itself runs directly from Flask.",
+  "scripts": {
+    "check:customer": "node tests/browser/customer-smoke.mjs",
+    "check:account": "node tests/browser/account-smoke.mjs",
+    "check:operations": "node tests/browser/operations-smoke.mjs",
+    "check:counter": "node tests/browser/counter-smoke.mjs",
+    "check:hold-boundary": "node tests/browser/hold-boundary-smoke.mjs",
+    "check:assistant": "node --test tests/frontend/assistant-link.test.mjs",
+    "check:maps": "node --test tests/frontend/geo.test.mjs tests/frontend/amap.test.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  },
+  "type": "module"
+}

@@ -1,0 +1,294 @@
+/* Personal-centre styles are intentionally scoped to this view. */
+.account-page .account-wallet {
+  margin-bottom: 22px;
+  padding: 25px 30px;
+  background: var(--forest);
+  border-color: var(--forest);
+  color: #fffefa;
+}
+.account-page .account-wallet .toolbar {
+  margin-bottom: 0;
+}
+.account-page .account-wallet .muted {
+  color: #d4dfd1;
+  font-size: 12px;
+}
+.account-page .account-wallet p {
+  margin: 0;
+  line-height: 1.8;
+}
+.account-page #account-balance {
+  margin: 7px 0 0;
+  font-size: clamp(30px, 4vw, 39px);
+  font-weight: 500;
+  letter-spacing: -1px;
+  font-variant-numeric: tabular-nums;
+}
+.account-page .tabs {
+  margin-bottom: 28px;
+}
+.account-page .tab {
+  min-height: 48px;
+}
+.account-page .actions {
+  margin-top: 0;
+}
+.account-page .panel-header {
+  align-items: flex-start;
+}
+.account-page .panel-header > div {
+  min-width: 0;
+}
+.account-page .panel-header h2 {
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.account-page .panel-header .eyebrow {
+  margin-bottom: 8px;
+}
+.account-page .panel-header .badge {
+  flex-shrink: 0;
+}
+.account-page .account-booking-facts {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 20px 0 6px;
+  border-top: 1px solid var(--line);
+  margin-top: 22px;
+}
+.account-page .form-grid > div > .muted {
+  font-size: 11px;
+}
+.account-page .form-grid > div > p {
+  margin: 5px 0 14px;
+  font-size: 14px;
+}
+.account-page [data-booking] > .toolbar {
+  margin-top: 13px;
+  font-size: 11px;
+}
+.account-page [data-order-details] {
+  border-top: 1px solid var(--line);
+  padding-top: 15px;
+}
+.account-page [data-order-details] > summary {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  background: transparent;
+  padding: 10px 0;
+  border: none;
+  text-align: left;
+  list-style: none;
+  font-size: 12px;
+}
+.account-page [data-order-details] > summary::-webkit-details-marker {
+  display: none;
+}
+.account-page [data-order-details] > summary::after {
+  content: "+";
+  font-size: 20px;
+  font-weight: 400;
+}
+.account-page [data-order-details][open] > summary::after {
+  content: "−";
+}
+.account-page [data-order-details] > summary:hover {
+  color: var(--accent-dark);
+  background: transparent;
+}
+.account-page [data-order-details][open] [data-detail-content] {
+  padding-top: 20px;
+}
+.account-page [data-detail-content] .stack {
+  gap: 15px;
+}
+.account-page [data-detail-content] .form-grid {
+  gap: 4px 20px;
+}
+.account-page [data-detail-content] h4 {
+  margin: 8px 0 13px;
+  font-size: 12px;
+}
+.account-page [data-detail-content] p {
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.account-page [data-detail-content] .split {
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.account-page [data-detail-content] a {
+  color: var(--accent-dark);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.account-page .table caption {
+  text-align: left;
+  font-size: 11px;
+  margin: 0 0 12px;
+}
+.account-page .table-wrap:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 4px;
+}
+.account-page .account-table-hint {
+  display: none;
+}
+.account-page .table td {
+  overflow-wrap: anywhere;
+}
+.account-page .table td:nth-last-child(-n + 2) {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.account-page .table td p {
+  font-size: 10px;
+  margin: 4px 0 0;
+}
+.account-page .badge {
+  font-size: 10px;
+  white-space: normal;
+}
+.account-page .badge.success {
+  background: #edf4e9;
+  color: #28513c;
+  border-color: #d4dfcb;
+}
+.account-page .badge.warning {
+  background: #fff3d8;
+  color: #80530b;
+  border-color: #ead8ab;
+}
+.account-page .success-text {
+  color: var(--success);
+}
+.account-page [data-countdown] {
+  font-variant-numeric: tabular-nums;
+  color: #80530b;
+  font-size: 15px;
+}
+.account-page [aria-disabled="true"] {
+  pointer-events: none;
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.account-page nav.toolbar {
+  margin-top: 12px;
+  font-size: 12px;
+}
+.account-page #account-content > .notice {
+  margin: 0;
+}
+.account-page #account-content > .toolbar {
+  margin: 0;
+}
+.account-page #account-content > .toolbar > p {
+  margin: 0;
+  font-size: 12px;
+  max-width: 650px;
+}
+.account-page #account-content > .form-grid {
+  align-items: stretch;
+}
+.account-page #account-content > .form-grid > .panel {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+.account-page #account-content > .form-grid > .panel > .actions {
+  margin-top: auto;
+  padding-top: 12px;
+}
+.account-dialog {
+  width: min(510px, calc(100vw - 32px));
+}
+.account-dialog h2 {
+  font-size: 25px;
+}
+.account-dialog p {
+  font-size: 13px;
+  line-height: 1.7;
+}
+.account-dialog .actions {
+  justify-content: flex-end;
+  margin-top: 25px;
+}
+@media (max-width: 850px) {
+  .account-page .account-booking-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .account-page .account-wallet {
+    padding: 23px;
+  }
+  .account-page .account-wallet .toolbar {
+    gap: 20px;
+  }
+}
+@media (max-width: 500px) {
+  .account-page .page-heading > .button {
+    margin-top: 20px;
+  }
+  .account-page .account-wallet {
+    padding: 22px 20px;
+  }
+  .account-page .account-wallet .toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .account-page .account-wallet p {
+    font-size: 11px;
+  }
+  .account-page .panel-header {
+    flex-wrap: wrap;
+  }
+  .account-page .panel-header h2 {
+    font-size: 19px;
+  }
+  .account-page .panel-header .actions {
+    width: 100%;
+  }
+  .account-page [data-booking] > .toolbar {
+    gap: 14px;
+  }
+  .account-page [data-booking] > .toolbar > .button {
+    width: 100%;
+  }
+  .account-page #account-content > .toolbar > .actions {
+    gap: 7px;
+  }
+  .account-page #account-content > .toolbar > .actions .button {
+    padding: 10px 12px;
+    font-size: 11px;
+  }
+  .account-page #account-content .table {
+    min-width: 480px;
+  }
+  .account-page .account-table-hint {
+    display: block;
+    color: var(--muted);
+    font-size: 11px;
+    margin: 0 0 12px;
+  }
+  .account-page [data-detail-content] .table {
+    min-width: 350px !important;
+  }
+  .account-page .account-booking-facts {
+    gap: 12px 16px;
+  }
+  .account-page .account-booking-facts > div > p {
+    font-size: 12px;
+  }
+  .account-page [data-hold] .toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 15px;
+  }
+  .account-page [data-hold] .toolbar .actions {
+    justify-content: space-between;
+  }
+  .account-dialog .actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+}

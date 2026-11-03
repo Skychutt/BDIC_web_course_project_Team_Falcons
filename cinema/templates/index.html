@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#f63765">
+  <meta name="description" content="Discover films across Beijing cinemas. Find a screening, choose your seats, and book together with Falcons Cinema.">
+  <title>Falcons Cinema — Make it a movie night.</title>
+  <link rel="icon" href="{{ url_for('static', filename='assets/favicon.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='ticketing.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='assistant-widget.css') }}">
+  <script type="module" src="{{ url_for('static', filename='js/app.js') }}"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header" id="site-header"></header>
+  <main id="main" tabindex="-1"><div class="page-loading" role="status"><span class="spinner"></span> Finding your next movie night…</div></main>
+  <footer class="site-footer"><a href="#/discover" class="wordmark">falcons<span>.</span></a><span>Good stories deserve a big screen.</span><span class="footer-note">Beijing · Student project · Simulated payments</span></footer>
+  <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+  <noscript><div class="notice error">JavaScript is needed to check current seats and confirm bookings. Please enable it to continue.</div></noscript>
+</body>
+</html>
