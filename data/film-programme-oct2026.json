@@ -1,0 +1,110 @@
+{
+  "version": "2026-10-24",
+  "timezone": "Asia/Shanghai",
+  "note": "Course-project demonstration programme. Prices, dates and screen formats are locally planned. Imported initial ratings and customer votes use one 10-point platform rating.",
+  "replace_title": "Journey Beyond the City",
+  "films": [
+    {
+      "key": "resident-evil-2026",
+      "title": "Resident Evil (2026)",
+      "display_title_zh": "生化危机（2026）",
+      "duration_minutes": 94,
+      "genres": [
+        "Horror",
+        "Thriller"
+      ],
+      "synopsis": "Medical courier Bryan finds himself caught in a night of escalating chaos and must fight to survive. Directed by Zach Cregger, this is a new story in the Resident Evil universe.",
+      "poster": "resident-evil-2026.png",
+      "base_price_minor": 4800,
+      "sources": [
+        "https://www.sonypictures.com/movies/residentevil8",
+        "https://www.bbfc.co.uk/release/resident-evil-q29sbgvjdglvbjpwwc0xmte2mjkx"
+      ],
+      "rating_seed": {
+        "score": 7.3,
+        "vote_count": 192840
+      }
+    },
+    {
+      "key": "tenzing",
+      "title": "Tenzing",
+      "display_title_zh": "丹增（Tenzing）",
+      "duration_minutes": 125,
+      "genres": [
+        "Adventure",
+        "Biography",
+        "Drama"
+      ],
+      "synopsis": "The story of mountaineer Tenzing Norgay and his extraordinary journey to the summit of Everest alongside Edmund Hillary, exploring the determination and partnership behind their historic ascent.",
+      "poster": "tenzing.png",
+      "base_price_minor": 4500,
+      "sources": [
+        "https://www.apple.com/uk/tv-pr/originals/tenzing/",
+        "https://tv.apple.com/us/movie/tenzing/umc.cmc.6lic0hhuxkrbem0n29vzjopii"
+      ],
+      "rating_seed": {
+        "score": 7.7,
+        "vote_count": 1396
+      }
+    },
+    {
+      "key": "love-hypothesis",
+      "title": "The Love Hypothesis",
+      "display_title_zh": "爱情假说（The Love Hypothesis）",
+      "duration_minutes": 112,
+      "genres": [
+        "Romance",
+        "Comedy"
+      ],
+      "synopsis": "PhD candidate Olive enters a pretend relationship with intimidating professor Adam Carlsen. As their arrangement grows more complicated, the scientist discovers that real feelings do not follow a neat hypothesis.",
+      "poster": "love-hypothesis.png",
+      "base_price_minor": 4200,
+      "sources": [
+        "https://www.primevideo.com/detail/0IH8VKXSSIAXGDCWKPS2UU3HZT"
+      ],
+      "rating_seed": {
+        "score": 6.6,
+        "vote_count": 6084
+      }
+    },
+    {
+      "key": "niu-lai",
+      "title": "牛来 (Niu Lai)",
+      "display_title_zh": "牛来",
+      "duration_minutes": 86,
+      "genres": [
+        "Animation"
+      ],
+      "synopsis": "Niu Lai (2026) is a Mandarin-language animated feature from China, directed by Xin Yumeng and written by Sun Lifang.",
+      "poster": "niu-lai.png",
+      "base_price_minor": 3600,
+      "sources": [
+        "User-supplied film information screenshot cd7c6e77319096abd4fe4ecef1f8e4fa.png"
+      ],
+      "rating_seed": {
+        "score": 6.0,
+        "vote_count": 53066
+      }
+    },
+    {
+      "key": "shawshank-redemption",
+      "title": "The Shawshank Redemption",
+      "display_title_zh": "肖申克的救赎",
+      "duration_minutes": 142,
+      "genres": [
+        "Drama",
+        "Crime"
+      ],
+      "synopsis": "Imprisoned banker Andy Dufresne forms a lasting friendship with fellow inmate Red. Across years inside Shawshank, their story explores perseverance, dignity and the power of hope.",
+      "poster": "shawshank-redemption.png",
+      "base_price_minor": 4000,
+      "sources": [
+        "https://www.bfi.org.uk/film/27458270-29df-5059-803c-b4e4bef9912b/the-shawshank-redemption"
+      ],
+      "rating_seed": {
+        "score": 9.7,
+        "vote_count": 3352918
+      }
+    }
+  ]
+}

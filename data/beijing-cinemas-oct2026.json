@@ -1,0 +1,77 @@
+{
+  "version": "2026-10-24",
+  "note": "Names, addresses and reference phone numbers follow the six user screenshots. Coordinates identify the matching AMap POIs (GCJ-02). Screens, seats, prices and showtimes are course-project simulations, not real cinema inventory.",
+  "cinemas": [
+    {
+      "key": "wanda-cbd", "legacy_name": "Falcons Chaoyang",
+      "name": "万达影城(CBD万达广场店)", "brand": "万达影城",
+      "district_code": "110105", "district_name": "Chaoyang",
+      "address": "北京市朝阳区建国路93号万达广场B座3楼",
+      "reference_phone": "010-59603399",
+      "latitude": "39.9092700", "longitude": "116.4706310", "coordinate_system": "GCJ02",
+      "coordinate_source": "https://ditu.amap.com/place/B000A83VFG",
+      "source_name": "儒意影城(CBD万达广场店)",
+      "source_note": "Same address and 010-59603399 telephone; retain the user's screenshot name.",
+      "demo_screen_type": "STANDARD"
+    },
+    {
+      "key": "wanda-xitieying", "legacy_name": "Falcons Haidian",
+      "name": "万达影城(西铁营店)", "brand": "万达影城",
+      "district_code": "110106", "district_name": "Fengtai",
+      "address": "北京市丰台区西铁营万达广场7层",
+      "reference_phone": "150-1136-6757",
+      "latitude": "39.8606850", "longitude": "116.3552300", "coordinate_system": "GCJ02",
+      "coordinate_source": "https://www.amap.com/place/B0FFITGR2B",
+      "source_name": "万达影城(西铁营万达广场店)",
+      "source_note": "AMap gives 西铁营中路1号万达广场7F; screenshot telephone retained as a reference only.",
+      "demo_screen_type": "IMAX"
+    },
+    {
+      "key": "poly-canyon", "legacy_name": null,
+      "name": "保利国际影城(凯德大峡谷店)", "brand": "保利国际影城",
+      "district_code": "110106", "district_name": "Fengtai",
+      "address": "北京市丰台区南三环西路16号凯德MALL·大峡谷5层-09",
+      "reference_phone": "010-87578530",
+      "latitude": "39.8546670", "longitude": "116.3665840", "coordinate_system": "GCJ02",
+      "coordinate_source": "https://www.amap.com/place/B000A85PQT",
+      "source_name": "保利国际影城(凯德大峡谷店)",
+      "additional_source": "https://www.polyfilm.cn/productinfo/1911217.html",
+      "demo_screen_type": "STANDARD"
+    },
+    {
+      "key": "zhonghua", "legacy_name": null,
+      "name": "中华电影院", "brand": "中华电影院",
+      "district_code": "110102", "district_name": "Xicheng",
+      "address": "北京市西城区天桥南大街3号",
+      "reference_phone": "010-66080338",
+      "latitude": "39.8845430", "longitude": "116.3982030", "coordinate_system": "GCJ02",
+      "coordinate_source": "https://www.amap.com/place/B0FFJBGE0D",
+      "source_name": "首都电影院(中华店)",
+      "source_note": "Same 天桥南大街3号 cinema; retain the user's screenshot name.",
+      "demo_screen_type": "STANDARD"
+    },
+    {
+      "key": "beijing-station", "legacy_name": "Falcons Dongcheng",
+      "name": "北京站电影院", "brand": "北京站电影院",
+      "district_code": "110101", "district_name": "Dongcheng",
+      "address": "北京市东城区毛家湾胡同甲13号北京站西侧3楼",
+      "reference_phone": "010-51834309",
+      "latitude": "39.9037240", "longitude": "116.4260310", "coordinate_system": "GCJ02",
+      "coordinate_source": "https://www.amap.com/place/B0FFF2S417",
+      "source_name": "北京站电影院(毛家湾胡同店)",
+      "demo_screen_type": "DOLBY_CINEMA"
+    },
+    {
+      "key": "hengdian-wangfujing", "legacy_name": null,
+      "name": "北京横店影城(王府井百货店)", "brand": "横店影城",
+      "district_code": "110101", "district_name": "Dongcheng",
+      "address": "北京市东城区王府井大街255号王府井百货大楼北馆8层",
+      "reference_phone": "010-59921010",
+      "latitude": "39.9139890", "longitude": "116.4104130", "coordinate_system": "GCJ02",
+      "coordinate_source": "https://ditu.amap.com/place/B000ABCE3X",
+      "source_name": "横店电影城(北京市百货大楼店)",
+      "source_note": "AMap lists 253号 and 010-65231588 for the same 百货大楼北馆8层. Display address and reference telephone follow the user's screenshot; the discrepancy is preserved here.",
+      "demo_screen_type": "STANDARD"
+    }
+  ]
+}

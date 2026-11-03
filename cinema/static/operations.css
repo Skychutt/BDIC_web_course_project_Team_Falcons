@@ -1,0 +1,210 @@
+/* Branch and platform workspaces, including their native dialogs. */
+.operations-view .operations-body {
+  min-width: 0;
+}
+.operations-view .panel-header {
+  flex-wrap: wrap;
+  align-items: center;
+}
+.operations-view .panel-header > .button {
+  flex-shrink: 0;
+}
+.operations-view .table {
+  min-width: 640px;
+}
+.operations-view .table td {
+  overflow-wrap: anywhere;
+}
+.operations-view .table td .button {
+  margin: 3px 4px 3px 0;
+}
+.operations-view .table td:last-child {
+  min-width: 160px;
+}
+.operations-view .toolbar .field {
+  flex: 1;
+  max-width: 520px;
+}
+.operations-view .toolbar .field input {
+  width: 100%;
+}
+.operations-view .toolbar > button[type="submit"] {
+  align-self: end;
+}
+.operations-view .error,
+.operations-dialog .error {
+  color: var(--error);
+  padding: 12px 14px;
+  border: 1px solid #e9c6bb;
+  border-radius: 7px;
+  background: #fff0eb;
+  overflow-wrap: anywhere;
+}
+.operations-view .metric > span,
+.operations-dialog .metric > span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+  margin-bottom: 7px;
+}
+.operations-view [data-counter-hold] textarea,
+.operations-view [data-counter-payment] textarea {
+  font:
+    12px/1.6 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+  overflow-wrap: anywhere;
+  min-height: 120px;
+}
+.operations-view details,
+.operations-dialog details {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 12px 14px;
+}
+.operations-view summary,
+.operations-dialog summary {
+  font-size: 12px;
+  cursor: pointer;
+  min-height: 24px;
+  color: var(--muted);
+}
+.operations-view details[open] > summary,
+.operations-dialog details[open] > summary {
+  margin-bottom: 15px;
+}
+.operations-view .notice strong,
+.operations-dialog p,
+.operations-dialog .notice {
+  overflow-wrap: anywhere;
+}
+.modal-dialog.operations-dialog {
+  width: min(820px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  padding: 28px;
+  scrollbar-width: thin;
+  overscroll-behavior: contain;
+}
+.operations-dialog > .panel-header {
+  align-items: flex-start;
+  gap: 20px;
+}
+.operations-dialog > .panel-header h2 {
+  font-size: 25px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.operations-dialog > .panel-header > button {
+  flex-shrink: 0;
+}
+.operations-dialog .form-grid {
+  margin: 0;
+}
+.operations-dialog .stack {
+  min-width: 0;
+}
+.operations-dialog fieldset {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 0;
+}
+.operations-dialog legend {
+  padding: 0 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.operations-dialog fieldset .actions {
+  margin-top: 0;
+}
+.operations-dialog fieldset label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  font-size: 13px;
+}
+.operations-dialog input[type="checkbox"] {
+  vertical-align: middle;
+  margin: 0 6px 2px 0;
+  flex-shrink: 0;
+}
+.operations-dialog .metric-grid {
+  margin-bottom: 0;
+}
+.operations-dialog .table-wrap {
+  max-width: 100%;
+}
+.operations-dialog .table {
+  min-width: 430px;
+}
+.operations-dialog .table td {
+  overflow-wrap: anywhere;
+}
+.operations-dialog [data-layout-preview] .badge {
+  white-space: nowrap;
+}
+.operations-view .tab[aria-pressed="true"] {
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+@media (max-width: 650px) {
+  .operations-view .panel-header {
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .operations-view .panel-header h2 {
+    font-size: 21px;
+  }
+  .operations-view .panel-header > .button {
+    max-width: 100%;
+  }
+  .operations-view .toolbar .field {
+    flex-basis: 100%;
+    max-width: none;
+  }
+  .operations-view .toolbar > button[type="submit"] {
+    align-self: stretch;
+  }
+  .modal-dialog.operations-dialog {
+    padding: 22px 18px;
+  }
+  .operations-dialog > .panel-header h2 {
+    font-size: 22px;
+  }
+  .operations-dialog > .panel-header > .button {
+    padding: 10px 12px;
+  }
+  .operations-dialog .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .operations-dialog fieldset {
+    padding: 14px 10px;
+  }
+  .operations-dialog .actions > .button {
+    width: 100%;
+  }
+  .operations-dialog .metric-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .operations-dialog .metric {
+    padding: 14px;
+  }
+  .operations-dialog .metric strong {
+    font-size: 22px;
+    overflow-wrap: anywhere;
+  }
+}
+@media (max-width: 360px) {
+  .operations-dialog .metric-grid {
+    grid-template-columns: 1fr;
+  }
+  .operations-dialog > .panel-header {
+    flex-wrap: wrap;
+  }
+}
