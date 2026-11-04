@@ -1,0 +1,297 @@
+/* Falcons ticketing theme: film-led browsing, with existing booking semantics intact. */
+:root {
+  --paper: #f7f8fa;
+  --surface: #fff;
+  --ink: #252733;
+  --muted: #737681;
+  --line: #e9eaf0;
+  --accent: #e92c59;
+  --accent-dark: #c51f47;
+  --forest: #252d48;
+  --soft: #f4f5f8;
+  --font: "Avenir Next", "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  --serif: var(--font);
+}
+body {background: var(--paper);}
+h1 {font-weight: 700; letter-spacing: -1.2px;}
+h2, h3 {letter-spacing: -.4px;}
+/* Main headings: clip the gradient to the glyphs, with a solid fallback. */
+#main :is(h1, .catalogue-heading h2, .showtimes-heading h2) {
+  display: inline-block;
+  font-family: var(--font);
+  font-weight: 500;
+  color: #7029A6;
+}
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  #main :is(h1, .catalogue-heading h2, .showtimes-heading h2) {
+    background-image: linear-gradient(90deg, #7029A6 0%, #A449C4 100%);
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+}
+@media print, (forced-colors: active) {
+  #main :is(h1, .catalogue-heading h2, .showtimes-heading h2) {
+    background-image: none;
+    color: CanvasText;
+    -webkit-text-fill-color: currentColor;
+  }
+}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible {outline-color: var(--accent);}
+.site-header {height: 80px;gap: 30px;background: #fff;border-bottom: 1px solid var(--line);}
+.wordmark {color: var(--accent);font-size: 31px;font-weight: 800;letter-spacing: -1.8px;}
+.wordmark span {color: var(--ink);}
+.location {font-size: 13px;}
+.main-nav {gap: 30px;}
+.main-nav a {font-size: 13px;}
+.main-nav a.active {color: var(--accent);font-weight: 700;}
+.main-nav a.active:after {height: 3px;bottom: 0;}
+.header-actions .button {min-height: 38px;padding: 9px 17px;background: #fff;color: var(--accent);border-color: #f2c5d0;}
+.header-actions .button:hover {background: #fff1f5;}
+#main {max-width: 1280px;padding-top: 30px;}
+.button {border-radius: 6px;}
+.button.secondary {background: var(--accent);}
+.button.secondary:hover {background: var(--accent-dark);}
+.header-actions .button.secondary {background: #fff;color: var(--accent);}
+.header-actions .button.secondary:hover {background: #fff1f5;}
+.button.ghost {background: white;}
+.button.ghost:hover {border-color: var(--accent);color: var(--accent);background: #fff5f7;}
+.cinema-hero {position: relative;min-height: 340px;overflow: hidden;background: #19223c;border-radius: 10px;color: #fff;display: flex;align-items: center;padding: 38px 44px;isolation: isolate;}
+.cinema-hero.city-feature {background: linear-gradient(90deg,#121a31 0%,#131b31ed 24%,#131b3180 52%,#131b3100 76%),url('./assets/journey-city.svg') right 70% / cover;}
+.hero-copy {max-width: 570px;z-index: 1;}
+.hero-kicker {font-size: 10px;font-weight: 600;letter-spacing: 2.1px;color: #fbb6cb;margin-bottom: 16px;display: flex;align-items: center;gap: 9px;}
+.hero-kicker>span {width: 7px;height: 7px;display: block;background: #fc809f;border-radius: 50%;}
+.hero-copy h1 {font-size: clamp(32px,4.2vw,51px);letter-spacing: -1.7px;line-height: 1.08;max-width: 500px;margin-bottom: 15px;}
+.hero-description {max-width: 400px;color: #cbd0e1;font-size: 13px;line-height: 1.65;margin-bottom: 15px;}
+.hero-metadata {display: flex;flex-wrap: wrap;gap: 0;margin-bottom: 25px;font-size: 11px;color: #e0e3ee;}
+.hero-metadata span+span:before {content: '·';margin: 0 12px;color: #858fa7;}
+.hero-actions {display: flex;align-items: center;gap: 22px;flex-wrap: wrap;}
+.hero-actions .button {padding: 13px 23px;background: #ed3b68;}
+.hero-actions .button:hover {background: #d32351;}
+.hero-details {display: inline-flex;align-items: center;gap: 8px;font-size: 12px;color: #d9ddeb;padding: 10px 0;}
+.hero-caption {position: absolute;bottom: 17px;right: 20px;color: #c4bfd3;font-size: 8px;letter-spacing: 1.7px;}
+.catalogue-section {margin: 30px 0 38px;}
+.catalogue-heading {display: flex;justify-content: space-between;gap: 15px;align-items: center;margin-bottom: 20px;}
+.catalogue-heading>div {display: flex;gap: 12px;align-items: center;}
+.section-marker {width: 4px;height: 20px;background: var(--accent);border-radius: 2px;}
+.catalogue-heading h2 {font-size: 22px;margin: 0;}
+.catalogue-count {font-size: 11px;color: var(--muted);background: #edeef2;border-radius: 20px;padding: 3px 9px;white-space: nowrap;}
+.catalogue-heading>a {font-size: 12px;color: var(--muted);display: inline-flex;gap: 5px;align-items: center;}
+.catalogue-heading>a .icon {width: 15px;height: 15px;}
+.catalogue-layout {display: grid;grid-template-columns: minmax(0,1fr) 310px;gap: 24px;}
+.film-rail {display: grid;grid-template-columns: repeat(auto-fill,minmax(160px,1fr));gap: 20px;min-width: 0;}
+.catalogue-film {min-width: 0;background: #fff;border: 1px solid var(--line);border-radius: 9px;overflow: hidden;}
+.catalogue-poster {display: block;}
+.catalogue-film .film-poster {width: 100%;aspect-ratio: 2/2.8;}
+.catalogue-film-copy {padding: 16px;}
+.catalogue-film h3 {font-size: 16px;line-height: 1.4;margin-bottom: 10px;}
+.catalogue-film p {font-size: 12px;margin-bottom: 10px;}
+.catalogue-label {font-size: 9px!important;letter-spacing: 1.5px;font-weight: 650;color: var(--accent);}
+.catalogue-rating {color: var(--muted);}
+.catalogue-rating strong {color: #af6b10;font-size: 18px;}
+.catalogue-rating span {font-size: 11px;}
+.catalogue-meta {color: var(--muted);}
+.catalogue-synopsis {display: none;}
+.catalogue-film .button {width: 100%;margin-top: 8px;font-size: 12px;}
+.single-film .film-rail {display: block;}
+.single-film .catalogue-film {display: grid;grid-template-columns: 167px minmax(0,1fr);height: 100%;}
+.single-film .catalogue-poster {height: 100%;}
+.single-film .film-poster {height: 100%;min-height: 244px;}
+.single-film .catalogue-film-copy {padding: 22px 25px;align-self: center;}
+.single-film .catalogue-film h3 {font-size: 23px;line-height: 1.25;}
+.single-film .catalogue-synopsis {display: block;color: var(--muted);max-width: 400px;line-height: 1.65;}
+.single-film .catalogue-film .button {width: auto;padding: 10px 18px;min-height: 40px;}
+.concierge-card {position: relative;overflow: hidden;padding: 23px 25px;background: #fff0f5;border: 1px solid #f8dce5;border-radius: 9px;}
+.concierge-icon {position: absolute;right: 22px;top: 20px;width: 42px;height: 42px;background: #ffe0e9;border-radius: 12px;display: grid;place-items: center;color: var(--accent);transform: rotate(8deg);}
+.concierge-icon .icon {width: 26px;height: 26px;}
+.concierge-card .eyebrow {font-size: 9px;letter-spacing: 1.4px;margin-bottom: 15px;max-width: 200px;}
+.concierge-card h2 {font-size: 25px;line-height: 1.2;margin-bottom: 12px;}
+.concierge-card>p:not(.eyebrow) {font-size: 11px;color: #7c6671;line-height: 1.65;margin-bottom: 16px;}
+.concierge-card .button {min-height: 39px;padding: 9px 17px;font-size: 12px;}
+.concierge-languages {display: block;margin-top: 11px;font-size: 9px;color: #887680;}
+.city-poster {background: linear-gradient(0deg,#10192ff5 0%,#121a3155 44%,transparent 68%),url('./assets/journey-city.svg') 68% center / auto 100%;color: white;}
+.city-poster .poster-orbit {display: none;}
+.city-poster:after {border-color: #d2c0d329;}
+.city-poster .poster-type {font-weight: 750;font-family: var(--font);line-height: 1.05;}
+.city-poster .poster-imprint {color: #ffd2df;}
+.city-poster .poster-caption {color: #c6cddd;}
+.showtimes-heading {margin-bottom: 20px;border-top: 1px solid var(--line);padding-top: 30px;}
+.showtimes-heading h1,.showtimes-heading h2 {font-size: 28px;letter-spacing: -.8px;}
+.showtimes-heading .eyebrow {font-size: 9px;letter-spacing: 1.6px;margin-bottom: 8px;}
+.showtimes-heading .muted {font-size: 13px;}
+.search-panel {background: #fff;color: var(--ink);border: 1px solid var(--line);border-radius: 8px;padding: 21px 24px;}
+.search-panel .field>span {color: #787b87;}
+.search-panel input,.search-panel select {background: #f7f8fa;border: 1px solid #e7e8ee;}
+.search-advanced {border-top-color: var(--line);}
+.search-advanced summary {color: var(--muted);}
+.date-chip,.chip {border-radius: 5px;}
+.date-chip.active,.chip.active {background: #fff0f4;color: #bd1d47;border-color: #efb0c0;}
+.date-chip.active .muted {color: #bd1d47;}
+.screening-group {border-radius: 8px;}
+.film-group-copy h2 {font-weight: 650;font-size: 25px;}
+.badge.orange {color: #bb234b;background: #fff0f5;border-color: #f3ccd7;}
+.session-button {border-radius: 5px;}
+.session-price {color: var(--accent);}
+.aside-card {background: #252d48;color: #fff;border-color: #252d48;}
+.aside-card .eyebrow {color: #ffb7ce;}
+.aside-card>p:not(.eyebrow),.aside-card .fine-print {color: #c5cbdc;}
+.aside-card h3 {color: #fff;}
+.cinema-card {border-radius: 8px;}
+.cinema-card-top {background: #252d48;color: #f1d4e1;font-family: var(--font);font-size: 28px;font-weight: 650;}
+.cinema-card:nth-child(2n) .cinema-card-top {background: #5c3452;}
+.cinema-card-top:after {border-color: #bc89a3;border-bottom-color: #ed8bae;}
+.page-heading h1 {font-family: var(--font);}
+.ai-message.user {background: #fff0f5;}
+.ai-condition {background: #f4f5f8;}
+.site-footer {background: #fff;border-top-color: var(--line);font-size: 12px;}
+@media (max-width:1100px) {
+  .site-header {gap: 20px;}
+  .main-nav {gap: 20px;}
+  .catalogue-layout {grid-template-columns: minmax(0,1fr) 280px;gap: 18px;}
+  .single-film .catalogue-film {grid-template-columns: 145px minmax(0,1fr);}
+  .single-film .catalogue-film-copy {padding: 20px;}
+  .single-film .catalogue-film h3 {font-size: 20px;}
+}
+@media (max-width:800px) {
+  .site-header {height: auto;gap: 16px;}
+  .main-nav {gap: 22px;}
+  #main {padding-top: 22px;}
+  .cinema-hero {min-height: 330px;padding: 30px;}
+  .cinema-hero.city-feature {background-position: center,right center;}
+  .hero-copy {max-width: 75%;}
+  .hero-copy h1 {font-size: 38px;}
+  .hero-description {font-size: 12px;}
+  .catalogue-layout {grid-template-columns: 1fr;}
+  .single-film .catalogue-film {grid-template-columns: 160px minmax(0,1fr);}
+  .single-film .film-poster {min-height: 235px;}
+  .concierge-card {padding: 22px 25px;}
+  .concierge-card h2 br,.concierge-card>p br {display: none;}
+  .concierge-card h2 {font-size: 23px;}
+  .concierge-card .button {position: absolute;right: 25px;bottom: 30px;}
+  .concierge-card>p,.concierge-languages {max-width: 65%;}
+  .hero-caption {font-size: 7px;letter-spacing: 1px;}
+}
+@media (max-width:500px) {
+  .brand-wrap {gap: 12px;}
+  .wordmark {font-size: 27px;}
+  .location {display: flex;font-size: 11px;padding-left: 12px;}
+  .main-nav {gap: 22px;}
+  .main-nav a {font-size: 12px;}
+  .header-actions .button {font-size: 11px;padding: 8px 12px;}
+  .cinema-hero {min-height: 370px;padding: 27px 22px;align-items: flex-start;}
+  .cinema-hero.city-feature {background-image: linear-gradient(90deg,#121a31f5,#131b31b0 65%,#131b3160),url('./assets/journey-city.svg');}
+  .hero-copy {max-width: 100%;}
+  .hero-copy h1 {font-size: 37px;max-width: 290px;}
+  .hero-kicker {font-size: 8px;letter-spacing: 1.5px;}
+  .hero-description {max-width: 285px;}
+  .hero-actions {gap: 15px;}
+  .hero-actions .button {padding: 12px 16px;font-size: 12px;}
+  .hero-details {font-size: 11px;}
+  .hero-caption {left: 22px;right: auto;bottom: 14px;font-size: 6px;}
+  .catalogue-heading h2 {font-size: 19px;}
+  .catalogue-heading>div {gap: 8px;}
+  .catalogue-heading>a {font-size: 10px;max-width: 110px;}
+  .catalogue-count {font-size: 10px;padding: 3px 7px;}
+  .single-film .catalogue-film {grid-template-columns: 118px minmax(0,1fr);}
+  .single-film .film-poster {min-height: 225px;padding: 13px;}
+  .single-film .film-poster .poster-type {font-size: 23px;}
+  .single-film .film-poster .poster-imprint {font-size: 5px;letter-spacing: 1px;}
+  .single-film .film-poster .poster-caption {font-size: 5px;letter-spacing: .6px;}
+  .single-film .catalogue-film-copy {padding: 15px;}
+  .single-film .catalogue-film h3 {font-size: 17px;}
+  .single-film .catalogue-synopsis {display: none;}
+  .single-film .catalogue-film .button {padding: 9px 11px;font-size: 10px;}
+  .concierge-card h2 {max-width: 75%;font-size: 21px;}
+  .concierge-card .button {position: static;}
+  .concierge-card>p,.concierge-languages {max-width: none;}
+  .showtimes-heading h1,.showtimes-heading h2 {font-size: 25px;}
+  .search-panel {padding: 18px;}
+}
+/* The supplied five-film programme; poster images retain their full composition. */
+.film-poster.photographic-poster {padding:0;background:#151821;overflow:hidden;position:relative;}
+.film-poster.photographic-poster:after {display:none;}
+.photographic-poster img {width:100%;height:100%;position:absolute;inset:0;object-fit:contain;display:block;}
+.cinema-hero.poster-feature {min-height:375px;background:radial-gradient(ellipse at 85% 40%,#45576b 0%,#1d293e 35%,#141d30 75%);padding-right:340px;}
+.poster-feature .hero-film-artwork {position:absolute;right:62px;top:22px;height:310px;max-width:235px;object-fit:contain;box-shadow:0 12px 36px #080d1e80;border-radius:3px;}
+.catalogue-layout:not(.single-film) {grid-template-columns:minmax(0,1fr);}
+.catalogue-layout:not(.single-film) .film-rail {grid-template-columns:repeat(5,minmax(0,1fr));gap:18px;}
+.catalogue-layout:not(.single-film) .catalogue-film {display:flex;flex-direction:column;}
+.catalogue-layout:not(.single-film) .film-poster {aspect-ratio:2/3;}
+.catalogue-layout:not(.single-film) .catalogue-film-copy {display:flex;flex-direction:column;flex:1;}
+.catalogue-layout:not(.single-film) .catalogue-meta {margin-bottom:14px;}
+.catalogue-layout:not(.single-film) .catalogue-film .button {margin-top:auto;}
+.catalogue-layout:not(.single-film) .concierge-card {padding:22px 25px;}
+.catalogue-layout:not(.single-film) .concierge-card h2 br,
+.catalogue-layout:not(.single-film) .concierge-card>p br {display:none;}
+.catalogue-layout:not(.single-film) .concierge-card .button {position:absolute;right:25px;bottom:30px;}
+@media(max-width:1000px) {
+  .catalogue-layout:not(.single-film) .film-rail {grid-template-columns:repeat(3,minmax(0,1fr));}
+  .cinema-hero.poster-feature {padding-right:270px;}
+  .poster-feature .hero-copy {max-width:100%;}
+  .poster-feature .hero-film-artwork {right:28px;max-width:205px;}
+}
+@media(max-width:600px) {
+  .catalogue-layout:not(.single-film) .film-rail {grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
+  .catalogue-film-copy {padding:13px;}
+  .catalogue-film h3 {font-size:15px;}
+  .cinema-hero.poster-feature {padding:25px 22px 38px;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 90px;gap:16px;}
+  .poster-feature .hero-film-artwork {position:static;width:90px;height:auto;max-height:140px;grid-column:2;grid-row:1;}
+  .poster-feature .hero-copy h1 {font-size:28px;letter-spacing:-.7px;}
+  .poster-feature .hero-description {font-size:11px;}
+  .poster-feature .hero-kicker {font-size:7px;letter-spacing:1px;}
+  .poster-feature .hero-metadata {font-size:10px;}
+  .poster-feature .hero-metadata span+span:before {margin:0 6px;}
+  .poster-feature .hero-actions {gap:4px;}
+  .poster-feature .hero-caption {font-size:6px;letter-spacing:.6px;}
+  .catalogue-layout:not(.single-film) .concierge-card .button {position:static;}
+}
+/* Featured film rotation: reserve the tallest slide so the page never jumps. */
+.featured-carousel {position:relative;}
+.featured-slides {display:grid;}
+.featured-slide {grid-area:1 / 1;visibility:hidden;opacity:0;pointer-events:none;transition:opacity .55s ease,visibility .55s;}
+.featured-slide.is-active {visibility:visible;opacity:1;pointer-events:auto;}
+.featured-carousel .cinema-hero {min-height:460px;padding-left:64px;}
+#main .featured-carousel h1 {background:none;color:#fff;-webkit-text-fill-color:#fff;font-weight:700;}
+.featured-carousel .hero-film-artwork {top:38px;height:340px;max-width:245px;}
+.hero-rating {color:#e1d8e8;font-size:12px;line-height:1.6;margin:0 0 13px;}
+.film-score {white-space:nowrap;}
+.film-score strong {color:#945514;font-size:19px;font-weight:650;}
+.rating-votes {display:block;font-size:11px;color:var(--muted);line-height:1.7;}
+.hero-rating .film-score strong {color:#ffc56f;}
+.hero-rating .rating-votes {color:#cbd0e1;}
+.featured-controls {position:absolute;inset:0;display:flex;align-items:center;justify-content:space-between;padding:0 12px;z-index:2;pointer-events:none;}
+.featured-controls button {display:grid;place-items:center;min-width:36px;min-height:36px;padding:0;border:1px solid #ffffff30;border-radius:50%;background:#ffffff0c;color:#fff;font:inherit;font-size:23px;cursor:pointer;pointer-events:auto;}
+.featured-controls button:hover {background:#ffffff25;}
+@media(max-width:600px) {
+  .featured-carousel .cinema-hero {min-height:0;padding-left:22px;padding-bottom:72px;}
+  .featured-carousel .hero-film-artwork {height:auto;max-width:90px;}
+  .featured-controls {inset:auto 22px 18px auto;padding:0;gap:10px;}
+  .hero-rating {font-size:10px;}
+}
+@media(prefers-reduced-motion:reduce) {
+  .featured-slide {transition:none;}
+}
+@media print, (forced-colors:active) {
+  #main .featured-carousel h1 {color:CanvasText;-webkit-text-fill-color:currentColor;}
+}
+/* AMap and cinema finder */
+.cinema-map-panel { padding:24px; background:#fff; border:1px solid #e8e8ec; border-radius:18px; margin-bottom:28px; }
+.map-controls { display:flex; flex-wrap:wrap; gap:12px; }
+.map-status { margin:16px 0 0; color:#53576a; font-size:14px; line-height:1.7; }
+.cinema-map-canvas { height:390px; margin-top:20px; border-radius:12px; overflow:hidden; background:#f3f5f7; }
+.cinema-map-canvas iframe { width:100%; height:100%; border:0; }
+.map-list-toolbar { display:flex; align-items:end; flex-wrap:wrap; gap:24px; }
+.map-list-toolbar .field { min-width:200px; }
+.map-list-toolbar > .muted { margin-left:auto; padding-bottom:10px; }
+.map-nearest { display:flex; align-items:center; gap:8px; padding-bottom:10px; }
+.map-nearest input { width:18px; height:18px; accent-color:#f63765; }
+.cinema-distance { min-height:24px; color:#b52850; font-weight:600; font-size:13px; }
+.map-card-actions { display:grid; gap:10px; }
+[hidden] { display:none !important; }
+@media(max-width:600px) {
+  .cinema-map-panel { padding:16px; }
+  .cinema-map-canvas { height:300px; }
+  .map-controls .button { flex:1 1 40%; }
+  .map-list-toolbar { gap:12px; }
+}
