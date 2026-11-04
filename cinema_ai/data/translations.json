@@ -1,0 +1,128 @@
+{
+  "version": "2026-10-24",
+  "films": {
+    "Resident Evil (2026)": {
+      "titles": {
+        "zh": "生化危机（2026）",
+        "en": "Resident Evil (2026)"
+      },
+      "synopses": {
+        "zh": "医疗快递员布莱恩陷入一个混乱不断升级的夜晚，必须为生存而战。扎克·克雷格执导的这部影片，讲述了《生化危机》世界中的一个新故事。",
+        "en": "Medical courier Bryan finds himself caught in a night of escalating chaos and must fight to survive. Directed by Zach Cregger, this is a new story in the Resident Evil universe."
+      },
+      "source_synopsis": "Medical courier Bryan finds himself caught in a night of escalating chaos and must fight to survive. Directed by Zach Cregger, this is a new story in the Resident Evil universe."
+    },
+    "Tenzing": {
+      "titles": {
+        "zh": "丹增（Tenzing）",
+        "en": "Tenzing"
+      },
+      "synopses": {
+        "zh": "影片讲述登山家丹增·诺尔盖与埃德蒙·希拉里共同登顶珠穆朗玛峰的非凡旅程，展现这次历史性攀登背后的决心与合作。",
+        "en": "The story of mountaineer Tenzing Norgay and his extraordinary journey to the summit of Everest alongside Edmund Hillary, exploring the determination and partnership behind their historic ascent."
+      },
+      "source_synopsis": "The story of mountaineer Tenzing Norgay and his extraordinary journey to the summit of Everest alongside Edmund Hillary, exploring the determination and partnership behind their historic ascent."
+    },
+    "The Love Hypothesis": {
+      "titles": {
+        "zh": "爱情假说（The Love Hypothesis）",
+        "en": "The Love Hypothesis"
+      },
+      "synopses": {
+        "zh": "博士生奥利芙与令人望而生畏的教授亚当·卡尔森假扮情侣。随着这段约定越来越复杂，她发现真实的感情并不遵循严谨的假说。",
+        "en": "PhD candidate Olive enters a pretend relationship with intimidating professor Adam Carlsen. As their arrangement grows more complicated, the scientist discovers that real feelings do not follow a neat hypothesis."
+      },
+      "source_synopsis": "PhD candidate Olive enters a pretend relationship with intimidating professor Adam Carlsen. As their arrangement grows more complicated, the scientist discovers that real feelings do not follow a neat hypothesis."
+    },
+    "牛来 (Niu Lai)": {
+      "titles": {
+        "zh": "牛来",
+        "en": "Niu Lai"
+      },
+      "synopses": {
+        "zh": "《牛来》（2026）是一部中国普通话动画长片，由辛宇萌执导、孙丽芳编剧。",
+        "en": "Niu Lai (2026) is a Mandarin-language animated feature from China, directed by Xin Yumeng and written by Sun Lifang."
+      },
+      "source_synopsis": "Niu Lai (2026) is a Mandarin-language animated feature from China, directed by Xin Yumeng and written by Sun Lifang."
+    },
+    "The Shawshank Redemption": {
+      "titles": {
+        "zh": "肖申克的救赎",
+        "en": "The Shawshank Redemption"
+      },
+      "synopses": {
+        "zh": "入狱的银行家安迪·杜弗雷恩与狱友瑞德建立了长久的友谊。在肖申克度过的岁月里，他们的故事探讨了坚持、尊严与希望的力量。",
+        "en": "Imprisoned banker Andy Dufresne forms a lasting friendship with fellow inmate Red. Across years inside Shawshank, their story explores perseverance, dignity and the power of hope."
+      },
+      "source_synopsis": "Imprisoned banker Andy Dufresne forms a lasting friendship with fellow inmate Red. Across years inside Shawshank, their story explores perseverance, dignity and the power of hope."
+    }
+  },
+  "cinemas": {
+    "万达影城(CBD万达广场店)": {
+      "names": {
+        "zh": "万达影城(CBD万达广场店)",
+        "en": "Wanda Cinema (CBD Wanda Plaza)"
+      },
+      "addresses": {
+        "zh": "北京市朝阳区建国路93号万达广场B座3楼",
+        "en": "3F, Block B, Wanda Plaza, 93 Jianguo Road, Chaoyang, Beijing"
+      },
+      "source_address": "北京市朝阳区建国路93号万达广场B座3楼"
+    },
+    "万达影城(西铁营店)": {
+      "names": {
+        "zh": "万达影城(西铁营店)",
+        "en": "Wanda Cinema (Xitieying)"
+      },
+      "addresses": {
+        "zh": "北京市丰台区西铁营万达广场7层",
+        "en": "7F, Xitieying Wanda Plaza, Fengtai, Beijing"
+      },
+      "source_address": "北京市丰台区西铁营万达广场7层"
+    },
+    "保利国际影城(凯德大峡谷店)": {
+      "names": {
+        "zh": "保利国际影城(凯德大峡谷店)",
+        "en": "Poly International Cinema (CapitaMall Grand Canyon)"
+      },
+      "addresses": {
+        "zh": "北京市丰台区南三环西路16号凯德MALL·大峡谷5层-09",
+        "en": "Unit 09, 5F, CapitaMall Grand Canyon, 16 South Third Ring West Road, Fengtai, Beijing"
+      },
+      "source_address": "北京市丰台区南三环西路16号凯德MALL·大峡谷5层-09"
+    },
+    "中华电影院": {
+      "names": {
+        "zh": "中华电影院",
+        "en": "Zhonghua Cinema"
+      },
+      "addresses": {
+        "zh": "北京市西城区天桥南大街3号",
+        "en": "3 Tianqiao South Street, Xicheng, Beijing"
+      },
+      "source_address": "北京市西城区天桥南大街3号"
+    },
+    "北京站电影院": {
+      "names": {
+        "zh": "北京站电影院",
+        "en": "Beijing Railway Station Cinema"
+      },
+      "addresses": {
+        "zh": "北京市东城区毛家湾胡同甲13号北京站西侧3楼",
+        "en": "3F, west side of Beijing Railway Station, Jia 13 Maojiawan Hutong, Dongcheng, Beijing"
+      },
+      "source_address": "北京市东城区毛家湾胡同甲13号北京站西侧3楼"
+    },
+    "北京横店影城(王府井百货店)": {
+      "names": {
+        "zh": "北京横店影城(王府井百货店)",
+        "en": "Hengdian Cinema (Wangfujing Department Store)"
+      },
+      "addresses": {
+        "zh": "北京市东城区王府井大街255号王府井百货大楼北馆8层",
+        "en": "8F, North Building, Wangfujing Department Store, 255 Wangfujing Street, Dongcheng, Beijing"
+      },
+      "source_address": "北京市东城区王府井大街255号王府井百货大楼北馆8层"
+    }
+  }
+}
