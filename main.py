@@ -13,5 +13,5 @@ app = create_app()
 if __name__ == "__main__":
     host = os.getenv("HOST", "127.0.0.1")
     port = int(os.getenv("PORT", "5001"))
-    print(f"\n网站地址(Website URL)：http://{host}:{port}\n", flush=True)
+    print(f"\nWebsite URL: http://{host}:{port}\n", flush=True)
     app.run(host=host, port=port)
