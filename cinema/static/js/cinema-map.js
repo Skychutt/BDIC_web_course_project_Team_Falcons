@@ -41,6 +41,13 @@ const words = {
   },
 };
 
+const cinemaPhotos = {
+  "万达影城(CBD万达广场店)": {src:"/static/assets/cinemas/wanda-cbd.webp", alt:"北京CBD万达广场建筑外观", source:"https://www.wanda-cbd.cn/index.html"},
+};
+function cinemaCover(cinema) {
+  const photo = cinemaPhotos[cinema.name];
+  return `<div class="cinema-card-top cinema-photo-cover">${photo ? `<img src="${photo.src}" alt="${esc(photo.alt)}" loading="lazy" decoding="async" width="1200" height="800">` : ""}<span class="cinema-cover-label"><small>BEIJING · CINEMA</small><span>${esc(cinema.district_name || "Beijing")}</span></span>${photo ? `<a class="cinema-photo-credit" href="${photo.source}" target="_blank" rel="noopener noreferrer">实景 · 来源 ↗</a>` : ""}</div>`;
+}
 export async function renderCinemaMap(ctx) {
   const { root, api, bootstrap } = ctx;
   let config;
@@ -84,7 +91,7 @@ export async function renderCinemaMap(ctx) {
     const missing = values.filter((c) => !c.position).length;
     el("count").textContent = `${values.length} ${t("count")}`;
     el("missing").textContent = missing ? `${missing} ${t("missing")}` : "";
-    el("list").innerHTML = values.map((c) => `<article class="cinema-card"><div class="cinema-card-top">${esc(c.district_name || "Beijing")}</div><div class="cinema-card-body"><p class="eyebrow">${esc(c.brand)}</p><h2>${esc(c.name)}</h2><p>${icon("pin")} ${esc(c.address)}</p><p class="cinema-distance">${c.distance != null ? `${t("distance")} · ${(c.distance / 1000).toFixed(1)} km` : c.position ? "" : t("unlocated")}</p><div class="map-card-actions"><a class="button ghost wide" href="#/discover?${new URLSearchParams({ cinema_id: c.id, district_id: c.district_id })}">${t("showtimes")} ${icon("arrow")}</a>${c.position ? `<button type="button" class="button secondary wide" data-pin="${esc(c.id)}">${t("onMap")}</button><button type="button" class="button wide" data-route="${esc(c.id)}">${t("navigate")}</button><button type="button" class="button wide" data-route="${esc(c.id)}" data-mode="driving">${t("drive")}</button>` : ""}</div></div></article>`).join("") || empty(t("nomatch"));
+    el("list").innerHTML = values.map((c) => `<article class="cinema-card">${cinemaCover(c)}<div class="cinema-card-body"><p class="eyebrow">${esc(c.brand)}</p><h2>${esc(c.name)}</h2><p>${icon("pin")} ${esc(c.address)}</p><p class="cinema-distance">${c.distance != null ? `${t("distance")} · ${(c.distance / 1000).toFixed(1)} km` : c.position ? "" : t("unlocated")}</p><div class="map-card-actions"><a class="button ghost wide" href="#/discover?${new URLSearchParams({ cinema_id: c.id, district_id: c.district_id })}">${t("showtimes")} ${icon("arrow")}</a>${c.position ? `<button type="button" class="button secondary wide" data-pin="${esc(c.id)}">${t("onMap")}</button><button type="button" class="button wide" data-route="${esc(c.id)}">${t("navigate")}</button><button type="button" class="button wide" data-route="${esc(c.id)}" data-mode="driving">${t("drive")}</button>` : ""}</div></div></article>`).join("") || empty(t("nomatch"));
     el("list").querySelectorAll("[data-pin]").forEach((button) => {
       button.onclick = () => run(async () => {
         await ensureMap();
