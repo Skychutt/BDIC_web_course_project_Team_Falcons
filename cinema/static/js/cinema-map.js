@@ -129,9 +129,8 @@ export async function renderCinemaMap(ctx) {
     finally { running = false; if (!disposed) message(); }
   }
   function mount() {
-    const existingFrame = el("canvas")?.querySelector("iframe");
+    map?.destroy(); map = null;
     root.innerHTML = `<div class="page-heading"><div><p class="eyebrow">FALCONS · BEIJING</p><h1>${t("title")}</h1><p class="muted">${t("intro")}</p></div><button class="button ghost" data-map="language">${language === "zh" ? "English" : "中文"}</button></div><section class="cinema-map-panel"><div class="map-controls"><button type="button" class="button secondary" data-map="load">${t("map")}</button><button type="button" class="button" data-map="locate">${icon("pin")} ${t("locate")}</button><button type="button" class="button ghost" data-map="clear" hidden>${t("clear")}</button></div><p class="fine-print">${t("privacy")}</p><p class="map-status" data-map="status" role="status" aria-live="polite"></p><div class="cinema-map-canvas" data-map="canvas" role="region" aria-label="${t("mapLabel")}" hidden></div></section><div class="map-list-toolbar"><label class="field"><span>${t("district")}</span><select data-map="district">${options(bootstrap.districts, district, "name", t("all"))}</select></label><label class="map-nearest"><input type="checkbox" data-map="nearest"> ${t("nearest")}</label><span class="muted" data-map="count"></span></div><p class="fine-print" data-map="missing"></p><div class="cinema-grid" data-map="list"></div>`;
-    if (existingFrame) { el("canvas").hidden = false; el("canvas").append(existingFrame); }
     root.lang = language === "zh" ? "zh-CN" : "en";
     el("language").onclick = () => {
       if (running) return;

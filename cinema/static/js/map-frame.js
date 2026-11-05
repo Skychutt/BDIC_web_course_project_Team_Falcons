@@ -1,5 +1,5 @@
 import { loadAMap, toMapPosition, addressFor } from "./amap-sdk.js";
-let map, AMap, markers = [], ready = false, walking, routeVersion = 0;
+let map, AMap, markers = [], ready = false, walking, routeVersion = 0, markerKey = "", userMarker;
 const send = (data) => parent.postMessage({ channel: "falcons-map", ...data }, location.origin);
 const fail = () => {
   const error = document.getElementById("map-error");
@@ -27,17 +27,26 @@ window.addEventListener("message", async (event) => {
       });
     });
   } else if (msg.type === "render") {
+    const cinemas = (msg.cinemas || []).slice(0, 200);
+    const nextKey = JSON.stringify(cinemas);
+    if (nextKey !== markerKey) {
+    markerKey = nextKey;
     map.remove(markers); markers = [];
-    for (const c of (msg.cinemas || []).slice(0, 200)) {
+    for (const c of cinemas) {
       if (!validPoint(c.position) || !/^\d+$/.test(c.id)) continue;
       const marker = new AMap.Marker({ position: c.position, title: String(c.name || ""),
         icon: "/static/assets/cinema-pin.svg", anchor: "bottom-center", offset: new AMap.Pixel(0, 0) });
       marker.on("click", () => send({ type: "cinema", id: c.id }));
       markers.push(marker);
     }
-    if (validPoint(msg.position)) markers.push(new AMap.CircleMarker({ center: msg.position, radius: 8,
-      fillColor: "#2168d9", fillOpacity: 1, strokeColor: "white", strokeWeight: 3 }));
     map.add(markers);
+    }
+    if (userMarker) { map.remove(userMarker); userMarker = null; }
+    if (validPoint(msg.position)) {
+      userMarker = new AMap.CircleMarker({ center: msg.position, radius: 8,
+        fillColor: "#2168d9", fillOpacity: 1, strokeColor: "white", strokeWeight: 3 });
+      map.add(userMarker);
+    }
   } else if (msg.type === "focus" && validPoint(msg.position)) {
     map.setZoomAndCenter(Math.min(17, Math.max(3, Number(msg.zoom) || 10)), msg.position);
   } else if (msg.type === "convert" && validPoint(msg.position)) {

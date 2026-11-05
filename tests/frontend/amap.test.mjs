@@ -35,5 +35,5 @@ test("GPS coordinates must pass conversion before being used for distance", asyn
 
 test("failed address lookup does not invent a city", async () => {
   class Geocoder { getAddress(point, done) { done("error",{}); } }
-  assert.equal(await addressFor({Geocoder},[116,39]),null);
+  assert.equal(await addressFor({Geocoder, plugin(name, ready) { assert.equal(name,"AMap.Geocoder"); ready(); }},[116,39]),null);
 });
