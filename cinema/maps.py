@@ -17,7 +17,7 @@ from .core import require
 maps = Blueprint("maps", __name__)
 ALLOWED_PATHS = frozenset({
     "v3/assistant/coordinate/convert", "v3/geocode/regeo", "v4/maps",
-    "v4/map/styles", "v4/map/styles/list",
+    "v4/map/styles", "v4/map/styles/list", "v3/direction/walking",
 })
 
 

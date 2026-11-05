@@ -1,5 +1,5 @@
 import { loadAMap, toMapPosition, addressFor } from "./amap-sdk.js";
-let map, AMap, markers = [], ready = false;
+let map, AMap, markers = [], ready = false, walking, routeVersion = 0;
 const send = (data) => parent.postMessage({ channel: "falcons-map", ...data }, location.origin);
 const fail = () => {
   const error = document.getElementById("map-error");
@@ -11,7 +11,22 @@ window.addEventListener("error", () => { if (!ready) fail(); });
 window.addEventListener("message", async (event) => {
   if (event.source !== parent || event.origin !== location.origin || event.data?.channel !== "falcons-map" || !ready) return;
   const msg = event.data;
-  if (msg.type === "render") {
+  if (msg.type === "clear-route") {
+    ++routeVersion; walking?.clear(); document.getElementById("route-panel").hidden = true;
+  } else if (msg.type === "route" && validPoint(msg.origin) && validPoint(msg.destination)) {
+    const version = ++routeVersion;
+    walking?.clear();
+    const panel = document.getElementById("route-panel"); panel.hidden = true;
+    AMap.plugin("AMap.Walking", () => {
+      if (version !== routeVersion) return;
+      walking = new AMap.Walking({map, panel:"route-panel"});
+      walking.search(msg.origin, msg.destination, (status) => {
+        if (version !== routeVersion) return;
+        panel.hidden = status !== "complete";
+        send({type:status === "complete" ? "routed" : "route-error", id:msg.id});
+      });
+    });
+  } else if (msg.type === "render") {
     map.remove(markers); markers = [];
     for (const c of (msg.cinemas || []).slice(0, 200)) {
       if (!validPoint(c.position) || !/^\d+$/.test(c.id)) continue;
