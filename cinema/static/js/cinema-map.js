@@ -62,6 +62,9 @@ export async function renderCinemaMap(ctx) {
     el("status").textContent = status === "located" ? locatedText() : t(status);
     el("locate").disabled = running || !config.enabled;
     el("load").disabled = running || !config.enabled;
+    root.querySelectorAll("[data-route]").forEach((button) => {
+      button.disabled = running || !config.enabled;
+    });
     el("clear").hidden = !position;
     el("nearest").disabled = !position;
     el("nearest").checked = nearest;
