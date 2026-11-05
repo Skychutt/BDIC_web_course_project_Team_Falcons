@@ -42,11 +42,46 @@ const words = {
 };
 
 const cinemaPhotos = {
-  "万达影城(CBD万达广场店)": {src:"/static/assets/cinemas/wanda-cbd.webp", alt:"北京CBD万达广场建筑外观", source:"https://www.wanda-cbd.cn/index.html"},
+  "万达影城(CBD万达广场店)": {
+    "src": "/static/assets/cinemas/wanda-cbd.webp",
+    "alt": "北京CBD万达广场建筑外观",
+    "source": "https://www.wanda-cbd.cn/index.html",
+    "caption": "所在建筑"
+  },
+  "万达影城(西铁营店)": {
+    "src": "/static/assets/cinemas/wanda-xitieying.webp",
+    "alt": "北京西铁营万达广场夜间外观",
+    "source": "https://www.sohu.com/picture/772923275",
+    "caption": "所在建筑"
+  },
+  "保利国际影城(凯德大峡谷店)": {
+    "src": "/static/assets/cinemas/poly-canyon.webp",
+    "alt": "北京凯德大峡谷商场及保利电影院线外观",
+    "source": "https://www.theedgesingapore.com/capital/results/capitaland-china-trusts-fy2023-dpu-falls-101-retail-improves-new-economy-struggles",
+    "caption": "所在建筑"
+  },
+  "中华电影院": {
+    "src": "/static/assets/cinemas/zhonghua.webp",
+    "alt": "北京中华电影院历史外观，非当前门面照片",
+    "source": "https://www.sohu.com/a/333425910_120047053",
+    "caption": "历史外观"
+  },
+  "北京站电影院": {
+    "src": "/static/assets/cinemas/beijing-station.webp",
+    "alt": "影院周边的北京站建筑外观，非影院入口",
+    "source": "https://www.sohu.com/a/786121631_121117452",
+    "caption": "周边地标"
+  },
+  "北京横店影城(王府井百货店)": {
+    "src": "/static/assets/cinemas/hengdian-wangfujing.webp",
+    "alt": "横店影城所在的北京王府井百货大楼夜间外观",
+    "source": "https://4travel.jp/os_shisetsu/10408729",
+    "caption": "所在建筑"
+  }
 };
 function cinemaCover(cinema) {
   const photo = cinemaPhotos[cinema.name];
-  return `<div class="cinema-card-top cinema-photo-cover">${photo ? `<img src="${photo.src}" alt="${esc(photo.alt)}" loading="lazy" decoding="async" width="1200" height="800">` : ""}<span class="cinema-cover-label"><small>BEIJING · CINEMA</small><span>${esc(cinema.district_name || "Beijing")}</span></span>${photo ? `<a class="cinema-photo-credit" href="${photo.source}" target="_blank" rel="noopener noreferrer">实景 · 来源 ↗</a>` : ""}</div>`;
+  return `<div class="cinema-card-top cinema-photo-cover">${photo ? `<img src="${photo.src}" alt="${esc(photo.alt)}" loading="lazy" decoding="async" width="1200" height="800">` : ""}<span class="cinema-cover-label"><small>BEIJING · CINEMA</small><span>${esc(cinema.district_name || "Beijing")}</span></span>${photo ? `<a class="cinema-photo-credit" href="${photo.source}" target="_blank" rel="noopener noreferrer">${esc(photo.caption)} · 来源 ↗</a>` : ""}</div>`;
 }
 export async function renderCinemaMap(ctx) {
   const { root, api, bootstrap } = ctx;

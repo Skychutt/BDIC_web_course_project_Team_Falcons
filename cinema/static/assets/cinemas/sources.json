@@ -1,8 +1,50 @@
 [
   {
+    "cinema": "万达影城(CBD万达广场店)",
     "file": "wanda-cbd.webp",
-    "description": "北京CBD万达广场外观，影院所在综合体；非影厅或影院入口",
+    "description": "北京CBD万达广场建筑外观",
+    "caption": "所在建筑",
     "source": "https://www.wanda-cbd.cn/index.html",
     "image": "https://www.wanda-cbd.cn/images/0loupantu/2.jpg"
+  },
+  {
+    "cinema": "万达影城(西铁营店)",
+    "file": "wanda-xitieying.webp",
+    "description": "北京西铁营万达广场夜间外观",
+    "caption": "所在建筑",
+    "source": "https://www.sohu.com/picture/772923275",
+    "image": "https://q8.itc.cn/q_70/images01/20240419/37956e0ffb064b059d35c1de31ebe35d.jpeg"
+  },
+  {
+    "cinema": "保利国际影城(凯德大峡谷店)",
+    "file": "poly-canyon.webp",
+    "description": "北京凯德大峡谷商场及保利电影院线外观",
+    "caption": "所在建筑",
+    "source": "https://www.theedgesingapore.com/capital/results/capitaland-china-trusts-fy2023-dpu-falls-101-retail-improves-new-economy-struggles",
+    "image": "https://edgemarkets-transferred.s3-ap-southeast-1.amazonaws.com/styles/article_detail_v2/s3/Grand%20Canyon%20Mall%20.jpg"
+  },
+  {
+    "cinema": "中华电影院",
+    "file": "zhonghua.webp",
+    "description": "北京中华电影院历史外观，非当前门面照片",
+    "caption": "历史外观",
+    "source": "https://www.sohu.com/a/333425910_120047053",
+    "image": "https://5b0988e595225.cdn.sohucs.com/images/20190813/1e4e8659ebd94a18b58fb46c9e1d11d7.jpeg"
+  },
+  {
+    "cinema": "北京站电影院",
+    "file": "beijing-station.webp",
+    "description": "影院周边的北京站建筑外观，非影院入口",
+    "caption": "周边地标",
+    "source": "https://www.sohu.com/a/786121631_121117452",
+    "image": "https://q5.itc.cn/q_70/images03/20240615/152113f3e78b4e20bf6b9bd2b52cba51.jpeg"
+  },
+  {
+    "cinema": "北京横店影城(王府井百货店)",
+    "file": "hengdian-wangfujing.webp",
+    "description": "横店影城所在的北京王府井百货大楼夜间外观",
+    "caption": "所在建筑",
+    "source": "https://4travel.jp/os_shisetsu/10408729",
+    "image": "https://cdn.4travel.jp/img/thumbnails/imk/tips_pict/14/09/10/650x450_14091008.jpg?updated_at=1472892367"
   }
 ]
