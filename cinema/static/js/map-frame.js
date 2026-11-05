@@ -1,5 +1,6 @@
+import { createRoutePlanner } from "./map-route.js";
 import { loadAMap, toMapPosition, addressFor } from "./amap-sdk.js";
-let map, AMap, markers = [], ready = false, walking, routeVersion = 0, markerKey = "", userMarker;
+let map, AMap, markers = [], ready = false, planner, routeVersion = 0, markerKey = "", userMarker;
 const send = (data) => parent.postMessage({ channel: "falcons-map", ...data }, location.origin);
 const fail = () => {
   const error = document.getElementById("map-error");
@@ -12,20 +13,15 @@ window.addEventListener("message", async (event) => {
   if (event.source !== parent || event.origin !== location.origin || event.data?.channel !== "falcons-map" || !ready) return;
   const msg = event.data;
   if (msg.type === "clear-route") {
-    ++routeVersion; walking?.clear(); document.getElementById("route-panel").hidden = true;
+    ++routeVersion; planner?.clear();
   } else if (msg.type === "route" && validPoint(msg.origin) && validPoint(msg.destination)) {
     const version = ++routeVersion;
-    walking?.clear();
-    const panel = document.getElementById("route-panel"); panel.hidden = true;
-    AMap.plugin("AMap.Walking", () => {
-      if (version !== routeVersion) return;
-      walking = new AMap.Walking({map, panel:"route-panel"});
-      walking.search(msg.origin, msg.destination, (status) => {
-        if (version !== routeVersion) return;
-        panel.hidden = status !== "complete";
-        send({type:status === "complete" ? "routed" : "route-error", id:msg.id});
-      });
-    });
+    try {
+      const details = await planner.search(msg.origin, msg.destination, msg.mode);
+      if (version === routeVersion) send({type:"routed", id:msg.id, ...details});
+    } catch (error) {
+      if (version === routeVersion) send({type:"route-error", id:msg.id, code:error.message});
+    }
   } else if (msg.type === "render") {
     const cinemas = (msg.cinemas || []).slice(0, 200);
     const nextKey = JSON.stringify(cinemas);
@@ -72,5 +68,6 @@ try {
   });
   AMap = await loadAMap(config);
   map = new AMap.Map("map", { viewMode: "2D", zoom: 10, center: [116.397428, 39.90923] });
+  planner = createRoutePlanner(AMap, map, document.getElementById("route-panel"));
   map.on("complete", () => { if (!ready) { ready = true; send({ type: "ready" }); } });
 } catch { fail(); }

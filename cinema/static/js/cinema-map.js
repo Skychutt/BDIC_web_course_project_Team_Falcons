@@ -18,7 +18,7 @@ const words = {
     unlocated: "Map position pending", missing: "cinema(s) have no map coordinates. Their distance cannot be calculated.",
     count: "cinemas", distance: "Straight-line distance", showtimes: "See showtimes", onMap: "Show on map", nomatch: "No cinemas in this district.",
     expired: "Location cleared after 10 minutes. Locate again for fresh distances.", mapLabel: "AMap cinema map", you: "Your approximate location",
-    navigate: "Walking directions", routing: "Planning walking route…", routed: "Walking route ready. Follow the directions on the map.", route_failed: "Route unavailable. Try a nearer cinema or retry later.",
+    drive: "Driving directions", route_permission: "AMap key does not permit this route service. Check key permissions.", route_timeout: "AMap route request timed out. Please retry.", route_no_data: "No road route was returned for these locations.", navigate: "Walking directions", routing: "Planning road route…", routed: "Road route ready. Follow the directions on the map.", route_failed: "Route unavailable. Try a nearer cinema or retry later.",
     noPins: "No cinema coordinates have been added yet. The map shows Beijing; no cinema markers or distances are invented.",
   },
   zh: {
@@ -36,7 +36,7 @@ const words = {
     unlocated: "地图位置待补充", missing: "家影院尚未填写地图坐标，暂时无法计算距离。",
     count: "家影院", distance: "直线距离", showtimes: "查看场次", onMap: "在地图中查看", nomatch: "该区域暂无影院。",
     expired: "位置已在 10 分钟后清除，请重新定位。", mapLabel: "高德影院地图", you: "你的大致位置",
-    navigate: "步行导航", routing: "正在规划步行路线…", routed: "步行路线已显示，可在地图中查看分段指引。", route_failed: "暂时无法规划路线，请选择较近的影院或稍后重试。",
+    drive: "驾车导航", route_permission: "高德Key未获当前路线服务授权，请检查平台类型和接口权限。", route_timeout: "高德路线请求超时，请重试。", route_no_data: "高德没有返回可用的道路路线。", navigate: "步行导航", routing: "正在规划道路路线…", routed: "道路路线已显示，可在地图中查看分段指引。", route_failed: "暂时无法规划路线，请选择较近的影院或稍后重试。",
     noPins: "当前影院尚未填写坐标。地图先显示北京，暂不展示影院标记和距离。",
   },
 };
@@ -84,7 +84,7 @@ export async function renderCinemaMap(ctx) {
     const missing = values.filter((c) => !c.position).length;
     el("count").textContent = `${values.length} ${t("count")}`;
     el("missing").textContent = missing ? `${missing} ${t("missing")}` : "";
-    el("list").innerHTML = values.map((c) => `<article class="cinema-card"><div class="cinema-card-top">${esc(c.district_name || "Beijing")}</div><div class="cinema-card-body"><p class="eyebrow">${esc(c.brand)}</p><h2>${esc(c.name)}</h2><p>${icon("pin")} ${esc(c.address)}</p><p class="cinema-distance">${c.distance != null ? `${t("distance")} · ${(c.distance / 1000).toFixed(1)} km` : c.position ? "" : t("unlocated")}</p><div class="map-card-actions"><a class="button ghost wide" href="#/discover?${new URLSearchParams({ cinema_id: c.id, district_id: c.district_id })}">${t("showtimes")} ${icon("arrow")}</a>${c.position ? `<button type="button" class="button secondary wide" data-pin="${esc(c.id)}">${t("onMap")}</button><button type="button" class="button wide" data-route="${esc(c.id)}">${t("navigate")}</button>` : ""}</div></div></article>`).join("") || empty(t("nomatch"));
+    el("list").innerHTML = values.map((c) => `<article class="cinema-card"><div class="cinema-card-top">${esc(c.district_name || "Beijing")}</div><div class="cinema-card-body"><p class="eyebrow">${esc(c.brand)}</p><h2>${esc(c.name)}</h2><p>${icon("pin")} ${esc(c.address)}</p><p class="cinema-distance">${c.distance != null ? `${t("distance")} · ${(c.distance / 1000).toFixed(1)} km` : c.position ? "" : t("unlocated")}</p><div class="map-card-actions"><a class="button ghost wide" href="#/discover?${new URLSearchParams({ cinema_id: c.id, district_id: c.district_id })}">${t("showtimes")} ${icon("arrow")}</a>${c.position ? `<button type="button" class="button secondary wide" data-pin="${esc(c.id)}">${t("onMap")}</button><button type="button" class="button wide" data-route="${esc(c.id)}">${t("navigate")}</button><button type="button" class="button wide" data-route="${esc(c.id)}" data-mode="driving">${t("drive")}</button>` : ""}</div></div></article>`).join("") || empty(t("nomatch"));
     el("list").querySelectorAll("[data-pin]").forEach((button) => {
       button.onclick = () => run(async () => {
         await ensureMap();
@@ -101,7 +101,7 @@ export async function renderCinemaMap(ctx) {
         if (disposed || !position) return;
         await ensureMap(); status = "routing"; message();
         el("canvas").scrollIntoView({block:"center", behavior:"smooth"});
-        await map.route(position, cinema.position);
+        await map.route(position, cinema.position, button.dataset.mode || "walking");
         if (!disposed) status = "routed";
       });
     });

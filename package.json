@@ -9,7 +9,7 @@
     "check:counter": "node tests/browser/counter-smoke.mjs",
     "check:hold-boundary": "node tests/browser/hold-boundary-smoke.mjs",
     "check:assistant": "node --test tests/frontend/assistant-link.test.mjs",
-    "check:maps": "node --test tests/frontend/geo.test.mjs tests/frontend/amap.test.mjs"
+    "check:maps": "node --test tests/frontend/geo.test.mjs tests/frontend/amap.test.mjs tests/frontend/map-route.test.mjs"
   },
   "devDependencies": {
     "playwright": "1.62.1"

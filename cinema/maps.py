@@ -18,6 +18,7 @@ maps = Blueprint("maps", __name__)
 ALLOWED_PATHS = frozenset({
     "v3/assistant/coordinate/convert", "v3/geocode/regeo", "v4/maps",
     "v4/map/styles", "v4/map/styles/list", "v3/direction/walking",
+    "v3/direction/driving", "v5/direction/walking", "v5/direction/driving",
 })
 
 
@@ -46,6 +47,7 @@ def config():
 
 @maps.get("/_AMapService/<path:service>")
 def proxy(service):
+    service = service.rstrip("/")
     require(configured(), "MAP_NOT_CONFIGURED", "Map service is not configured.", 503)
     require(service in ALLOWED_PATHS, "MAP_SERVICE_NOT_ALLOWED", "This map service is unavailable.", 404)
     require(request.headers.get("Sec-Fetch-Site") not in {"cross-site"}, "MAP_ORIGIN", "Use the map on this website.", 403)
@@ -73,7 +75,7 @@ def proxy(service):
     # Stream to enforce a real response cap, even if Content-Length is absent.
     try:
         with httpx.stream("GET", "https://restapi.amap.com/" + service, params=params,
-                          timeout=6.0, follow_redirects=False) as upstream:
+                          timeout=httpx.Timeout(15.0, connect=8.0), follow_redirects=False) as upstream:
             if upstream.status_code != 200:
                 return jsonify(error={"code": "MAP_UNAVAILABLE", "message": "AMap could not complete the request."}), 502
             chunks, size = [], 0
@@ -89,6 +91,8 @@ def proxy(service):
                                      callback + " (" if callback else "{")),
                 "MAP_RESPONSE", "Invalid map service response.", 502)
         return Response(content, mimetype="application/javascript" if callback else "application/json")
+    except httpx.ConnectError:
+        return jsonify(error={"code": "MAP_CONNECTION", "message": "Cannot establish a secure connection to AMap route services."}), 502
     except (httpx.HTTPError, UnicodeError):
         # Do not log exceptions: upstream URLs contain jscode and coordinates.
         return jsonify(error={"code": "MAP_UNAVAILABLE", "message": "AMap is unavailable. Retry or choose a district manually."}), 502

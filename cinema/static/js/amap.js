@@ -33,7 +33,7 @@ export function createMapFrame(container, onCinema, config) {
       const call = pending.get(msg.id); pending.delete(msg.id); clearTimeout(call.timer);
       if (msg.type === "routed") call.resolve(msg);
       else if (msg.type === "converted") call.resolve({ position:msg.position, address:msg.address });
-      else call.reject(new Error("conversion"));
+      else call.reject(new Error(msg.code || "conversion"));
     }
   }
   window.addEventListener("message", receive);
@@ -41,12 +41,12 @@ export function createMapFrame(container, onCinema, config) {
     render(cinemas, position) { send({ type:"render", cinemas, position }); },
     focus(position, zoom=13) { send({ type:"focus", position, zoom }); },
     clearRoute() { send({type:"clear-route"}); },
-    route(origin, destination) {
+    route(origin, destination, mode = "walking") {
       return new Promise((resolve, reject) => {
         const id = ++serial;
-        const timer = setTimeout(() => { pending.delete(id); reject(new Error("route_failed")); }, 20000);
-        pending.set(id, { resolve, reject: () => reject(new Error("route_failed")), timer });
-        send({type:"route", id, origin, destination});
+        const timer = setTimeout(() => { pending.delete(id); reject(new Error("route_failed")); }, 40000);
+        pending.set(id, { resolve, reject, timer });
+        send({type:"route", id, origin, destination, mode});
       });
     },
     convert(coords) {
