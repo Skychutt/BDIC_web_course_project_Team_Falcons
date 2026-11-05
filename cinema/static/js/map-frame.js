@@ -37,8 +37,15 @@ function validPoint(value) {
   return Array.isArray(value) && value.length === 2 && value.every(Number.isFinite) && Math.abs(value[0]) <= 180 && Math.abs(value[1]) <= 90;
 }
 try {
-  const response = await fetch("/api/maps/config");
-  const config = (await response.json()).data;
+  const config = await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => { window.removeEventListener("message", receiveConfig); reject(new Error("config")); }, 10000);
+    function receiveConfig(event) {
+      if (event.source !== parent || event.origin !== location.origin || event.data?.channel !== "falcons-map" || event.data.type !== "config") return;
+      clearTimeout(timeout); window.removeEventListener("message", receiveConfig); resolve(event.data.config);
+    }
+    window.addEventListener("message", receiveConfig);
+    send({type:"config-request"});
+  });
   AMap = await loadAMap(config);
   map = new AMap.Map("map", { viewMode: "2D", zoom: 10, center: [116.397428, 39.90923] });
   map.on("complete", () => { if (!ready) { ready = true; send({ type: "ready" }); } });

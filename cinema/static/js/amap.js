@@ -10,7 +10,7 @@ export function locateDevice() {
 }
 
 // Isolate the vendor SDK from the booking document's strict script policy.
-export function createMapFrame(container, onCinema) {
+export function createMapFrame(container, onCinema, config) {
   const frame = document.createElement("iframe");
   frame.title = "Cinema map · 高德地图";
   frame.src = "/maps/embed";
@@ -25,7 +25,8 @@ export function createMapFrame(container, onCinema) {
   function receive(event) {
     if (disposed || event.source !== frame.contentWindow || event.origin !== location.origin || event.data?.channel !== "falcons-map") return;
     const msg = event.data;
-    if (msg.type === "ready") { clearTimeout(timer); readyResolve(); }
+    if (msg.type === "config-request") { send({ type:"config", config }); }
+    else if (msg.type === "ready") { clearTimeout(timer); readyResolve(); }
     else if (msg.type === "error") { clearTimeout(timer); readyReject(new Error("load_failed")); }
     else if (msg.type === "cinema" && /^\d+$/.test(msg.id)) onCinema(msg.id);
     else if (pending.has(msg.id)) {

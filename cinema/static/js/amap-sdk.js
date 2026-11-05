@@ -18,7 +18,7 @@ export function loadAMap(config) {
     window.__falconsAMapReady = () => finish(window.AMap?.Map ? null : new Error("load_failed"));
     script.onerror = () => finish(new Error("load_failed"));
     script.src = "https://webapi.amap.com/maps?" + new URLSearchParams({ v: "2.0", key: config.key,
-      plugin: "AMap.Geocoder", callback: "__falconsAMapReady" });
+      callback: "__falconsAMapReady" });
     document.head.append(script);
   });
   return sdkPromise;
@@ -40,9 +40,9 @@ export function toMapPosition(AMap, coords) {
 export function addressFor(AMap, position) {
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve(null), 5000);
-    new AMap.Geocoder({ extensions: "base" }).getAddress(position, (status, result) => {
+    AMap.plugin("AMap.Geocoder", () => new AMap.Geocoder({ extensions: "base" }).getAddress(position, (status, result) => {
       clearTimeout(timer);
       resolve(status === "complete" ? result?.regeocode?.addressComponent || null : null);
-    });
+    }));
   });
 }
