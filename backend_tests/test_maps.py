@@ -81,6 +81,22 @@ def test_proxy_bounded_failures(map_app, monkeypatch, mode):
     assert "private-map-code" not in response.text
 
 
+@pytest.mark.parametrize("service,exception,code", [
+    ("walking", httpx.ConnectError, "MAP_CONNECTION"),
+    ("driving", httpx.ReadTimeout, "MAP_TIMEOUT"),
+])
+def test_route_proxy_reports_upstream_failure_to_sdk(map_app, monkeypatch, service, exception, code):
+    @contextmanager
+    def stream(*args, **kwargs):
+        raise exception("URL with secret must not be sent to the browser")
+        yield
+
+    monkeypatch.setattr("cinema.maps.httpx.stream", stream)
+    response = map_app.test_client().get(f"/_AMapService/v3/direction/{service}?callback=route.done")
+    assert response.status_code == 200 and response.mimetype == "application/javascript"
+    assert response.text == f'route.done({{"status": "0", "info": "{code}"}});'
+
+
 def test_proxy_throttles_before_network(map_app, monkeypatch):
     import time
     from collections import deque

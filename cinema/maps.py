@@ -3,6 +3,7 @@
 User coordinates are never stored or sent to the language model. This proxy only
 supports the read services used by the browser map; it is not a general HTTP proxy.
 """
+import json
 import re
 import logging
 import threading
@@ -19,6 +20,10 @@ ALLOWED_PATHS = frozenset({
     "v3/assistant/coordinate/convert", "v3/geocode/regeo", "v4/maps",
     "v4/map/styles", "v4/map/styles/list", "v3/direction/walking",
     "v3/direction/driving", "v5/direction/walking", "v5/direction/driving",
+})
+ROUTE_PATHS = frozenset({
+    "v3/direction/walking", "v3/direction/driving",
+    "v5/direction/walking", "v5/direction/driving",
 })
 
 
@@ -71,18 +76,27 @@ def proxy(service):
     params["key"] = current_app.config["AMAP_JS_KEY"]
     secret = current_app.config["AMAP_SECURITY_CODE"]
     params["jscode"] = secret
+
+    def upstream_failure(code, message):
+        if service in ROUTE_PATHS and callback:
+            # A failed script load drops the error body. Complete the SDK's JSONP
+            # callback with a failure result so it can report the actual problem.
+            payload = json.dumps({"status": "0", "info": code})
+            return Response(f"{callback}({payload});", mimetype="application/javascript")
+        return jsonify(error={"code": code, "message": message}), 502
+
     # Never forward browser cookies, auth headers, redirects, or arbitrary hosts.
     # Stream to enforce a real response cap, even if Content-Length is absent.
     try:
         with httpx.stream("GET", "https://restapi.amap.com/" + service, params=params,
                           timeout=httpx.Timeout(15.0, connect=8.0), follow_redirects=False) as upstream:
             if upstream.status_code != 200:
-                return jsonify(error={"code": "MAP_UNAVAILABLE", "message": "AMap could not complete the request."}), 502
+                return upstream_failure("MAP_UNAVAILABLE", "AMap could not complete the request.")
             chunks, size = [], 0
             for chunk in upstream.iter_bytes():
                 size += len(chunk)
                 if size > 2 * 1024 * 1024:
-                    return jsonify(error={"code": "MAP_UNAVAILABLE", "message": "Map response exceeded the limit."}), 502
+                    return upstream_failure("MAP_UNAVAILABLE", "Map response exceeded the limit.")
                 chunks.append(chunk)
         content = b"".join(chunks).decode("utf-8").replace(secret, "[redacted]")
         # The SDK uses JSONP; reject HTML/redirect pages instead of executing them.
@@ -92,7 +106,9 @@ def proxy(service):
                 "MAP_RESPONSE", "Invalid map service response.", 502)
         return Response(content, mimetype="application/javascript" if callback else "application/json")
     except httpx.ConnectError:
-        return jsonify(error={"code": "MAP_CONNECTION", "message": "Cannot establish a secure connection to AMap route services."}), 502
+        return upstream_failure("MAP_CONNECTION", "Cannot establish a secure connection to AMap.")
+    except httpx.TimeoutException:
+        return upstream_failure("MAP_TIMEOUT", "AMap did not respond in time.")
     except (httpx.HTTPError, UnicodeError):
         # Do not log exceptions: upstream URLs contain jscode and coordinates.
-        return jsonify(error={"code": "MAP_UNAVAILABLE", "message": "AMap is unavailable. Retry or choose a district manually."}), 502
+        return upstream_failure("MAP_UNAVAILABLE", "AMap is unavailable. Retry or choose a district manually.")

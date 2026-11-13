@@ -24,3 +24,6 @@ test('missing road geometry never becomes a fake straight line',async()=>{
 test('provider permission failure stays an error',async()=>{
  const f=fixture({info:'INVALID_USER_KEY'},'error');await assert.rejects(f.planner.search([116,39],[117,40]),/route_permission/);assert.equal(f.added.length,0);
 });
+test('route connection failure is distinct from denied permission',async()=>{
+ const f=fixture({info:'MAP_CONNECTION'},'error');await assert.rejects(f.planner.search([116,39],[117,40]),/route_connection/);assert.equal(f.added.length,0);
+});

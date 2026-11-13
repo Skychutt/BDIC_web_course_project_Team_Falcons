@@ -27,7 +27,11 @@ export function createRoutePlanner(AMap, map, panel) {
             if (current !== version || settled) return;
             if (status !== "complete") {
               const info = String(result?.info || result || "");
-              const code = /KEY|USER|PLATFORM|REFERER|PERMISSION|PRIVILEGE/i.test(info) ? "route_permission" : "route_failed";
+              let code = "route_failed";
+              if (/MAP_CONNECTION/.test(info)) code = "route_connection";
+              else if (/MAP_TIMEOUT/.test(info)) code = "route_timeout";
+              else if (status === "no_data") code = "route_no_data";
+              else if (/KEY|USER|PLATFORM|REFERER|PERMISSION|PRIVILEGE/i.test(info)) code = "route_permission";
               return finish(new Error(code));
             }
             try {
@@ -46,7 +50,7 @@ export function createRoutePlanner(AMap, map, panel) {
               }
               panel.replaceChildren(heading,list); panel.hidden = false;
               finish(null,{distance,time});
-            } catch { clear(); finish(new Error("route_failed")); }
+            } catch { finish(new Error("route_failed")); clear(); }
           });
         } catch { finish(new Error("route_failed")); }
       }); } catch { finish(new Error("route_failed")); }

@@ -4,6 +4,7 @@ import { createMapFrame, locateDevice } from "./amap.js";
 
 const words = {
   en: {
+    route_connection: "Cannot connect securely to AMap. Check your network or proxy and try again.",
     title: "A big screen, near you.", intro: "Explore our Beijing cinemas and find your next showtime.",
     map: "Show map", locate: "Use my location", clear: "Clear location", district: "District", all: "All Beijing",
     nearest: "Sort by distance", privacy: "Location is optional. When you choose to locate, your browser asks permission and AMap converts the position. It stays in this page's memory and is not sent to the AI assistant.",
@@ -22,6 +23,7 @@ const words = {
     noPins: "No cinema coordinates have been added yet. The map shows Beijing; no cinema markers or distances are invented.",
   },
   zh: {
+    route_connection: "无法安全连接高德路线服务，请检查网络或代理后重试。",
     title: "找到附近的好影院", intro: "浏览北京影院，查看地址与可售场次。",
     map: "显示地图", locate: "定位我的位置", clear: "清除位置", district: "行政区", all: "北京全市",
     nearest: "按距离排序", privacy: "定位为可选功能。点击定位后，浏览器会请求授权，高德会进行坐标转换。位置仅保留在当前页面内存，不发送给 AI 助手。",
