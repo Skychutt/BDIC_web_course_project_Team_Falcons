@@ -1,0 +1,75 @@
+{
+  "description": "Manually verified from the rating block on each linked Douban film page on 2026-11-14. The score, rating count and all five percentages were read together. Published percentages are rounded; no exact per-star counts are available or inferred. These are source snapshots, not live data or Falcons votes.",
+  "films": [
+    {
+      "film_title": "Resident Evil (2026)",
+      "source_name": "Douban",
+      "source_title": "生化危机：爆发夜 Resident Evil (2026)",
+      "source_url": "https://movie.douban.com/subject/37068446/",
+      "checked_on": "2026-11-14",
+      "score": 7.3,
+      "vote_count": 243205,
+      "star_5": 14.8,
+      "star_4": 44.6,
+      "star_3": 32.9,
+      "star_2": 5.8,
+      "star_1": 2.0
+    },
+    {
+      "film_title": "Tenzing",
+      "source_name": "Douban",
+      "source_title": "登峰传奇：丹增诺盖 Tenzing (2026)",
+      "source_url": "https://movie.douban.com/subject/36887293/",
+      "checked_on": "2026-11-14",
+      "score": 7.7,
+      "vote_count": 3919,
+      "star_5": 22.8,
+      "star_4": 45.0,
+      "star_3": 28.9,
+      "star_2": 3.0,
+      "star_1": 0.4
+    },
+    {
+      "film_title": "The Love Hypothesis",
+      "source_name": "Douban",
+      "source_title": "爱情假说 The Love Hypothesis (2026)",
+      "source_url": "https://movie.douban.com/subject/37365064/",
+      "checked_on": "2026-11-14",
+      "score": 6.6,
+      "vote_count": 7456,
+      "star_5": 10.6,
+      "star_4": 27.6,
+      "star_3": 47.1,
+      "star_2": 12.6,
+      "star_1": 2.1
+    },
+    {
+      "film_title": "牛来 (Niu Lai)",
+      "source_name": "Douban",
+      "source_title": "牛来 (2026)",
+      "source_url": "https://movie.douban.com/subject/38581618/",
+      "checked_on": "2026-11-14",
+      "score": 6.0,
+      "vote_count": 53359,
+      "star_5": 32.2,
+      "star_4": 10.5,
+      "star_3": 14.5,
+      "star_2": 10.6,
+      "star_1": 32.3
+    },
+    {
+      "film_title": "The Shawshank Redemption",
+      "source_name": "Douban",
+      "source_title": "肖申克的救赎 The Shawshank Redemption (1994)",
+      "source_url": "https://movie.douban.com/subject/1292052/",
+      "checked_on": "2026-11-14",
+      "score": 9.7,
+      "vote_count": 3364516,
+      "star_5": 85.4,
+      "star_4": 13.0,
+      "star_3": 1.4,
+      "star_2": 0.1,
+      "star_1": 0.1
+    }
+  ]
+}

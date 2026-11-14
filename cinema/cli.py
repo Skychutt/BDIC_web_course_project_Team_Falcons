@@ -26,9 +26,27 @@ def initialize(engine):
     initialize_ratings(engine)
     from .community import initialize_community
     initialize_community(engine)
+    from .rating_snapshots import initialize_rating_snapshots
+    initialize_rating_snapshots(engine)
 
 
 def register_cli(app):
+    @app.cli.command("import-rating-snapshots")
+    @click.argument("manifest", type=click.Path(exists=True, dir_okay=False))
+    def import_rating_snapshots(manifest):
+        """Add verified source snapshots without changing votes, baselines or bookings."""
+        import json
+        from pathlib import Path
+        from .rating_snapshots import initialize_rating_snapshots, import_snapshots
+        items = json.loads(Path(manifest).read_text(encoding="utf-8"))["films"]
+        initialize_rating_snapshots(db())
+        try:
+            with db().begin() as c:
+                count = import_snapshots(c, items)
+        except ValueError as error:
+            raise click.ClickException(str(error)) from error
+        click.echo(f"Imported {count} verified rating snapshots. Customer votes unchanged.")
+
     @app.cli.command("migrate-community")
     def migrate_community():
         """Add review/discussion tables without modifying existing application data."""

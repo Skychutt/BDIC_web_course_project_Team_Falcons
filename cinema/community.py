@@ -3,6 +3,7 @@ from importlib.resources import files
 from flask import Blueprint, g, request
 
 from . import catalog
+from .rating_snapshots import get_snapshot
 from .api import body, key, logged, output
 from .core import db, digest, execute, get, ins, integer, new_id, now, one, require, role, rows, string, transaction
 
@@ -67,7 +68,8 @@ def overview(fid):
             own_review = one(c, "SELECT body,spoiler FROM film_reviews WHERE film_id=:f AND customer_id=:u", f=fid, u=g.actor["id"])
         imported = one(c, "SELECT vote_count FROM film_rating_baselines WHERE film_id=:f", f=fid)
         return output(dict(film=film, counts=counts, votes=votes, own_rating=own_rating,
-                           own_review=own_review, imported_votes=imported["vote_count"] if imported else 0))
+                           own_review=own_review, imported_votes=imported["vote_count"] if imported else 0,
+                           rating_snapshot=get_snapshot(c, fid)))
 
 
 @community.get("/films/<int:fid>/reviews")
