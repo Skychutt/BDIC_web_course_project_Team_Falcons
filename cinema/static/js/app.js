@@ -9,6 +9,7 @@ import { createAssistantWidget } from "./assistant-widget.js";
 import { renderSeats } from "./seats.js";
 import { renderAccount } from "./account.js";
 import { renderOperations } from "./operations.js";
+import { renderReviews, renderFilmReviews, renderDiscussion } from "./community.js";
 
 const api = new CinemaAPI();
 let assistantWidget;
@@ -33,11 +34,12 @@ async function refresh() {
   assistantWidget?.syncIdentity();
 }
 function header() {
-  const routePath = (location.hash || "#/discover").split("?")[0];
+  const currentPath = (location.hash || "#/discover").split("?")[0];
+  const routePath = currentPath.startsWith("#/reviews/") ? "#/reviews" : currentPath;
   const nav = (url, label) =>
     `<a href="${url}" class="${routePath === url ? "active" : ""}" ${routePath === url ? 'aria-current="page"' : ""}>${label}</a>`;
   document.getElementById("site-header").innerHTML =
-    `<div class="brand-wrap"><a class="wordmark" href="#/discover" aria-label="Falcons Cinema home">falcons<span>.</span></a><a class="location" href="#/cinemas" title="View map and use my location">${icon("pin")} Beijing · Map</a></div><nav class="main-nav" aria-label="Main navigation">${nav("#/discover", "Movies & showtimes")}${nav("#/cinemas", "Cinemas")}${user?.role === "CUSTOMER" ? nav("#/account", "My tickets") : ""}${user && user.role !== "CUSTOMER" ? nav("#/operations", user.role === "STAFF" ? "Cinema workspace" : "Platform console") : ""}</nav><div class="header-actions">${user ? `<span class="user-label" title="${esc(user.display_name)}">${esc(user.display_name)}</span><button id="logout" class="button ghost">Sign out</button>` : `<a class="button secondary" href="#/login">Sign in ${icon("arrow")}</a>`}</div>`;
+    `<div class="brand-wrap"><a class="wordmark" href="#/discover" aria-label="Falcons Cinema home">falcons<span>.</span></a><a class="location" href="#/cinemas" title="View map and use my location">${icon("pin")} Beijing · Map</a></div><nav class="main-nav" aria-label="Main navigation">${nav("#/discover", "Movies & showtimes")}${nav("#/cinemas", "Cinemas")}${nav("#/reviews", "Reviews")}${user?.role === "CUSTOMER" ? nav("#/account", "My tickets") : ""}${user && user.role !== "CUSTOMER" ? nav("#/operations", user.role === "STAFF" ? "Cinema workspace" : "Platform console") : ""}</nav><div class="header-actions">${user ? `<span class="user-label" title="${esc(user.display_name)}">${esc(user.display_name)}</span><button id="logout" class="button ghost">Sign out</button>` : `<a class="button secondary" href="#/login">Sign in ${icon("arrow")}</a>`}</div>`;
   document.getElementById("logout")?.addEventListener("click", async (event) =>
     busy(event.currentTarget, async () => {
       try {
@@ -128,6 +130,9 @@ async function route() {
     if (path === "/discover" || path === "/")
       dispose = await renderDiscover(ctx);
     else if (path === "/cinemas") dispose = await renderCinemas(ctx);
+    else if (path === "/reviews") dispose = await renderReviews(ctx);
+    else if (path.startsWith("/reviews/film/")) dispose = await renderFilmReviews(ctx, path.split("/")[3]);
+    else if (path.startsWith("/reviews/thread/")) dispose = await renderDiscussion(ctx, path.split("/")[3]);
     else if (path.startsWith("/film/"))
       dispose = await renderFilm(ctx, path.split("/")[2]);
     else if (path.startsWith("/seats/"))
@@ -144,9 +149,10 @@ async function route() {
     if (token === generation) {
       cleanup = dispose;
       document.title =
-        ({
+        (ctx.title || {
           "/discover": "Movies & showtimes",
           "/cinemas": "Cinemas",
+          "/reviews": "Film reviews",
           "/account": "My tickets",
           "/operations": "Workspace",
           "/login": "Sign in",

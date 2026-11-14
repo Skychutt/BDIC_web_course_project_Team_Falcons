@@ -209,26 +209,7 @@ export async function renderDiscover(ctx) {
 }
 export const renderCinemas = renderCinemaMap;
 export async function renderFilm(ctx, fid) {
-  const { root, api, user, navigate } = ctx;
+  const { root, api } = ctx;
   const film = await api.request("/films/" + encodeURIComponent(fid));
-  root.innerHTML = `<div class="breadcrumb"><a href="#/discover">Movies & showtimes</a>${icon("chevron")}<span>Film details</span></div><div class="film-detail">${poster(film)}<div class="film-detail-copy"><p class="eyebrow">${film.archived ? "FROM THE CATALOGUE" : "NOW SHOWING"}</p><h1>${esc(film.title)}</h1><div class="film-meta"><span>${film.duration_minutes} min</span>${film.genres.map((g) => `<span class="meta-sep">·</span><span>${esc(g.name)}</span>`).join("")}<span class="meta-sep">·</span><span class="rating">${filmRating(film)}</span></div><p class="synopsis">${esc(film.synopsis)}</p><a class="button" href="#/discover?film_id=${esc(fid)}">Find showtimes ${icon("arrow")}</a><div class="rating-form"><h3>How was the film?</h3><p class="muted" style="font-size:12px">Rate this film from 1 to 10. Your rating contributes to the overall score. No booking required.</p>${user?.role === "CUSTOMER" ? `<form id="rating-form"><div class="rating-stars" role="group" aria-label="Your rating">${Array.from({ length: 10 }, (_, i) => i + 1).map((n) => `<label><input type="radio" name="stars" value="${n}" required aria-label="${n} ${n === 1 ? "point" : "points"}"><span>${n}</span></label>`).join("")}</div><div class="form-error"></div><button class="button ghost small" type="submit" style="margin-top:14px">Save my rating</button></form>` : user ? '<p class="muted">Ratings are available to customer accounts.</p>' : `<a class="button ghost" href="#/login?next=${encodeURIComponent(location.hash)}">Sign in to rate</a>`}</div></div></div>`;
-  root
-    .querySelector("#rating-form")
-    ?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const form = event.currentTarget;
-      await busy(form.querySelector("[type=submit]"), async () => {
-        try {
-          await api.request("/films/" + fid + "/rating", {
-            method: "PUT",
-            body: { stars: Number(new FormData(form).get("stars")) },
-          });
-          ctx.toast("Your rating has been saved.");
-          await ctx.refresh();
-          ctx.route();
-        } catch (e) {
-          showError(form.querySelector(".form-error"), e);
-        }
-      });
-    });
+  root.innerHTML = `<div class="breadcrumb"><a href="#/discover">Movies & showtimes</a>${icon("chevron")}<span>Film details</span></div><div class="film-detail">${poster(film)}<div class="film-detail-copy"><p class="eyebrow">${film.archived ? "FROM THE CATALOGUE" : "NOW SHOWING"}</p><h1>${esc(film.title)}</h1><div class="film-meta"><span>${film.duration_minutes} min</span>${film.genres.map((g) => `<span class="meta-sep">·</span><span>${esc(g.name)}</span>`).join("")}<span class="meta-sep">·</span><a class="rating" href="#/reviews/film/${esc(fid)}">${filmRating(film)}</a></div><p class="synopsis">${esc(film.synopsis)}</p><div class="community-actions"><a class="button" href="#/discover?film_id=${esc(fid)}">Find showtimes ${icon("arrow")}</a><a class="button ghost" href="#/reviews/film/${esc(fid)}">Reviews & discussions</a></div><div class="film-community-entry"><p class="eyebrow">BEYOND THE CREDITS</p><h3>What's your take?</h3><p>Give it a few stars, write a short review, or join the conversation. No booking required.</p><a class="community-text-button" href="#/reviews/film/${esc(fid)}">Rate this film ${icon("arrow")}</a></div></div></div>`;
 }
