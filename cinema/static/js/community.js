@@ -1,5 +1,8 @@
 import { esc, icon, poster, empty, dateTime, busy, showError } from "./ui.js";
 import { stars, starPicker, bindStars } from "./star-rating.js";
+import { ratingSummary } from "./rating-distribution.js";
+
+const selectedRatingSources = new Map();
 
 const number = value => Number(value || 0).toLocaleString("en-US");
 const ratingCount = value => `${number(value)} ${Number(value) === 1 ? "rating" : "ratings"}`;
@@ -46,9 +49,22 @@ export async function renderReviews(ctx) {
 }
 
 function scorePanel(data) {
-  const { film, votes, imported_votes } = data;
-  const total = votes.reduce((n, r) => n + r.count, 0);
-  return `<aside class="community-score"><p class="eyebrow">THE AUDIENCE SCORE</p><div class="community-score-number">${film.rating.average == null ? "—" : Number(film.rating.average).toFixed(1)}<small>/ 10</small></div>${stars(film.rating.average)}<p class="community-hint">${ratingCount(film.rating.count)}${imported_votes ? " · includes imported votes" : ""}</p><div class="community-distribution"><h3>On Falcons <span>${ratingCount(total)}</span></h3>${[5, 4, 3, 2, 1].map(n => { const value = votes.filter(r => Math.ceil(r.stars / 2) === n).reduce((v, r) => v + r.count, 0); const percent = total ? Math.round(value / total * 100) : 0; return `<div class="distribution-row"><span>${n} ★</span><span class="distribution-track"><span style="width:${percent}%"></span></span><span>${percent}%</span></div>`; }).join("")}${!total ? '<p class="community-hint">Be the first to leave your stars here.</p>' : ""}</div></aside>`;
+  return `<aside class="community-score" aria-label="Audience ratings"><p class="eyebrow">THE AUDIENCE SCORE</p>${data.rating_snapshot ? '<div class="rating-source-switch" role="group" aria-label="Rating source"><button type="button" data-rating-source="douban">Douban</button><button type="button" data-rating-source="falcons">Falcons</button></div>' : ""}<div class="community-score-content" aria-live="polite"></div></aside>`;
+}
+
+function bindScorePanel(ctx, data) {
+  const panel = ctx.root.querySelector(".community-score");
+  function draw(source) {
+    const score = ratingSummary(data, source);
+    panel.querySelectorAll("[data-rating-source]").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.ratingSource === score.source)));
+    const date = score.checkedOn ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(score.checkedOn)) : "";
+    panel.querySelector(".community-score-content").innerHTML = `<div class="community-score-summary"><div class="community-score-number">${score.average == null ? "—" : score.average.toFixed(1)}<small>/ 10</small></div>${stars(score.average)}<p class="community-hint">${ratingCount(score.count)} on ${score.source === "douban" ? "Douban" : "Falcons"}</p></div><div class="community-distribution"><h3>Rating breakdown</h3>${score.distribution.map(row => `<div class="distribution-row" aria-label="${row.stars} stars: ${row.percent == null ? "no ratings yet" : row.percent.toFixed(1) + "%"}"><span>${row.stars} ★</span><span class="distribution-track" aria-hidden="true"><span style="width:${row.percent ?? 0}%"></span></span><span>${row.percent == null ? "—" : row.percent.toFixed(1) + "%"}</span></div>`).join("")}</div><div class="rating-source-note">${score.source === "douban" ? `<a href="${esc(score.url)}" target="_blank" rel="noopener noreferrer">View on Douban ↗</a><span>Snapshot · <time datetime="${esc(score.checkedOn)}">${date}</time></span><small>Percentages rounded by the source.</small>` : `<span>${score.count ? "From Falcons members. Updated with every rating." : "No ratings here yet. Be the first to leave your stars."}</span>`}</div>`;
+  }
+  panel.querySelectorAll("[data-rating-source]").forEach(button => button.onclick = () => {
+    selectedRatingSources.set(data.film.id, button.dataset.ratingSource);
+    draw(button.dataset.ratingSource);
+  });
+  draw(selectedRatingSources.get(data.film.id) || "douban");
 }
 
 function reviewForm(ctx, data) {
@@ -72,6 +88,7 @@ export async function renderFilmReviews(ctx, fid) {
       ${tab === "reviews" ? `<div class="conversation-heading"><h2>What did you think?</h2><span>Newest first</span></div>${reviewForm(ctx, data)}<div class="community-review-list">${list.items.length ? list.items.map(item => `<article class="community-review"><div class="review-topline">${authorLine(item)}${item.stars ? stars(item.stars) : ""}</div>${textBody(item.body, item.spoiler)}${item.updated_at !== item.created_at ? '<span class="community-hint">Edited</span>' : ""}</article>`).join("") : empty("Your perspective could be the first.", "Leave a few words about this film. A short review can start a great conversation.")}</div>` : `<div class="conversation-heading"><h2>Let's talk about it.</h2><span>Newest first</span></div>${threadForm(ctx)}<div class="community-thread-list">${list.items.length ? list.items.map(t => `<a class="community-thread-row" href="#/reviews/thread/${esc(t.id)}"><div><div class="thread-tags">DISCUSSION ${t.spoiler ? '<span class="spoiler-tag">SPOILERS</span>' : ""}</div><h3>${esc(t.title)}</h3><p>${esc(t.author.display_name)} <span>·</span> ${dateTime(t.created_at)}</p></div><span class="thread-reply-count"><strong>${t.reply_count}</strong> replies</span>${icon("chevron")}</a>`).join("") : empty("A good question starts a conversation.", "Talk about the characters, share an interpretation, or ask what everyone else thought.")}</div>`}
       ${pager(list, p => `${url}?tab=${tab}&page=${p}`)}</section>
       <aside class="community-sidebar"><div class="community-sidebar-card"><span class="eyebrow">BETTER TOGETHER</span><h3>Different takes.<br>Same love for film.</h3><p>You don't need a ticket to have an opinion. Share yours, and make room for someone else's.</p><ul><li>Keep the conversation about the film.</li><li>Mark spoilers before you post.</li><li>Be thoughtful. Be kind.</li></ul></div><a class="community-booking-card" href="#/discover?film_id=${esc(fid)}">${icon("ticket")}<div><strong>See it on the big screen.</strong><span>Find a screening near you</span></div>${icon("arrow")}</a></aside></div></section>`;
+  bindScorePanel(ctx, data);
   bindReviewForm(ctx, data, fid);
   bindThreadForm(ctx, fid);
 }
@@ -87,6 +104,7 @@ function bindReviewForm(ctx, data, fid) {
         const input = new FormData(form), score = Number(input.get("stars"));
         if (!score) throw new Error("Choose your stars before saving.");
         await ctx.api.request(`/community/films/${fid}/review`, { method: "PUT", body: { stars: score, body: input.get("body"), spoiler: input.has("spoiler") } });
+        selectedRatingSources.set(data.film.id, "falcons");
         ctx.toast("Your rating and review have been saved.");
         await ctx.refresh();
         if (ctx.root.isConnected) await ctx.route();
