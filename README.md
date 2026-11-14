@@ -8,7 +8,7 @@
 
 ## 影评与讨论
 
-顶部 **Reviews** 是独立影评入口；电影详情中的 **Reviews & discussions** 可进入该片的五星评分、短评和讨论区。评分与购票页共用数据，不要求先购票。已有数据库需先执行一次 `.venv/bin/python -m flask --app cinema:create_app migrate-community`，再重启网站；该命令只新增三张社区表。功能和测试说明见 [影评与讨论](docs/film-community.md)。
+顶部 **Reviews** 是独立影评入口；电影详情中的 **Reviews & discussions** 可进入该片的五星评分、短评和讨论区。本站评分与购票页共用数据，不要求先购票。评分卡可切换豆瓣真实评分快照与 Falcons 本站评分，各自的均分、人数和五星分布使用同一来源，并显示外部来源链接与核验日期。已有数据库先执行 `.venv/bin/python -m flask --app cinema:create_app migrate-community`，再执行 `.venv/bin/python -m flask --app cinema:create_app import-rating-snapshots data/film-rating-snapshots-20261114.json`，最后重启网站。两个命令只新增社区表和来源快照，不改写顾客评分或订单。功能、数据来源和测试说明见 [影评与讨论](docs/film-community.md)。
 
 ## 现在启动
 
