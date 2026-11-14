@@ -51,11 +51,12 @@ DATA_SOURCE=backend
 AI_PROVIDER=deepseek
 DEEPSEEK_API_KEY=在本地填写你的密钥
 DEEPSEEK_MODEL=deepseek-flash
+AI_TIMEOUT_SECONDS=30
 ```
 
-重启应用。请求仅从后端发往 `https://api.deepseek.com`，使用 OpenAI 兼容 SDK 与原生 Tool Calls，关闭思考模式、流式输出和自动重试。每轮最多 4 次模型请求、6 次只读工具调用，模型等待共用 10 秒预算；重复调用提前停止。接口依据 [DeepSeek Tool Calls 文档](https://api-docs.deepseek.com/guides/tool_calls/)。密钥不会发送到浏览器。
+重启应用。请求仅从后端发往 `https://api.deepseek.com`，使用 OpenAI 兼容 SDK 与原生 Tool Calls，关闭思考模式、流式输出和自动重试。每轮最多 4 次模型请求、6 次只读工具调用，默认共用 30 秒预算，`AI_TIMEOUT_SECONDS` 可调整但不能超过 60 秒；重复调用提前停止。接口依据 [DeepSeek Tool Calls 文档](https://api-docs.deepseek.com/guides/tool_calls/)。密钥不会发送到浏览器。
 
-当前是“单 Agent＋受控业务查询工具”：闲聊直接回答，选片无需人数，场次推荐再检查整组座位；还支持类型、本站评分、预算、候选序号及登录后的本人订单/优惠券/改签资格/费用预览。Python 校验参数、身份与硬条件，卡片和金额由后端生成。个人明细保留在后端和浏览器，模型只获得查询状态及候选序号。解释超时或事实校验失败时使用已验证结果的模板。没有密钥时可用 `AI_PROVIDER=stub` 测试有限表达。完整说明与限制见 [业务 Agent 集成说明](docs/business-agent.md)。
+当前是“通用对话＋受控业务查询工具”：知识问答、写作、翻译、学习和闲聊由 DeepSeek 结合近期对话回答，不强制转成选片问题。完整、明确的“我的订单／我的优惠券”直接查询本人数据并使用固定说明，即使模型不可用也能查询；复杂的业务问题仍由模型选择只读工具。选片无需人数，场次推荐再检查整组座位；还支持类型、本站评分、预算、候选序号及改签资格/费用预览。Python 校验参数、身份与硬条件，卡片和金额由后端生成。个人明细保留在后端和浏览器，模型只获得查询状态及候选序号。解释超时或事实校验失败时使用已验证结果的模板。`AI_PROVIDER=stub` 只支持有限的离线固定表达；仅填写密钥不会自动启用 DeepSeek。完整说明与限制见 [业务 Agent 集成说明](docs/business-agent.md)。
 
 | 配置 | 说明 |
 | --- | --- |

@@ -4,6 +4,7 @@ from dataclasses import replace
 from types import SimpleNamespace
 import pytest
 from cinema_ai.providers import AgentTurn, ToolCall, ProviderError, DeepSeekProvider
+from cinema_ai.agent import direct_personal_tool
 
 
 def tool(name, **args):
@@ -152,6 +153,57 @@ def test_model_cannot_claim_a_successful_transaction(app, chat):
 def test_own_orders_request_requires_login(chat):
     result = chat("我的订单")
     assert result["status"] == "login_required" and result["tool_calls"] == ["get_my_orders"]
+
+
+@pytest.mark.parametrize("question,reply", [
+    ("为什么天空是蓝色的？", "因为空气分子对短波长的蓝光散射更强，这叫瑞利散射。"),
+    ("API key 是什么？", "API key 是调用服务时用于识别调用方的凭据，应保存在服务端。"),
+    ("怎么设计安全的登录密码？", "使用较长且独特的密码，并开启双重验证。"),
+    ("告诉我怎么设置安全密码", "每个网站使用独特的长密码，并开启双重验证。"),
+    ("Give me password security advice", "Use a unique, long password and enable multi-factor authentication."),
+    ("影院营业额如何计算？", "一般按售出的票数乘以各自票价，再加上其他销售收入计算。"),
+    ("请解释 SELECT * FROM users 的含义", "它读取 users 表的所有列；这里只解释语法，不会执行查询。"),
+    ("写一个 HTML 示例", '<p>Hello</p>\n<script>console.log("Example")</script>'),
+    ("Python 官方网站地址是什么？", "Python 官方网站是 https://www.python.org/ 。"),
+    ("帮我写一首关于雨的短诗", "雨落在窗边，\n把城市写成一封没有寄出的信。"),
+])
+def test_general_questions_use_model_reply_without_business_tools(app, chat, question, reply):
+    requests = scripted(app, AgentTurn(content=reply))
+    result = chat(question)
+    assert result["status"] == "ok" and result["reply"] == reply
+    assert result["tool_calls"] == [] and not result["cards"]
+    assert result["filters"]["party_size"] is None
+    assert len(requests) == 1 and requests[0]["messages"][-1]["content"] == question
+
+
+def test_general_followup_retains_conversation_and_movie_preferences(app, chat):
+    first = chat("今晚朝阳区三个人看电影 A")
+    requests = scripted(app, AgentTurn(content="第一版：雨落窗前。"), AgentTurn(content="改写：雨轻叩窗，像老朋友的问候。"))
+    chat("帮我写一句关于雨的文字")
+    result = chat("把刚才那句话写得更温柔一点")
+    assert result["filters"] == first["filters"] and not result["tool_calls"]
+    assert {"role": "assistant", "content": "第一版：雨落窗前。"} in requests[1]["messages"]
+
+
+@pytest.mark.parametrize("message,name", [
+    ("我的订单", "get_my_orders"), ("请帮我查一下我的订单。", "get_my_orders"),
+    ("Please show me my recent orders", "get_my_orders"),
+    ("我的优惠券", "get_my_coupons"), ("Check my coupons please", "get_my_coupons"),
+])
+def test_simple_personal_query_works_without_model(app, chat, message, name):
+    def unavailable(**kwargs):
+        pytest.fail("Personal list requests should not call the model")
+    app.extensions["cinema_ai"]["provider"].turn = unavailable
+    response = chat(message)
+    assert response["status"] == "login_required" and response["tool_calls"] == [name]
+
+
+@pytest.mark.parametrize("message", [
+    "我的订单是什么意思？", "我的最近订单能改签吗", "我的订单和优惠券", "不要查我的订单",
+    "Explain how my orders work", "Write a story called My orders", "我的订单，然后解释光合作用",
+])
+def test_personal_shortcut_does_not_capture_mixed_or_explanatory_questions(message):
+    assert direct_personal_tool(message) is None
 
 
 def test_manual_region_updates_state_without_model(client, app):

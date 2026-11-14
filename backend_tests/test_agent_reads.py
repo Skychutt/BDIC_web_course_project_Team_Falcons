@@ -44,6 +44,9 @@ def test_customer_orders_scope_and_model_data_minimization(env):
     client = env["app"].test_client()
     with client.session_transaction() as session:
         session["user_id"], session["csrf"] = str(actor(env)["id"]), "test-csrf"
+    def no_model(**kwargs):
+        pytest.fail("A simple personal query must not require the external model")
+    env["app"].extensions["cinema_ai"]["provider"].turn = no_model
     response = client.post("/api/assistant/chat", json={"message": "我的订单", "locale": "zh"}, headers={"X-CSRF-Token": "test-csrf"}).json["data"]
     assert len(response["orders"]) == 1 and response["orders"][0]["id"] == str(mine[0]["id"])
     assert str(second["booking_id"]) not in str(response)

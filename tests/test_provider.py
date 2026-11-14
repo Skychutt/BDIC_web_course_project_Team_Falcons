@@ -6,6 +6,7 @@ import pytest
 from openai import APIStatusError, APITimeoutError
 
 from cinema_ai.providers import DeepSeekProvider, ProviderError
+from cinema_ai import create_app
 
 
 class FakeCompletions:
@@ -77,3 +78,24 @@ def test_no_key_error():
     with pytest.raises(ProviderError) as caught:
         interpret(DeepSeekProvider(""))
     assert caught.value.code == "missing_key"
+
+
+def test_native_chat_preserves_free_text_and_uses_configured_deadline():
+    answer = "概念解释：\n" + "这是一个用于学习的代码示例。\n" * 30
+    fake = FakeCompletions(answer)
+    turn = provider(fake).turn(messages=[{"role": "user", "content": "请详细解释一下"}], tool_definitions=[], timeout=30)
+    assert turn.content == answer and not turn.calls
+    assert fake.calls[0]["timeout"] == 30 and fake.calls[0]["max_tokens"] == 2400
+
+
+@pytest.mark.parametrize("timeout", [30, 60])
+def test_longer_chat_budget_is_configurable(timeout):
+    app = create_app({"TESTING": True, "DATA_SOURCE": "mock", "AI_PROVIDER": "stub", "AI_TIMEOUT_SECONDS": timeout})
+    assert app.extensions["cinema_ai"]["chat"].timeout == timeout
+    app.extensions["cinema_ai"]["runner"].pool.shutdown()
+
+
+@pytest.mark.parametrize("timeout", [0, -1, 61, float("nan"), float("inf")])
+def test_chat_budget_stays_bounded(timeout):
+    with pytest.raises(ValueError, match="AI_TIMEOUT_SECONDS"):
+        create_app({"TESTING": True, "DATA_SOURCE": "mock", "AI_PROVIDER": "stub", "AI_TIMEOUT_SECONDS": timeout})

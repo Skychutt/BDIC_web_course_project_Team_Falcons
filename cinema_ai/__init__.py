@@ -38,9 +38,9 @@ def init_app(app, repository=None, provider=None, clock=None):
             provider = DeepSeekProvider(app.config.get("DEEPSEEK_API_KEY"), app.config.get("DEEPSEEK_MODEL", "deepseek-flash"))
         else:
             raise ValueError("AI_PROVIDER must be stub or deepseek")
-    timeout = float(app.config.get("AI_TIMEOUT_SECONDS", 10))
-    if not 0 < timeout <= 10:
-        raise ValueError("AI_TIMEOUT_SECONDS must be in (0, 10]")
+    timeout = float(app.config.get("AI_TIMEOUT_SECONDS", 30))
+    if not 0 < timeout <= 60:
+        raise ValueError("AI_TIMEOUT_SECONDS must be in (0, 60]")
     catalog = catalog or CatalogService(repository, clock)
     runner = ModelRunner()
     app.extensions["cinema_ai"] = {
@@ -64,7 +64,7 @@ def create_app(config=None, *, repository=None, provider=None, clock=None):
         DATA_SOURCE=os.getenv("DATA_SOURCE", "mock"),
         DEEPSEEK_API_KEY=os.getenv("DEEPSEEK_API_KEY", ""),
         DEEPSEEK_MODEL=os.getenv("DEEPSEEK_MODEL", "deepseek-flash"),
-        AI_TIMEOUT_SECONDS=os.getenv("AI_TIMEOUT_SECONDS", "10"),
+        AI_TIMEOUT_SECONDS=os.getenv("AI_TIMEOUT_SECONDS", "30"),
         MAX_CONTENT_LENGTH=16 * 1024,
         SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
     )

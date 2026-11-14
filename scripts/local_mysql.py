@@ -124,7 +124,7 @@ def main():
         + "@localhost/cinema_demo?charset=utf8mb4&unix_socket="
         + quote(str(SOCKET), safe="")
     )
-    ENV.write_text(f"DATABASE_URL={url}\nSECRET_KEY={secret}\nCOOKIE_SECURE=false\nDATA_SOURCE=backend\nAI_PROVIDER=stub\nDEEPSEEK_API_KEY=\nDEEPSEEK_MODEL=deepseek-flash\nAI_TIMEOUT_SECONDS=10\n")
+    ENV.write_text(f"DATABASE_URL={url}\nSECRET_KEY={secret}\nCOOKIE_SECURE=false\nDATA_SOURCE=backend\nAI_PROVIDER=stub\nDEEPSEEK_API_KEY=\nDEEPSEEK_MODEL=deepseek-flash\nAI_TIMEOUT_SECONDS=30\n")
     os.chmod(ENV, 0o600)
 
     def export_ids(value):

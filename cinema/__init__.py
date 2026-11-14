@@ -33,7 +33,7 @@ def create_app(config=None):
         AI_PROVIDER=os.getenv("AI_PROVIDER", "stub"),
         DEEPSEEK_API_KEY=os.getenv("DEEPSEEK_API_KEY", ""),
         DEEPSEEK_MODEL=os.getenv("DEEPSEEK_MODEL", "deepseek-flash"),
-        AI_TIMEOUT_SECONDS=os.getenv("AI_TIMEOUT_SECONDS", "10"),
+        AI_TIMEOUT_SECONDS=os.getenv("AI_TIMEOUT_SECONDS", "30"),
         AMAP_JS_KEY=os.getenv("AMAP_JS_KEY", ""),
         AMAP_SECURITY_CODE=os.getenv("AMAP_SECURITY_CODE", ""),
     )

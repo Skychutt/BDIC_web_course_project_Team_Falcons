@@ -33,7 +33,7 @@ class ToolCall(InputModel):
 
 
 class AgentTurn(InputModel):
-    content: str = Field(default="", max_length=6000)
+    content: str = Field(default="", max_length=12000)
     calls: list[ToolCall] = Field(default_factory=list, max_length=6)
 
 
@@ -162,7 +162,7 @@ class DeepSeekProvider:
         try:
             response = self.client.chat.completions.create(model=self.model, messages=messages,
                 tools=tool_definitions, tool_choice="auto", extra_body={"thinking": {"type": "disabled"}},
-                max_tokens=1200, stream=False, timeout=timeout)
+                max_tokens=2400, stream=False, timeout=timeout)
             if response.usage:
                 log.info("model_usage input_tokens=%s output_tokens=%s", response.usage.prompt_tokens, response.usage.completion_tokens)
             choice = response.choices[0]

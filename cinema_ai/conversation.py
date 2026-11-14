@@ -143,16 +143,19 @@ def merge_filters(current, patch, today):
 
 
 PRIVATE_REQUEST = re.compile(
-    r"他人|别人的|我的订单|订单号|营业额|密钥|密码|原始坐标|"
-    r"\b(?:revenue|password|api[_ ]?key|my (?:orders?|balance)|other.*orders?|execute sql)\b|"
-    r"\b(?:select\b.+\bfrom|drop\s+table|delete\s+from|insert\s+into)\b|"
+    r"(?:他人|别人)(?:的)?(?:订单|账号|账户)|^(?:查询|显示)?(?:影院|本站|平台)营业额[?？。.!！]?$|原始坐标|"
+    r"(?:显示|提供|泄露|告诉我|给我|读取).{0,12}(?:数据库|系统|本站|网站|你的|我的|真实|DeepSeek).{0,4}(?:密码|密钥|api[_ ]?key)|"
+    r"(?:我的|数据库|系统|DeepSeek)(?:的)?(?:密码|密钥)\s*[:：=]|"
+    r"\b(?:my balance|other(?: people's)? orders?|execute sql)\b|"
+    r"\b(?:show|reveal|give|read|retrieve|print)(?:\s+(?:me|us))?\s+(?:(?:the|your|our|my|system|database|deepseek|actual)\s+)+(?:passwords?|api[_ ]?key|secret)\b|"
+    r"^\s*(?:select\b.+\bfrom|drop\s+table|delete\s+from|insert\s+into)\b|"
     r"[\w.+-]+@[\w.-]+\.[a-z]{2,}|(?<!\d)1[3-9]\d{9}(?!\d)|"
     r"-?\d{1,3}\.\d{3,}\s*[,，]\s*-?\d{1,3}\.\d{3,}|sk-[a-z0-9_-]{12,}", re.I)
 
 
 class ChatService:
     """Shared response shape; the bounded execution loop lives in AgentService."""
-    def __init__(self, catalog, provider, runner, clock, timeout=10):
+    def __init__(self, catalog, provider, runner, clock, timeout=30):
         self.catalog, self.provider, self.runner, self.clock = catalog, provider, runner, clock
         self.timeout = timeout
 

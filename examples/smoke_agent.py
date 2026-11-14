@@ -23,7 +23,7 @@ def ask(pair, label, message):
     request = urllib.request.Request(args.base_url + "/api/assistant/chat", data=json.dumps({"message": message, "locale": "zh"}).encode(),
         headers={"Content-Type": "application/json", "X-CSRF-Token": token})
     at = time.monotonic()
-    value = json.load(opener.open(request, timeout=20))["data"]
+    value = json.load(opener.open(request, timeout=70))["data"]
     print(json.dumps({"case": label, "status": value["status"], "tools": value["tool_calls"], "films": len(value["films"]),
         "cards": len(value["cards"]), "seconds": round(time.monotonic()-at, 2), "fallback": value.get("explanation_fallback", False),
         "error": value.get("error_code") or value.get("model_error_code")}, ensure_ascii=False), flush=True)
@@ -31,6 +31,13 @@ def ask(pair, label, message):
 
 
 value = ask(session(), "small_talk", "我想睡觉，今天有点累。")
+assert value["status"] == "ok" and not value["tool_calls"]
+pair = session()
+value = ask(pair, "general_knowledge", "为什么天空是蓝色的？用两句话解释。")
+assert value["status"] == "ok" and not value["tool_calls"] and not value["cards"]
+value = ask(pair, "general_followup", "Now explain that in English in one sentence.")
+assert value["status"] == "ok" and value["locale"] == "en" and not value["tool_calls"]
+value = ask(session(), "writing", "帮我给大学电影社写一条40字以内的招新文案")
 assert value["status"] == "ok" and not value["tool_calls"]
 value = ask(session(), "film_recommendation", "推荐一部电影")
 assert value["status"] == "ok" and value["films"] and value["filters"]["party_size"] is None
