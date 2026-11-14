@@ -6,6 +6,10 @@
 
 **当前工作区已安装依赖、初始化独立 MySQL 8.4.4 演示库，并于 2026-10-24 接通真实 DeepSeek，完成少量真实接口联调。** 数据来自数据库里的虚构演示影院，不代表真实影院营业数据。密钥仅保存在被 Git 忽略的本地 `.env` 中，不随项目交接。
 
+## 影评与讨论
+
+顶部 **Reviews** 是独立影评入口；电影详情中的 **Reviews & discussions** 可进入该片的五星评分、短评和讨论区。评分与购票页共用数据，不要求先购票。已有数据库需先执行一次 `.venv/bin/python -m flask --app cinema:create_app migrate-community`，再重启网站；该命令只新增三张社区表。功能和测试说明见 [影评与讨论](docs/film-community.md)。
+
 ## 现在启动
 
 在项目根目录运行（Python 3.11+）：

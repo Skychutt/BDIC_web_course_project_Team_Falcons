@@ -3,6 +3,7 @@
   "private": true,
   "description": "Optional browser verification; the website itself runs directly from Flask.",
   "scripts": {
+    "check:community": "node tests/browser/community-smoke.mjs",
     "check:customer": "node tests/browser/customer-smoke.mjs",
     "check:account": "node tests/browser/account-smoke.mjs",
     "check:operations": "node tests/browser/operations-smoke.mjs",
