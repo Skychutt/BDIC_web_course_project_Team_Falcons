@@ -5,6 +5,11 @@ const artwork = Object.freeze({
   'The Love Hypothesis': 'love-hypothesis.png',
   '牛来 (Niu Lai)': 'niu-lai.png',
   'The Shawshank Redemption': 'shawshank-redemption.png',
+  "Interstellar": "interstellar.jpg",
+  "Inception": "inception.jpg",
+  "Zootopia": "zootopia.jpg",
+  "Spirited Away": "spirited-away.png",
+  "Harry Potter and the Philosopher's Stone": "harry-potter.jpg",
 });
 
 export function filmArtwork(film) {

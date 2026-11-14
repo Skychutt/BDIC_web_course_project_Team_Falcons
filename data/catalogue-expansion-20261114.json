@@ -1,0 +1,288 @@
+{
+  "version": "2026-11-14",
+  "note": "Verified film facts, Douban published snapshots and real cinema addresses. Halls, seats, fares and screening dates are local student demonstration data, not actual cinema listings. Ratings were checked from publicly indexed Douban pages on the stated date, not a live feed.",
+  "films": [
+    {
+      "key": "interstellar",
+      "title": "Interstellar",
+      "title_zh": "星际穿越",
+      "duration_minutes": 169,
+      "genres": [
+        "Drama",
+        "Sci-Fi",
+        "Adventure"
+      ],
+      "synopsis": "A former pilot joins a mission through a wormhole to find a new home for humanity, while his daughter searches for answers on Earth.",
+      "synopsis_zh": "一名前飞行员穿越虫洞，为人类寻找新的家园；留在地球的女儿也在寻找拯救世界的答案。",
+      "base_price_minor": 4800,
+      "poster": "interstellar.jpg",
+      "poster_source": "https://en.wikipedia.org/wiki/Interstellar_(film)",
+      "poster_image_url": "https://upload.wikimedia.org/wikipedia/en/b/bc/Interstellar_film_poster.jpg",
+      "sources": [
+        "https://movie.douban.com/subject/1889243/"
+      ],
+      "rating_seed": {
+        "score": 9.4,
+        "vote_count": 2239064
+      },
+      "rating_snapshot": {
+        "film_title": "Interstellar",
+        "source_name": "Douban",
+        "source_title": "星际穿越",
+        "source_url": "https://movie.douban.com/subject/1889243/",
+        "checked_on": "2026-11-14",
+        "score": 9.4,
+        "vote_count": 2239064,
+        "star_5": 76.1,
+        "star_4": 19.7,
+        "star_3": 3.6,
+        "star_2": 0.4,
+        "star_1": 0.2
+      }
+    },
+    {
+      "key": "inception",
+      "title": "Inception",
+      "title_zh": "盗梦空间",
+      "duration_minutes": 148,
+      "genres": [
+        "Drama",
+        "Sci-Fi",
+        "Mystery",
+        "Adventure"
+      ],
+      "synopsis": "A team enters shared dreams to plant an idea in a business heir’s mind. Their leader’s memories threaten to unravel the mission.",
+      "synopsis_zh": "一支团队潜入层层梦境，试图在企业继承人的脑海中植入想法，领队挥之不去的记忆却让任务陷入危机。",
+      "base_price_minor": 4600,
+      "poster": "inception.jpg",
+      "poster_source": "https://en.wikipedia.org/wiki/Inception",
+      "poster_image_url": "https://upload.wikimedia.org/wikipedia/en/2/2e/Inception_%282010%29_theatrical_poster.jpg",
+      "sources": [
+        "https://movie.douban.com/subject/3541415/"
+      ],
+      "rating_seed": {
+        "score": 9.4,
+        "vote_count": 2367520
+      },
+      "rating_snapshot": {
+        "film_title": "Inception",
+        "source_name": "Douban",
+        "source_title": "盗梦空间",
+        "source_url": "https://movie.douban.com/subject/3541415/",
+        "checked_on": "2026-11-14",
+        "score": 9.4,
+        "vote_count": 2367520,
+        "star_5": 72.8,
+        "star_4": 23.3,
+        "star_3": 3.5,
+        "star_2": 0.2,
+        "star_1": 0.1
+      }
+    },
+    {
+      "key": "zootopia",
+      "title": "Zootopia",
+      "title_zh": "疯狂动物城",
+      "duration_minutes": 109,
+      "genres": [
+        "Animation",
+        "Comedy",
+        "Adventure"
+      ],
+      "synopsis": "A rookie rabbit police officer teams up with a fox to investigate missing animals and uncover a conspiracy in a bustling mammal city.",
+      "synopsis_zh": "兔子警官与狐狸搭档调查动物失踪案，在繁华的动物都市中揭开隐藏的阴谋，也重新认识彼此。",
+      "base_price_minor": 3800,
+      "poster": "zootopia.jpg",
+      "poster_source": "https://en.wikipedia.org/wiki/Zootopia",
+      "poster_image_url": "https://upload.wikimedia.org/wikipedia/en/9/96/Zootopia_%28movie_poster%29.jpg",
+      "sources": [
+        "https://movie.douban.com/subject/25662329/"
+      ],
+      "rating_seed": {
+        "score": 9.3,
+        "vote_count": 2366585
+      },
+      "rating_snapshot": {
+        "film_title": "Zootopia",
+        "source_name": "Douban",
+        "source_title": "疯狂动物城",
+        "source_url": "https://movie.douban.com/subject/25662329/",
+        "checked_on": "2026-11-14",
+        "score": 9.3,
+        "vote_count": 2366585,
+        "star_5": 67.6,
+        "star_4": 27.9,
+        "star_3": 4.2,
+        "star_2": 0.2,
+        "star_1": 0.1
+      }
+    },
+    {
+      "key": "spirited-away",
+      "title": "Spirited Away",
+      "title_zh": "千与千寻",
+      "duration_minutes": 125,
+      "genres": [
+        "Animation",
+        "Fantasy",
+        "Drama"
+      ],
+      "synopsis": "After her parents are transformed, Chihiro works in a bathhouse for spirits and must find the courage to save her family and return home.",
+      "synopsis_zh": "父母意外变成猪后，千寻在神灵的澡堂工作，努力寻找拯救家人、返回现实世界的方法。",
+      "base_price_minor": 4000,
+      "poster": "spirited-away.png",
+      "poster_source": "https://en.wikipedia.org/wiki/Spirited_Away",
+      "poster_image_url": "https://upload.wikimedia.org/wikipedia/en/d/db/Spirited_Away_Japanese_poster.png",
+      "sources": [
+        "https://movie.douban.com/subject/1291561/"
+      ],
+      "rating_seed": {
+        "score": 9.4,
+        "vote_count": 2570356
+      },
+      "rating_snapshot": {
+        "film_title": "Spirited Away",
+        "source_name": "Douban",
+        "source_title": "千与千寻",
+        "source_url": "https://movie.douban.com/subject/1291561/",
+        "checked_on": "2026-11-14",
+        "score": 9.4,
+        "vote_count": 2570356,
+        "star_5": 73.6,
+        "star_4": 22.8,
+        "star_3": 3.3,
+        "star_2": 0.2,
+        "star_1": 0.1
+      }
+    },
+    {
+      "key": "harry-potter",
+      "title": "Harry Potter and the Philosopher's Stone",
+      "title_zh": "哈利·波特与魔法石",
+      "duration_minutes": 152,
+      "genres": [
+        "Fantasy",
+        "Adventure"
+      ],
+      "synopsis": "Harry discovers he is a wizard, begins his first year at Hogwarts and joins two new friends to investigate a secret hidden in the school.",
+      "synopsis_zh": "哈利得知自己的巫师身份，在霍格沃茨开始第一年的学习，并与两位新朋友一起调查学校里隐藏的秘密。",
+      "base_price_minor": 4400,
+      "poster": "harry-potter.jpg",
+      "poster_source": "https://en.wikipedia.org/wiki/Harry_Potter_and_the_Philosopher%27s_Stone_(film)",
+      "poster_image_url": "https://upload.wikimedia.org/wikipedia/en/7/7a/Harry_Potter_and_the_Philosopher%27s_Stone_banner.jpg",
+      "sources": [
+        "https://movie.douban.com/subject/1295038/"
+      ],
+      "rating_seed": {
+        "score": 9.2,
+        "vote_count": 1455551
+      },
+      "rating_snapshot": {
+        "film_title": "Harry Potter and the Philosopher's Stone",
+        "source_name": "Douban",
+        "source_title": "哈利·波特与魔法石",
+        "source_url": "https://movie.douban.com/subject/1295038/",
+        "checked_on": "2026-11-14",
+        "score": 9.2,
+        "vote_count": 1455551,
+        "star_5": 66.2,
+        "star_4": 27.8,
+        "star_3": 5.5,
+        "star_2": 0.3,
+        "star_1": 0.1
+      }
+    }
+  ],
+  "cinemas": [
+    {
+      "key": "capital-xidan",
+      "name": "首都电影院(西单店)",
+      "name_en": "Capital Cinema (Xidan)",
+      "brand": "首都电影院",
+      "district_code": "110102",
+      "district_name": "Xicheng",
+      "address": "北京市西城区西单北大街甲131号大悦城商场10层",
+      "address_en": "10F, Xidan Joy City, 131 Xidan North Street, Xicheng, Beijing",
+      "latitude": "39.9108840",
+      "longitude": "116.3729600",
+      "coordinate_system": "GCJ02",
+      "coordinate_note": "AMap position of Xidan Joy City, the cinema building; not an indoor entrance.",
+      "sources": [
+        "https://www.bjiff.com/bannergdtp/202404/t20240405_173462.html",
+        "https://ditu.amap.com/place/B000A80NIV"
+      ],
+      "demo_screen_types": [
+        "STANDARD",
+        "STANDARD"
+      ]
+    },
+    {
+      "key": "emperor-centre",
+      "name": "英皇电影城(北京英皇中心店)",
+      "name_en": "Emperor Cinemas (Emperor Group Centre)",
+      "brand": "英皇电影城",
+      "district_code": "110105",
+      "district_name": "Chaoyang",
+      "address": "北京市朝阳区建外大街丁12号英皇集团中心B1层",
+      "address_en": "B1, Emperor Group Centre, 12D Jianwai Avenue, Chaoyang, Beijing",
+      "latitude": "39.9074910",
+      "longitude": "116.4450750",
+      "coordinate_system": "GCJ02",
+      "sources": [
+        "https://emperorgroupcentre.cn/FilmCityIntroduction/index.aspx",
+        "https://ditu.amap.com/place/B0FFIBRNKP"
+      ],
+      "demo_screen_types": [
+        "STANDARD",
+        "IMAX"
+      ]
+    },
+    {
+      "key": "geological-hall",
+      "name": "北京地质礼堂",
+      "name_en": "Beijing Geological Hall Cinema",
+      "brand": "地质礼堂",
+      "district_code": "110102",
+      "district_name": "Xicheng",
+      "address": "北京市西城区羊肉胡同30号",
+      "address_en": "30 Yangrou Hutong, Xicheng, Beijing",
+      "latitude": "39.9225700",
+      "longitude": "116.3713110",
+      "coordinate_system": "GCJ02",
+      "sources": [
+        "https://www.bjiff.com/bannergdtp/202404/t20240405_173462.html",
+        "https://ditu.amap.com/place/B000A5505C"
+      ],
+      "demo_screen_types": [
+        "STANDARD",
+        "STANDARD"
+      ]
+    }
+  ],
+  "existing_cinemas": [
+    {
+      "name": "万达影城(CBD万达广场店)",
+      "demo_screen_type": "STANDARD"
+    },
+    {
+      "name": "万达影城(西铁营店)",
+      "demo_screen_type": "IMAX"
+    },
+    {
+      "name": "保利国际影城(凯德大峡谷店)",
+      "demo_screen_type": "STANDARD"
+    },
+    {
+      "name": "中华电影院",
+      "demo_screen_type": "STANDARD"
+    },
+    {
+      "name": "北京站电影院",
+      "demo_screen_type": "DOLBY_CINEMA"
+    },
+    {
+      "name": "北京横店影城(王府井百货店)",
+      "demo_screen_type": "STANDARD"
+    }
+  ]
+}

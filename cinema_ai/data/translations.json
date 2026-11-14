@@ -55,6 +55,61 @@
         "en": "Imprisoned banker Andy Dufresne forms a lasting friendship with fellow inmate Red. Across years inside Shawshank, their story explores perseverance, dignity and the power of hope."
       },
       "source_synopsis": "Imprisoned banker Andy Dufresne forms a lasting friendship with fellow inmate Red. Across years inside Shawshank, their story explores perseverance, dignity and the power of hope."
+    },
+    "Interstellar": {
+      "titles": {
+        "zh": "星际穿越",
+        "en": "Interstellar"
+      },
+      "synopses": {
+        "zh": "一名前飞行员穿越虫洞，为人类寻找新的家园；留在地球的女儿也在寻找拯救世界的答案。",
+        "en": "A former pilot joins a mission through a wormhole to find a new home for humanity, while his daughter searches for answers on Earth."
+      },
+      "source_synopsis": "A former pilot joins a mission through a wormhole to find a new home for humanity, while his daughter searches for answers on Earth."
+    },
+    "Inception": {
+      "titles": {
+        "zh": "盗梦空间",
+        "en": "Inception"
+      },
+      "synopses": {
+        "zh": "一支团队潜入层层梦境，试图在企业继承人的脑海中植入想法，领队挥之不去的记忆却让任务陷入危机。",
+        "en": "A team enters shared dreams to plant an idea in a business heir’s mind. Their leader’s memories threaten to unravel the mission."
+      },
+      "source_synopsis": "A team enters shared dreams to plant an idea in a business heir’s mind. Their leader’s memories threaten to unravel the mission."
+    },
+    "Zootopia": {
+      "titles": {
+        "zh": "疯狂动物城",
+        "en": "Zootopia"
+      },
+      "synopses": {
+        "zh": "兔子警官与狐狸搭档调查动物失踪案，在繁华的动物都市中揭开隐藏的阴谋，也重新认识彼此。",
+        "en": "A rookie rabbit police officer teams up with a fox to investigate missing animals and uncover a conspiracy in a bustling mammal city."
+      },
+      "source_synopsis": "A rookie rabbit police officer teams up with a fox to investigate missing animals and uncover a conspiracy in a bustling mammal city."
+    },
+    "Spirited Away": {
+      "titles": {
+        "zh": "千与千寻",
+        "en": "Spirited Away"
+      },
+      "synopses": {
+        "zh": "父母意外变成猪后，千寻在神灵的澡堂工作，努力寻找拯救家人、返回现实世界的方法。",
+        "en": "After her parents are transformed, Chihiro works in a bathhouse for spirits and must find the courage to save her family and return home."
+      },
+      "source_synopsis": "After her parents are transformed, Chihiro works in a bathhouse for spirits and must find the courage to save her family and return home."
+    },
+    "Harry Potter and the Philosopher's Stone": {
+      "titles": {
+        "zh": "哈利·波特与魔法石",
+        "en": "Harry Potter and the Philosopher's Stone"
+      },
+      "synopses": {
+        "zh": "哈利得知自己的巫师身份，在霍格沃茨开始第一年的学习，并与两位新朋友一起调查学校里隐藏的秘密。",
+        "en": "Harry discovers he is a wizard, begins his first year at Hogwarts and joins two new friends to investigate a secret hidden in the school."
+      },
+      "source_synopsis": "Harry discovers he is a wizard, begins his first year at Hogwarts and joins two new friends to investigate a secret hidden in the school."
     }
   },
   "cinemas": {
@@ -123,6 +178,39 @@
         "en": "8F, North Building, Wangfujing Department Store, 255 Wangfujing Street, Dongcheng, Beijing"
       },
       "source_address": "北京市东城区王府井大街255号王府井百货大楼北馆8层"
+    },
+    "首都电影院(西单店)": {
+      "names": {
+        "zh": "首都电影院(西单店)",
+        "en": "Capital Cinema (Xidan)"
+      },
+      "addresses": {
+        "zh": "北京市西城区西单北大街甲131号大悦城商场10层",
+        "en": "10F, Xidan Joy City, 131 Xidan North Street, Xicheng, Beijing"
+      },
+      "source_address": "北京市西城区西单北大街甲131号大悦城商场10层"
+    },
+    "英皇电影城(北京英皇中心店)": {
+      "names": {
+        "zh": "英皇电影城(北京英皇中心店)",
+        "en": "Emperor Cinemas (Emperor Group Centre)"
+      },
+      "addresses": {
+        "zh": "北京市朝阳区建外大街丁12号英皇集团中心B1层",
+        "en": "B1, Emperor Group Centre, 12D Jianwai Avenue, Chaoyang, Beijing"
+      },
+      "source_address": "北京市朝阳区建外大街丁12号英皇集团中心B1层"
+    },
+    "北京地质礼堂": {
+      "names": {
+        "zh": "北京地质礼堂",
+        "en": "Beijing Geological Hall Cinema"
+      },
+      "addresses": {
+        "zh": "北京市西城区羊肉胡同30号",
+        "en": "30 Yangrou Hutong, Xicheng, Beijing"
+      },
+      "source_address": "北京市西城区羊肉胡同30号"
     }
   }
 }

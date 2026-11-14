@@ -35,6 +35,7 @@ class ToolCall(InputModel):
 class AgentTurn(InputModel):
     content: str = Field(default="", max_length=12000)
     calls: list[ToolCall] = Field(default_factory=list, max_length=6)
+    truncated: bool = False
 
 
 class ModelProvider(Protocol):
@@ -166,15 +167,18 @@ class DeepSeekProvider:
             if response.usage:
                 log.info("model_usage input_tokens=%s output_tokens=%s", response.usage.prompt_tokens, response.usage.completion_tokens)
             choice = response.choices[0]
-            if choice.finish_reason not in {"stop", "tool_calls"}:
+            if choice.finish_reason not in {"stop", "tool_calls", "length"}:
                 raise ProviderError("invalid_output")
             msg = choice.message
+            if choice.finish_reason == "length" and getattr(msg, "tool_calls", None):
+                # Incomplete tool arguments must never reach the business dispatcher.
+                raise ProviderError("invalid_output")
             calls = []
             for call in (getattr(msg, "tool_calls", None) or []):
                 if call.type != "function" or len(call.function.arguments) > 12000:
                     raise ProviderError("invalid_output")
                 calls.append(ToolCall(id=call.id, name=call.function.name, arguments=json.loads(call.function.arguments)))
-            result = AgentTurn(content=msg.content or "", calls=calls)
+            result = AgentTurn(content=msg.content or "", calls=calls, truncated=choice.finish_reason == "length")
             if not result.content.strip() and not result.calls:
                 raise ProviderError("invalid_output")
             return result

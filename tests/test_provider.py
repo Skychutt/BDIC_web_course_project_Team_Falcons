@@ -88,6 +88,20 @@ def test_native_chat_preserves_free_text_and_uses_configured_deadline():
     assert fake.calls[0]["timeout"] == 30 and fake.calls[0]["max_tokens"] == 2400
 
 
+def test_length_limited_text_is_returned_instead_of_discarded():
+    fake = FakeCompletions("Here is the first part of the explanation.", finish="length")
+    turn = provider(fake).turn(messages=[], tool_definitions=[], timeout=30)
+    assert turn.content == fake.content and turn.truncated and not turn.calls
+
+
+def test_length_limited_tool_arguments_are_never_accepted():
+    def create(**kwargs):
+        return SimpleNamespace(usage=None, choices=[SimpleNamespace(finish_reason="length", message=SimpleNamespace(
+            content=None, tool_calls=[SimpleNamespace(type="function", id="a", function=SimpleNamespace(name="get_my_orders", arguments="{}"))]))])
+    with pytest.raises(ProviderError, match="invalid_output"):
+        provider(SimpleNamespace(create=create)).turn(messages=[], tool_definitions=[], timeout=30)
+
+
 @pytest.mark.parametrize("timeout", [30, 60])
 def test_longer_chat_budget_is_configurable(timeout):
     app = create_app({"TESTING": True, "DATA_SOURCE": "mock", "AI_PROVIDER": "stub", "AI_TIMEOUT_SECONDS": timeout})

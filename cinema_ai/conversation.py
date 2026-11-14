@@ -142,15 +142,21 @@ def merge_filters(current, patch, today):
     return candidate
 
 
+# Match complete requests for restricted platform data, not mentions of a topic.
+# Actual access control remains in the validated read tools and their SQL scopes.
 PRIVATE_REQUEST = re.compile(
-    r"(?:他人|别人)(?:的)?(?:订单|账号|账户)|^(?:查询|显示)?(?:影院|本站|平台)营业额[?？。.!！]?$|原始坐标|"
-    r"(?:显示|提供|泄露|告诉我|给我|读取).{0,12}(?:数据库|系统|本站|网站|你的|我的|真实|DeepSeek).{0,4}(?:密码|密钥|api[_ ]?key)|"
-    r"(?:我的|数据库|系统|DeepSeek)(?:的)?(?:密码|密钥)\s*[:：=]|"
-    r"\b(?:my balance|other(?: people's)? orders?|execute sql)\b|"
-    r"\b(?:show|reveal|give|read|retrieve|print)(?:\s+(?:me|us))?\s+(?:(?:the|your|our|my|system|database|deepseek|actual)\s+)+(?:passwords?|api[_ ]?key|secret)\b|"
-    r"^\s*(?:select\b.+\bfrom|drop\s+table|delete\s+from|insert\s+into)\b|"
-    r"[\w.+-]+@[\w.-]+\.[a-z]{2,}|(?<!\d)1[3-9]\d{9}(?!\d)|"
-    r"-?\d{1,3}\.\d{3,}\s*[,，]\s*-?\d{1,3}\.\d{3,}|sk-[a-z0-9_-]{12,}", re.I)
+    r"(?:(?:请|麻烦)(?:你)?\s*)?(?:(?:帮我|给我|为我)\s*)?"
+    r"(?:(?:查|查询|查看|获取|显示|读取|导出|提供|告诉我|泄露)\s*)?"
+    r"(?:(?:他人|别人|其他人)(?:的)?(?:订单|账号|账户)(?:列表|信息|详情)?|"
+    r"(?:影院|本站|平台)营业额|(?:数据库|系统|本站|网站|你的|我的|DeepSeek)(?:的)?\s*(?:密码|密钥|api[_ ]?key))|"
+    r"(?:please\s+)?(?:(?:show|reveal|give|read|retrieve|print|list|get|check)(?:\s+(?:me|us))?\s+)?"
+    r"(?:my balance|other(?: people's)? orders?|(?:(?:the|your|our|my|system|database|deepseek|actual)\s+)+(?:passwords?|api[_ ]?key|secret))",
+    re.I,
+)
+SECRET_INPUT = re.compile(
+    r"sk-[a-z0-9_-]{12,}|(?:我的|数据库|系统|DeepSeek)(?:的)?(?:密码|密钥)\s*[:：=]\s*\S+",
+    re.I,
+)
 
 
 class ChatService:

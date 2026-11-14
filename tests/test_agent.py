@@ -166,6 +166,14 @@ def test_own_orders_request_requires_login(chat):
     ("写一个 HTML 示例", '<p>Hello</p>\n<script>console.log("Example")</script>'),
     ("Python 官方网站地址是什么？", "Python 官方网站是 https://www.python.org/ 。"),
     ("帮我写一首关于雨的短诗", "雨落在窗边，\n把城市写成一封没有寄出的信。"),
+    ("帮我写一封求职邮件，收件人是 hr@example.com。", "收件人：hr@example.com\n您好，我希望申请贵公司的实习岗位。"),
+    ("SELECT * FROM users 是什么意思？", "它查询 users 表中的所有列；这里只解释代码，不执行查询。"),
+    ("请问如何保护他人的账号隐私？", "仅访问得到授权的信息，避免收集不必要的个人数据。"),
+    ("把“我已经付款了”翻译成英文，只给译文。", "I have paid."),
+    ("解释“已付款”的含义", "“已付款”表示支付已经完成，不等于商品已经交付。"),
+    ("退货退款通常是什么意思？", "退货退款通常指退回商品后，之前已支付的款项按相应规则返还。"),
+    ("13800000000 加 2 等于多少？", "13800000002。"),
+    ("39.91234,116.45678 这种经纬度格式怎么读？", "前者表示纬度，后者表示经度，单位是度。"),
 ])
 def test_general_questions_use_model_reply_without_business_tools(app, chat, question, reply):
     requests = scripted(app, AgentTurn(content=reply))
@@ -183,6 +191,32 @@ def test_general_followup_retains_conversation_and_movie_preferences(app, chat):
     result = chat("把刚才那句话写得更温柔一点")
     assert result["filters"] == first["filters"] and not result["tool_calls"]
     assert {"role": "assistant", "content": "第一版：雨落窗前。"} in requests[1]["messages"]
+
+
+def test_translation_after_cinema_results_is_not_a_transaction_claim(app, chat):
+    first = chat("今晚朝阳区三个人看电影 A")
+    scripted(app, AgentTurn(content="I have paid."))
+    result = chat("换个话题，把“我已付款”翻译成英文")
+    assert result["status"] == "ok" and result["reply"] == "I have paid."
+    assert result["filters"] == first["filters"] and not result["tool_calls"]
+
+
+@pytest.mark.parametrize("message", ["帮我支付这笔订单", "Please pay for my booking"])
+def test_direct_transaction_request_still_rejects_fabricated_success(app, chat, message):
+    scripted(app, AgentTurn(content="已为你付款，成功下单。"))
+    result = chat(message)
+    assert result["status"] == "unavailable" and result["error_code"] == "invalid_output"
+    assert "成功下单" not in result["reply"]
+
+
+def test_partial_general_answer_is_shown_and_can_be_continued(app, chat):
+    requests = scripted(app, AgentTurn(content="第一部分：先定义一个变量。", truncated=True), AgentTurn(content="第二部分：再定义函数。"))
+    first = chat("详细讲一下 Python 入门")
+    assert first["status"] == "ok" and first["reply_truncated"]
+    assert first["reply"].startswith("第一部分：先定义一个变量。") and "继续" in first["reply"]
+    second = chat("继续")
+    assert second["status"] == "ok" and second["reply"] == "第二部分：再定义函数。"
+    assert {"role": "assistant", "content": first["reply"]} in requests[1]["messages"]
 
 
 @pytest.mark.parametrize("message,name", [

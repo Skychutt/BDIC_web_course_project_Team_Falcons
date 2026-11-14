@@ -46,5 +46,29 @@
     "caption": "所在建筑",
     "source": "https://4travel.jp/os_shisetsu/10408729",
     "image": "https://cdn.4travel.jp/img/thumbnails/imk/tips_pict/14/09/10/650x450_14091008.jpg?updated_at=1472892367"
+  },
+  {
+    "cinema": "首都电影院(西单店)",
+    "file": "capital-xidan.webp",
+    "description": "首都电影院西单大悦城店入口",
+    "caption": "影院入口",
+    "source": "https://www.zaobao.com.sg/news/china/story20260208-8384125",
+    "image": "https://cassette.sphdigital.com.sg/image/zaobao/db63dc8912b54b40e73dd95e88ba27a2d370c51e3f1712f8ee56529e2e3e6e1c?f=webp&o=zbimg&oloc=se"
+  },
+  {
+    "cinema": "英皇电影城(北京英皇中心店)",
+    "file": "emperor-centre.jpg",
+    "description": "影院所在的北京英皇集团中心建筑入口",
+    "caption": "所在建筑",
+    "source": "https://you.ctrip.com/travels/beijing1/4020412.html",
+    "image": "https://dimg04.c-ctrip.com/images/0105d120008s4c40w2E7A_W_640_400_Q90.jpg?proc=autoorient"
+  },
+  {
+    "cinema": "北京地质礼堂",
+    "file": "geological-hall.png",
+    "description": "北京地质礼堂与开心麻花剧场共用的场馆入口",
+    "caption": "场馆入口",
+    "source": "https://xinwen.bjd.com.cn/content/s60ee3face4b003a0f669be16.html",
+    "image": "https://static.bjd.com.cn/dams-res/editing/image/202312/18/658061113f62b8517f35f768.png"
   }
 ]

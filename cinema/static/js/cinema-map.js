@@ -79,6 +79,24 @@ const cinemaPhotos = {
     "alt": "横店影城所在的北京王府井百货大楼夜间外观",
     "source": "https://4travel.jp/os_shisetsu/10408729",
     "caption": "所在建筑"
+  },
+  "首都电影院(西单店)": {
+    "src": "/static/assets/cinemas/capital-xidan.webp",
+    "alt": "首都电影院西单大悦城店入口",
+    "source": "https://www.zaobao.com.sg/news/china/story20260208-8384125",
+    "caption": "影院入口"
+  },
+  "英皇电影城(北京英皇中心店)": {
+    "src": "/static/assets/cinemas/emperor-centre.jpg",
+    "alt": "影院所在的北京英皇集团中心建筑入口",
+    "source": "https://you.ctrip.com/travels/beijing1/4020412.html",
+    "caption": "所在建筑"
+  },
+  "北京地质礼堂": {
+    "src": "/static/assets/cinemas/geological-hall.png",
+    "alt": "北京地质礼堂与开心麻花剧场共用的场馆入口",
+    "source": "https://xinwen.bjd.com.cn/content/s60ee3face4b003a0f669be16.html",
+    "caption": "场馆入口"
   }
 };
 function cinemaCover(cinema) {
