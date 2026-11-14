@@ -300,22 +300,23 @@ def film_detail(c, fid):
     return attach_ratings(c, [f])[0]
 
 
+def save_rating(c, uid, fid, stars):
+    execute(
+        c,
+        """INSERT INTO ratings(id,customer_id,film_id,stars,created_at,updated_at) VALUES(:id,:u,:f,:s,:n,:n)
+        ON DUPLICATE KEY UPDATE stars=:s,updated_at=:n""",
+        id=new_id(), u=uid, f=fid, s=stars, n=now(),
+    )
+
+
 def rate(actor, fid, body):
     role(actor, "CUSTOMER")
     stars = integer(body.get("stars"), "stars", 1, 10)
 
     def work(c):
+        get(c, "users", actor["id"], True)
         get(c, "films", fid)
-        execute(
-            c,
-            """INSERT INTO ratings(id,customer_id,film_id,stars,created_at,updated_at) VALUES(:id,:u,:f,:s,:n,:n)
-            ON DUPLICATE KEY UPDATE stars=:s,updated_at=:n""",
-            id=new_id(),
-            u=actor["id"],
-            f=fid,
-            s=stars,
-            n=now(),
-        )
+        save_rating(c, actor["id"], fid, stars)
         return film_detail(c, fid)["rating"]
 
     return transaction(work)

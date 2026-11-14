@@ -24,9 +24,18 @@ def initialize(engine):
                 c.exec_driver_sql(statement)
     from .ratings import initialize_ratings
     initialize_ratings(engine)
+    from .community import initialize_community
+    initialize_community(engine)
 
 
 def register_cli(app):
+    @app.cli.command("migrate-community")
+    def migrate_community():
+        """Add review/discussion tables without modifying existing application data."""
+        from .community import initialize_community
+        initialize_community(db())
+        click.echo("Community tables ready. Existing films, ratings and bookings preserved.")
+
     @app.cli.command("init-db")
     def init_db():
         """Apply v1 schema to an explicitly configured EMPTY database only."""

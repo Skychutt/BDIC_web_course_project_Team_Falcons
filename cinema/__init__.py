@@ -155,6 +155,8 @@ def create_app(config=None):
     from .api import api
 
     app.register_blueprint(api)
+    from .community import community
+    app.register_blueprint(community)
     from .frontend_api import ui_api
     from .web import web
     app.register_blueprint(ui_api)
