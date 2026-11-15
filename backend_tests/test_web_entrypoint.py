@@ -83,3 +83,33 @@ def test_html_csp_and_entire_static_module_graph_are_accessible():
     finally:
         app.extensions["cinema_ai"]["runner"].pool.shutdown(wait=True, cancel_futures=True)
         app.extensions["db"].dispose()
+
+
+def test_community_writes_require_sign_in():
+    # Login is rejected before any community table is touched, so no live database is required.
+    app = create_app({
+        "TESTING": True,
+        "SECRET_KEY": "web-entrypoint-fixture-secret-" * 3,
+        "DATABASE_URL": "mysql+pymysql://unused@127.0.0.1/unused",
+        "AMAP_JS_KEY": "", "AMAP_SECURITY_CODE": "",
+    })
+    writes = (
+        ("put", "/api/community/films/1/review", {"stars": 8, "body": "Guest review", "spoiler": False}),
+        ("delete", "/api/community/films/1/review", None),
+        ("post", "/api/community/films/1/threads", {"title": "Guest topic", "body": "Discussion", "spoiler": False}),
+        ("post", "/api/community/threads/1/replies", {"body": "Guest reply"}),
+        ("delete", "/api/community/threads/1", None),
+        ("delete", "/api/community/replies/1", None),
+    )
+    try:
+        client = app.test_client()
+        token = client.get("/api/auth/csrf").json["data"]["csrf_token"]
+        for method, path, payload in writes:
+            call = getattr(client, method)
+            missing = call(path, json=payload)
+            assert missing.status_code == 403 and missing.json["error"]["code"] == "CSRF"
+            signed_out = call(path, json=payload, headers={"X-CSRF-Token": token})
+            assert signed_out.status_code == 401 and signed_out.json["error"]["code"] == "LOGIN_REQUIRED"
+    finally:
+        app.extensions["cinema_ai"]["runner"].pool.shutdown(wait=True, cancel_futures=True)
+        app.extensions["db"].dispose()
