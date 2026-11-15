@@ -32,7 +32,7 @@
 5. `《Journey Beyond the City》讲了什么？`
 6. `学生票有什么要求？` / `影院取消会退哪些费用？`
 
-初始数据库含 1 部影片、3 家影院、9 场放映，时间在**初始化时**按当前北京时间 +3 / +8 / +25 小时生成。数据库场次不会自动滚动；过期后可用员工 Cinema workspace 或原管理 API 新增场次；首页会列出未来有排期的日期。`DATA_SOURCE=mock` 的独立模拟模式则每日滚动生成未来场次。
+空库执行 `flask --app cinema seed-demo` 时，仍只写入测试用的 1 部影片、3 家影院和 9 场放映。课程演示目录要先导入原有片单和六家影院，再运行 `scripts/expand_demo_catalogue.py --apply`，得到 10 部影片和 9 家北京影院。场次在导入时生成，不会自动滚动；过期后可用员工 Cinema workspace 或原管理 API 新增场次。首页会列出未来有排期的日期。`DATA_SOURCE=mock` 的独立模拟模式则每日滚动生成未来场次。
 
 本地演示账号密码保存在 `instance/DEMO-ACCOUNTS.txt`，数据库连接和签名密钥在 `.env`，均被 Git 忽略。无需登录即可使用公开 AI 查询；已有登录、占座、订单、改签、退款等 API 仍由队友后端处理。完整网站已可购票及管理，AI 本身不执行交易。此次附带的 DEMO-ACCOUNTS.txt 属于队友的数据库，密码与本地不同；本地登录请使用项目 instance/DEMO-ACCOUNTS.txt，未覆盖本地密码。
 
