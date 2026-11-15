@@ -64,7 +64,7 @@ AI_TIMEOUT_SECONDS=30
 | `DATA_SOURCE=mock` | 无 MySQL 的独立演示，只注册 AI 和模拟目录 |
 | `AI_PROVIDER` | `stub` / `deepseek`，独立于数据来源 |
 | `DEEPSEEK_MODEL` | 默认 `deepseek-flash` |
-| `AI_TIMEOUT_SECONDS` | 大于 0、至多 10 秒 |
+| `AI_TIMEOUT_SECONDS` | 大于 0、至多 60 秒；默认 30 秒 |
 | `DATABASE_URL` | SQLAlchemy `mysql+pymysql` URL，仅 backend 模式需要 |
 | `SECRET_KEY` | 后端要求至少 32 个随机字符；私有初始化脚本自动生成 |
 | `COOKIE_SECURE` | 完整后端默认 false；HTTPS 部署设 true |
