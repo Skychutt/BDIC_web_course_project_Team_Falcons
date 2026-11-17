@@ -3,6 +3,7 @@ from functools import wraps
 from flask import Blueprint, g, jsonify, request, session
 from .core import *
 from . import auth, booking, catalog, management, platform
+from .seating import auditorium_layout
 
 api = Blueprint("api", __name__, url_prefix="/api")
 
@@ -306,6 +307,16 @@ def staff_screens():
                 s=s["id"],
             )
         return output(result)
+
+
+@api.get("/staff/screens/<int:sid>/layout-template")
+@logged
+def staff_layout_template(sid):
+    role(g.actor, "STAFF")
+    with db().connect() as c:
+        screen = get(c, "screens", sid)
+        branch(g.actor, screen["cinema_id"])
+        return output(auditorium_layout(screen["screen_type"]))
 
 
 @api.get("/staff/layouts/<int:lid>")

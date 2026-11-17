@@ -491,10 +491,11 @@ export async function renderOperations(ctx) {
     const maxY = Math.max(...layout.seats.map((s) => s.map_y)) + 1;
     return `<div class="notice">Screen position: ${{ TOP: "Top", BOTTOM: "Bottom", LEFT: "Left", RIGHT: "Right" }[layout.screen_direction]}. Row 1 is nearest the screen. ${layout.seats.length} seats.</div><div style="overflow:auto;padding:12px 0;max-height:340px"><div style="display:grid;grid-template-columns:repeat(${maxX},32px);grid-template-rows:repeat(${maxY},28px);gap:5px;width:max-content;margin:auto">${layout.seats.map((s) => `<span class="badge" title="Row ${s.row_no}, seat ${s.seat_no} · segment ${s.aisle_segment}" style="grid-column:${s.map_x + 1};grid-row:${s.map_y + 1};padding:3px;text-align:center;font-size:10px">${s.row_no}-${s.seat_no}</span>`).join("")}</div></div>`;
   }
-  function layoutDialog(screenId) {
+  async function layoutDialog(screenId) {
+    const recommended = await request(`/staff/screens/${screenId}/layout-template`);
     const d = dialog(
       `${screenName(screenId)} · Create layout version`,
-      `<form class="stack"><div class="form-grid">${input("Number of rows", "rows", "12", "number", 'min="1" max="100" required')}${input("Seats per aisle segment", "segments", "3,3", "text", 'required placeholder="For example: 3,4,3"')}${select(
+      `<form class="stack">${select("Seating plan", "layout_mode", [["recommended", "Recommended for this screen format"], ["custom", "Custom layout"]], "recommended")}<div class="form-grid" data-custom-layout hidden>${input("Number of rows", "rows", "12", "number", 'min="1" max="100" required')}${input("Seats per aisle segment", "segments", "3,3", "text", 'required placeholder="For example: 3,4,3"')}${select(
         "Screen position",
         "direction",
         [
@@ -503,13 +504,17 @@ export async function renderOperations(ctx) {
           ["LEFT", "Left"],
           ["RIGHT", "Right"],
         ],
-      )}</div><p class="muted">Separate aisle segments with commas. For example, 3,4,3 creates 10 seats and two aisles per row. Adjacent-seat suggestions stay within one segment.</p><div data-layout-preview></div>${formEnd("Save new version")}</form>`,
+      )}</div><p class="muted">The recommended plan includes tapered front rows and aisles suited to this screen format. For a custom plan, separate seat blocks with commas, for example 3,4,3.</p><div data-layout-preview></div>${formEnd("Save new version")}</form>`,
     );
     const form = d.querySelector("form");
+    const plan = fd => fd.get("layout_mode") === "recommended" ? recommended : makeLayout(fd);
     function preview() {
       try {
+        const custom = form.elements.layout_mode.value === "custom";
+        form.querySelector("[data-custom-layout]").hidden = !custom;
+        form.querySelectorAll("[data-custom-layout] input, [data-custom-layout] select").forEach(el => { el.disabled = !custom; });
         d.querySelector("[data-layout-preview]").innerHTML = layoutMap(
-          makeLayout(new FormData(form)),
+          plan(new FormData(form)),
         );
       } catch (err) {
         d.querySelector("[data-layout-preview]").innerHTML =
@@ -519,7 +524,7 @@ export async function renderOperations(ctx) {
     form.addEventListener("input", preview);
     preview();
     formAction(form, async (fd) => {
-      const { width, ...body } = makeLayout(fd);
+      const { width, ...body } = plan(fd);
       const result = await request(
         `/staff/screens/${screenId}/layouts`,
         "POST",
@@ -1073,7 +1078,7 @@ export async function renderOperations(ctx) {
         else if (action === "fares") await fareDialog(id);
         else if (action === "cancel") await cancelDialog(id);
         else if (action === "create-screen") screenDialog();
-        else if (action === "create-layout") layoutDialog(id);
+        else if (action === "create-layout") await layoutDialog(id);
         else if (action === "view-layout") await viewLayout(id);
         else if (action === "booking-detail") await bookingDialog(id);
         else if (action === "retry-refund") retryRefund(id);
