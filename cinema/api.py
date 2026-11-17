@@ -224,6 +224,20 @@ def purchase():
     return output(booking.checkout(g.actor, body(), key()), 201)
 
 
+@api.post("/bookings/<int:bid>/refund-preview")
+@logged
+def customer_refund_preview(bid):
+    from .cancellations import refund_preview
+    return output(refund_preview(g.actor, bid))
+
+
+@api.post("/bookings/<int:bid>/refund")
+@logged
+def customer_refund(bid):
+    from .cancellations import cancel_booking
+    return output(cancel_booking(g.actor, bid, body(), key()))
+
+
 @api.get("/bookings/<int:bid>")
 @logged
 def booking_detail(bid):

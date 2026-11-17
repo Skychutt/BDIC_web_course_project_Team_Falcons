@@ -28,9 +28,18 @@ def initialize(engine):
     initialize_community(engine)
     from .rating_snapshots import initialize_rating_snapshots
     initialize_rating_snapshots(engine)
+    from .cancellations import initialize_cancellations
+    initialize_cancellations(engine)
 
 
 def register_cli(app):
+    @app.cli.command("migrate-customer-refunds")
+    def migrate_customer_refunds():
+        """Enable customer refunds without resetting orders, payments or seats."""
+        from .cancellations import initialize_cancellations
+        initialize_cancellations(db())
+        click.echo("Customer refund schema ready. Existing application data preserved.")
+
     @app.cli.command("import-rating-snapshots")
     @click.argument("manifest", type=click.Path(exists=True, dir_okay=False))
     def import_rating_snapshots(manifest):

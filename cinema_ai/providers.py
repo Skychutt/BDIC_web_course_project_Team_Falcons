@@ -278,7 +278,7 @@ class StubProvider:
         if re.search(r"不限时间|any time|no time limit", text):
             updates.update(time_start=None, time_end=None)
         rule = None
-        for pattern, topic in [(r"影院.*取消|cinema.*cancel", "cancellation"), (r"改签|reschedul", "reschedule"),
+        for pattern, topic in [(r"退票|退款|取消.*(?:订单|电影票)|refund|cancel.*(?:ticket|booking)|影院.*取消|cinema.*cancel", "cancellation"), (r"改签|reschedul", "reschedule"),
                                (r"券|coupon|discount", "coupon"), (r"学生|student", "student"),
                                (r"占座|暂留|hold|reserv", "hold"), (r"支付|余额|payment|wallet", "payment")]:
             if re.search(pattern, text):

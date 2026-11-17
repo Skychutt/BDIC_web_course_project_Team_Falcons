@@ -109,7 +109,7 @@ def customer_bookings():
     if status == "CONFIRMED":
         where += " AND b.status='CONFIRMED'"
     elif status == "HISTORY":
-        where += " AND b.status IN ('RESCHEDULED','CINEMA_CANCELLED')"
+        where += " AND b.status IN ('RESCHEDULED','CINEMA_CANCELLED','CUSTOMER_CANCELLED')"
     with db().connect() as c:
         return output(booking_page(c, where, {"owner": g.actor["id"]}, page, size))
 

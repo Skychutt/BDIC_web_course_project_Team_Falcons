@@ -391,6 +391,7 @@ def booking_detail(c, bid, actor):
         "SELECT id,reason,amount_minor,status,attempt_count,created_at,settled_at FROM refunds WHERE booking_id=:b",
         b=bid,
     )
+    b["cancellation"] = one(c, "SELECT * FROM booking_cancellations WHERE booking_id=:b", b=bid)
     b["compensation_coupon"] = one(
         c, "SELECT id,status FROM coupons WHERE source_booking_id=:b", b=bid
     )

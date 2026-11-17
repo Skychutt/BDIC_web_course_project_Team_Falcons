@@ -282,7 +282,11 @@ def payment_result(actor, hid):
             op = one(c, """SELECT result_json FROM operations WHERE result_hold_id=:h
                           AND operation_type IN ('PURCHASE','RESCHEDULE')""", h=hid)
             require(op is not None, "RECEIPT_UNAVAILABLE", "Payment receipt is unavailable", 503)
-            return dict(status="CONFIRMED", receipt=json.loads(op["result_json"]))
+            receipt = json.loads(op["result_json"])
+            current = get(c, "bookings", integer(receipt["booking_id"], "booking_id"))
+            # The payment succeeded historically, but the ticket may since have been refunded.
+            receipt["status"] = current["status"]
+            return dict(status="CONFIRMED", receipt=receipt)
         if status == "ACTIVE" and h["expires_at"] <= now():
             status = "EXPIRED"
         return dict(status=status)

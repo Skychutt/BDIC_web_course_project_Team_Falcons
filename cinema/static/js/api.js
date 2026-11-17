@@ -3,7 +3,7 @@ const messages = {
     "Some seats were just taken. The latest seat map is shown below; your previous hold is unchanged.",
   HOLD_EXPIRED: "Your seat hold has ended. Select seats again to continue.",
   TOKEN_EXPIRED:
-    "This confirmation has expired. Request a fresh quote before paying.",
+    "This confirmation has expired. Review the latest amount before confirming again.",
   QUOTE_CHANGED:
     "The price or rescheduling fee has changed. Review a new quote before confirming.",
   INSUFFICIENT_BALANCE:
@@ -23,6 +23,7 @@ const messages = {
     "The response could not be confirmed. Retry this same action to safely recover the result.",
   DATABASE_UNAVAILABLE:
     "The service is temporarily unavailable. Retrying the same action will not duplicate a payment.",
+  REFUND_CLOSED: "Refunds close 30 minutes before the screening.",
   RESCHEDULE_CLOSED:
     "Rescheduling closes 30 minutes before your current screening.",
 };
