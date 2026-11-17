@@ -14,7 +14,13 @@
 
 ## 影评与讨论
 
-顶部 **Reviews** 是独立影评入口；电影详情中的 **Reviews & discussions** 可进入该片的五星评分、短评和讨论区。本站评分与购票页共用数据，不要求先购票。评分卡可切换豆瓣真实评分快照与 Falcons 本站评分，各自的均分、人数和五星分布使用同一来源，并显示外部来源链接与核验日期。已有数据库先执行 `.venv/bin/python -m flask --app cinema:create_app migrate-community`，再执行 `.venv/bin/python -m flask --app cinema:create_app import-rating-snapshots data/film-rating-snapshots-20261114.json`，最后重启网站。两个命令只新增社区表和来源快照，不改写顾客评分或订单。功能、数据来源和测试说明见 [影评与讨论](docs/film-community.md)。
+顶部 **Reviews** 是独立影评入口。电影详情中的 **Reviews & discussions** 可进入该片的五星评分、短评和讨论区。顾客无需购票即可评分，影评页、购票页和 AI 推荐共用一个十分制综合分。
+
+有豆瓣快照时，综合分等于（快照均分 × 快照票数 + 本站评分总和）÷ 总票数，显示到小数点后一位。评分卡附有快照来源和核验日期。星级分布结合快照公布的百分比和本站实际票数，因此是近似值。没有快照的影片沿用已有的初始评分和票数；初始数据缺少星级分布时，页面用横线表示。没有导入数据时，只统计本站投票。
+
+演示时可以在影评页给一部有快照的影片打分。首次评分后总票数增加一票，修改自己的评分时总票数不变。快照票数很大时，新增一票后显示的均分可能仍相同。
+
+已有数据库先执行 `.venv/bin/python -m flask --app cinema:create_app migrate-community`，再执行 `.venv/bin/python -m flask --app cinema:create_app import-rating-snapshots data/film-rating-snapshots-20261114.json`，最后重启网站。两个命令只新增社区表和来源快照，不改写顾客评分或订单。功能、数据来源和测试说明见 [影评与讨论](docs/film-community.md)。
 
 ## 现在启动
 

@@ -53,6 +53,11 @@ function scorePanel() {
 function bindScorePanel(ctx, data) {
   const score = ratingSummary(data);
   const date = score.checkedOn ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(score.checkedOn)) : "";
+  let sourceNote = score.count ? "This is the average of ratings from Falcons viewers." : "Be the first to rate this film on Falcons.";
+  if (data.imported_votes > 0) {
+    const source = data.rating_snapshot ? "the Douban snapshot" : "the original film catalogue";
+    sourceNote = `The average includes ${ratingCount(data.imported_votes)} from ${source}. Each Falcons rating counts as one more vote.`;
+  }
   ctx.root.querySelector(".community-score-content").innerHTML = `
     <div class="community-score-summary">
       <div class="community-score-number">${score.average == null ? "—" : score.average.toFixed(1)}<small>/ 10</small></div>
@@ -60,8 +65,9 @@ function bindScorePanel(ctx, data) {
       ${data.own_rating ? `<p class="community-your-rating">${stars(data.own_rating.stars)}<span>Your rating is included</span></p>` : ""}
     </div>
     <div class="community-distribution"><h3>Rating breakdown</h3>${score.distribution.map(row => `<div class="distribution-row" aria-label="${row.stars} stars: ${row.percent == null ? "unavailable" : row.percent.toFixed(1) + "%"}"><span>${row.stars} ★</span><span class="distribution-track" aria-hidden="true"><span style="width:${row.percent ?? 0}%"></span></span><span>${row.percent == null ? "—" : row.percent.toFixed(1) + "%"}</span></div>`).join("")}</div>
-    <div class="rating-source-note"><span>${!score.count ? "Be the first to leave your stars." : !score.hasDistribution ? "A full star breakdown is not available for the imported ratings." : "Every rating counts. Yours joins the audience score."}</span>
-      ${score.url ? `<small><a href="${esc(score.url)}" target="_blank" rel="noopener noreferrer">Initial rating data ↗</a> · <time datetime="${esc(score.checkedOn)}">${date}</time><br>Breakdown uses rounded source percentages.</small>` : ""}
+    <div class="rating-source-note"><span>${sourceNote}</span>
+      ${!score.hasDistribution ? "<small>The imported ratings have no star breakdown.</small>" : ""}
+      ${score.url ? `<small><a href="${esc(score.url)}" target="_blank" rel="noopener noreferrer">Douban source ↗</a> · Checked <time datetime="${esc(score.checkedOn)}">${date}</time><br>Star percentages are approximate because the snapshot uses rounded values.</small>` : ""}
     </div>`;
 }
 
