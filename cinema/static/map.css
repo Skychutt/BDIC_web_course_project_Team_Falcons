@@ -6,3 +6,7 @@ body { font-family:system-ui,sans-serif; background:#f3f5f7; }
 
 #route-panel { padding:14px; box-sizing:border-box; border-radius:10px; box-shadow:0 6px 24px #0002; font-size:13px; }
 #route-panel li { margin:10px 0; line-height:1.5; }
+#route-panel .route-block + .route-block { margin-top:12px; padding-top:12px; border-top:1px solid #ececf1; }
+#route-panel .route-label { display:block; margin:0 0 6px; padding-left:10px; border-left:4px solid #2168d9; }
+#route-panel .route-label.route-walking { border-left-color:#e26a00; }
+#route-panel .route-label.route-driving { border-left-color:#2168d9; }

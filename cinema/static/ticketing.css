@@ -287,6 +287,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .map-nearest { display:flex; align-items:center; gap:8px; padding-bottom:10px; }
 .map-nearest input { width:18px; height:18px; accent-color:#f63765; }
 .cinema-distance { min-height:24px; color:#b52850; font-weight:600; font-size:13px; }
+.cinema-card.is-selected { border-color:#f63765; }
+.cinema-card-body p.cinema-route-line { display:flex; align-items:center; gap:8px; min-height:0; margin:6px 0 0; color:#2c3142; font-weight:600; }
+.route-swatch { width:18px; height:6px; border-radius:99px; flex:none; }
+.route-swatch.route-driving { background:#2168d9; }
+.route-swatch.route-walking { background:#e26a00; }
+.route-legend { display:flex; flex-wrap:wrap; gap:16px; margin:12px 0 0; color:#2c3142; font-size:13px; font-weight:600; }
+.route-legend span { display:inline-flex; align-items:center; gap:8px; }
 .map-card-actions { display:grid; gap:10px; }
 [hidden] { display:none !important; }
 @media(max-width:600px) {

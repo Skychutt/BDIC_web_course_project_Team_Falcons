@@ -46,7 +46,8 @@ export function createMapFrame(container, onCinema, config) {
         const id = ++serial;
         const timer = setTimeout(() => { pending.delete(id); reject(new Error("route_failed")); }, 40000);
         pending.set(id, { resolve, reject, timer });
-        send({type:"route", id, origin, destination, mode});
+        const modes = (Array.isArray(mode) ? mode : [mode]).filter((item) => item === "walking" || item === "driving");
+        send({type:"route", id, origin, destination, modes: modes.length ? modes : ["walking"]});
       });
     },
     convert(coords) {

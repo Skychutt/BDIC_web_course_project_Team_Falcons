@@ -19,7 +19,7 @@ const words = {
     unlocated: "Map position pending", missing: "cinema(s) have no map coordinates. Their distance cannot be calculated.",
     count: "cinemas", distance: "Straight-line distance", showtimes: "See showtimes", onMap: "Show on map", nomatch: "No cinemas in this district.",
     expired: "Location cleared after 10 minutes. Locate again for fresh distances.", mapLabel: "AMap cinema map", you: "Your approximate location",
-    drive: "Driving directions", route_permission: "AMap key does not permit this route service. Check key permissions.", route_timeout: "AMap route request timed out. Please retry.", route_no_data: "No road route was returned for these locations.", navigate: "Walking directions", routing: "Planning road route…", routed: "Road route ready. Follow the directions on the map.", route_failed: "Route unavailable. Try a nearer cinema or retry later.",
+    drive: "Driving", walk: "Walking", routes: "Driving and walking routes", route_permission: "AMap key does not permit this route service. Check key permissions.", route_timeout: "AMap route request timed out. Please retry.", route_no_data: "No road route was returned for these locations.", routing: "Planning driving and walking routes…", routed: "Driving and walking routes are on the map.", routed_partial: "One route is on the map. The other could not be planned.", route_short_unavailable: "Unavailable", route_failed: "Route unavailable. Try a nearer cinema or retry later.",
     noPins: "No cinema coordinates have been added yet. The map shows Beijing; no cinema markers or distances are invented.",
   },
   zh: {
@@ -38,7 +38,7 @@ const words = {
     unlocated: "地图位置待补充", missing: "家影院尚未填写地图坐标，暂时无法计算距离。",
     count: "家影院", distance: "直线距离", showtimes: "查看场次", onMap: "在地图中查看", nomatch: "该区域暂无影院。",
     expired: "位置已在 10 分钟后清除，请重新定位。", mapLabel: "高德影院地图", you: "你的大致位置",
-    drive: "驾车导航", route_permission: "高德Key未获当前路线服务授权，请检查平台类型和接口权限。", route_timeout: "高德路线请求超时，请重试。", route_no_data: "高德没有返回可用的道路路线。", navigate: "步行导航", routing: "正在规划道路路线…", routed: "道路路线已显示，可在地图中查看分段指引。", route_failed: "暂时无法规划路线，请选择较近的影院或稍后重试。",
+    drive: "驾车", walk: "步行", routes: "显示驾车和步行路线", route_permission: "高德Key未获当前路线服务授权，请检查平台类型和接口权限。", route_timeout: "高德路线请求超时，请重试。", route_no_data: "高德没有返回可用的道路路线。", routing: "正在规划驾车和步行路线…", routed: "驾车和步行路线已显示在地图上。", routed_partial: "已画出可用路线，另一条暂时无法规划。", route_short_unavailable: "暂不可用", route_failed: "暂时无法规划路线，请选择较近的影院或稍后重试。",
     noPins: "当前影院尚未填写坐标。地图先显示北京，暂不展示影院标记和距离。",
   },
 };
@@ -108,6 +108,7 @@ export async function renderCinemaMap(ctx) {
   let config;
   try { config = await api.request("/maps/config"); } catch { config = { enabled: false }; }
   let language = "en", district = "", nearest = false, position = null, address = null, accuracy = null;
+  let activeCinemaId = null, routeInfo = null;
   let locate;
   let map, disposed = false, running = false, expireTimer, requestVersion = 0;
   let status = config.enabled ? "idle" : "not_configured";
@@ -130,41 +131,73 @@ export async function renderCinemaMap(ctx) {
     el("clear").hidden = !position;
     el("nearest").disabled = !position;
     el("nearest").checked = nearest;
+    const legend = el("legend");
+    if (legend) legend.hidden = !routeInfo;
   }
   function clearLocation(nextStatus = "ready") {
     ++requestVersion;
     clearTimeout(expireTimer);
     map?.clearRoute();
+    activeCinemaId = routeInfo = null;
     position = address = accuracy = null;
     nearest = false;
     status = map ? nextStatus : config.enabled ? "idle" : "not_configured";
     message(); draw();
     if (map) map.focus([116.397428, 39.90923], 10);
   }
+  function routeSummary(cinema) {
+    if (!routeInfo || String(routeInfo.id) !== String(cinema.id)) return "";
+    const line = (mode, label) => {
+      const found = routeInfo.routes.find((route) => route.mode === mode);
+      const distance = Number(found?.distance), time = Number(found?.time);
+      const detail = found && Number.isFinite(distance)
+        ? `${(distance / 1000).toFixed(1)} km${Number.isFinite(time) ? ` · ${Math.ceil(time / 60)} ${language === "zh" ? "分钟" : "min"}` : ""}`
+        : t("route_short_unavailable");
+      return `<p class="cinema-route-line"><i class="route-swatch route-${mode}"></i><span>${label} · ${detail}</span></p>`;
+    };
+    return line("driving", t("drive")) + line("walking", t("walk"));
+  }
   function draw() {
     const values = orderedCinemas(bootstrap.cinemas, position, district, nearest);
     const missing = values.filter((c) => !c.position).length;
     el("count").textContent = `${values.length} ${t("count")}`;
     el("missing").textContent = missing ? `${missing} ${t("missing")}` : "";
-    el("list").innerHTML = values.map((c) => `<article class="cinema-card">${cinemaCover(c)}<div class="cinema-card-body"><p class="eyebrow">${esc(c.brand)}</p><h2>${esc(c.name)}</h2><p>${icon("pin")} ${esc(c.address)}</p><p class="cinema-distance">${c.distance != null ? `${t("distance")} · ${(c.distance / 1000).toFixed(1)} km` : c.position ? "" : t("unlocated")}</p><div class="map-card-actions"><a class="button ghost wide" href="#/discover?${new URLSearchParams({ cinema_id: c.id, district_id: c.district_id })}">${t("showtimes")} ${icon("arrow")}</a>${c.position ? `<button type="button" class="button secondary wide" data-pin="${esc(c.id)}">${t("onMap")}</button><button type="button" class="button wide" data-route="${esc(c.id)}">${t("navigate")}</button><button type="button" class="button wide" data-route="${esc(c.id)}" data-mode="driving">${t("drive")}</button>` : ""}</div></div></article>`).join("") || empty(t("nomatch"));
+    el("list").innerHTML = values.map((c) => `<article class="cinema-card${String(activeCinemaId) === String(c.id) ? " is-selected" : ""}" data-cinema="${esc(c.id)}">${cinemaCover(c)}<div class="cinema-card-body"><p class="eyebrow">${esc(c.brand)}</p><h2>${esc(c.name)}</h2><p>${icon("pin")} ${esc(c.address)}</p><p class="cinema-distance">${c.distance != null ? `${t("distance")} · ${(c.distance / 1000).toFixed(1)} km` : c.position ? "" : t("unlocated")}</p>${routeSummary(c)}<div class="map-card-actions"><a class="button ghost wide" href="#/discover?${new URLSearchParams({ cinema_id: c.id, district_id: c.district_id })}">${t("showtimes")} ${icon("arrow")}</a>${c.position ? `<button type="button" class="button secondary wide" data-pin="${esc(c.id)}">${t("onMap")}</button><button type="button" class="button wide" data-route="${esc(c.id)}">${t("routes")}</button>` : ""}</div></div></article>`).join("") || empty(t("nomatch"));
     el("list").querySelectorAll("[data-pin]").forEach((button) => {
       button.onclick = () => run(async () => {
         await ensureMap();
-        const cinema = values.find((c) => c.id === button.dataset.pin);
+        const cinema = values.find((c) => String(c.id) === button.dataset.pin);
         if (!disposed && cinema?.position) { map.focus(cinema.position, 15); el("canvas").scrollIntoView({ block: "center", behavior: "smooth" }); }
       });
     });
     el("list").querySelectorAll("[data-route]").forEach((button) => {
       button.disabled = running;
       button.onclick = () => run(async () => {
-        const cinema = values.find((c) => c.id === button.dataset.route);
+        const cinema = values.find((c) => String(c.id) === button.dataset.route);
         if (!cinema?.position) return;
         if (!position) await locate();
         if (disposed || !position) return;
-        await ensureMap(); status = "routing"; message();
+        await ensureMap();
+        if (disposed || !position) return;
+        activeCinemaId = cinema.id;
+        routeInfo = null;
+        status = "routing";
+        message();
         el("canvas").scrollIntoView({block:"center", behavior:"smooth"});
-        await map.route(position, cinema.position, button.dataset.mode || "walking");
-        if (!disposed) status = "routed";
+        try {
+          const details = await map.route(position, cinema.position, ["walking", "driving"]);
+          if (disposed) return;
+          const routes = Array.isArray(details?.routes) ? details.routes : [];
+          const errors = Array.isArray(details?.errors) ? details.errors : [];
+          if (!routes.length) throw new Error(errors[0]?.code || "route_failed");
+          routeInfo = { id: cinema.id, routes, errors };
+          status = errors.length ? "routed_partial" : "routed";
+        } catch (error) {
+          activeCinemaId = routeInfo = null;
+          if (!disposed) draw();
+          throw error;
+        }
+        if (!disposed) draw();
       });
     });
     if (!map) return;
@@ -195,11 +228,12 @@ export async function renderCinemaMap(ctx) {
   }
   function mount() {
     map?.destroy(); map = null;
-    root.innerHTML = `<div class="page-heading"><div><p class="eyebrow">FALCONS · BEIJING</p><h1>${t("title")}</h1><p class="muted">${t("intro")}</p></div><button class="button ghost" data-map="language">${language === "zh" ? "English" : "中文"}</button></div><section class="cinema-map-panel"><div class="map-controls"><button type="button" class="button secondary" data-map="load">${t("map")}</button><button type="button" class="button" data-map="locate">${icon("pin")} ${t("locate")}</button><button type="button" class="button ghost" data-map="clear" hidden>${t("clear")}</button></div><p class="fine-print">${t("privacy")}</p><p class="map-status" data-map="status" role="status" aria-live="polite"></p><div class="cinema-map-canvas" data-map="canvas" role="region" aria-label="${t("mapLabel")}" hidden></div></section><div class="map-list-toolbar"><label class="field"><span>${t("district")}</span><select data-map="district">${options(bootstrap.districts, district, "name", t("all"))}</select></label><label class="map-nearest"><input type="checkbox" data-map="nearest"> ${t("nearest")}</label><span class="muted" data-map="count"></span></div><p class="fine-print" data-map="missing"></p><div class="cinema-grid" data-map="list"></div>`;
+    root.innerHTML = `<div class="page-heading"><div><p class="eyebrow">FALCONS · BEIJING</p><h1>${t("title")}</h1><p class="muted">${t("intro")}</p></div><button class="button ghost" data-map="language">${language === "zh" ? "English" : "中文"}</button></div><section class="cinema-map-panel"><div class="map-controls"><button type="button" class="button secondary" data-map="load">${t("map")}</button><button type="button" class="button" data-map="locate">${icon("pin")} ${t("locate")}</button><button type="button" class="button ghost" data-map="clear" hidden>${t("clear")}</button></div><p class="fine-print">${t("privacy")}</p><p class="map-status" data-map="status" role="status" aria-live="polite"></p><p class="route-legend" data-map="legend" hidden><span><i class="route-swatch route-driving"></i>${t("drive")}</span><span><i class="route-swatch route-walking"></i>${t("walk")}</span></p><div class="cinema-map-canvas" data-map="canvas" role="region" aria-label="${t("mapLabel")}" hidden></div></section><div class="map-list-toolbar"><label class="field"><span>${t("district")}</span><select data-map="district">${options(bootstrap.districts, district, "name", t("all"))}</select></label><label class="map-nearest"><input type="checkbox" data-map="nearest"> ${t("nearest")}</label><span class="muted" data-map="count"></span></div><p class="fine-print" data-map="missing"></p><div class="cinema-grid" data-map="list"></div>`;
     root.lang = language === "zh" ? "zh-CN" : "en";
     el("language").onclick = () => {
       if (running) return;
       const hadMap = !!map;
+      activeCinemaId = routeInfo = null;
       language = language === "en" ? "zh" : "en"; mount();
       if (hadMap) run(async () => { await ensureMap(); if (position) { map.focus(position, 13); status = "located"; } });
     };
@@ -209,6 +243,7 @@ export async function renderCinemaMap(ctx) {
       const version = ++requestVersion;
       // Clear stale position before a fresh request; never show an old distance as new.
       map?.clearRoute();
+      activeCinemaId = routeInfo = null;
       clearTimeout(expireTimer); position = address = accuracy = null; nearest = false;
       status = "locating"; message(); draw();
       const result = await locateDevice();

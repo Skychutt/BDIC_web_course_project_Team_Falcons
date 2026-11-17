@@ -16,8 +16,10 @@ window.addEventListener("message", async (event) => {
     ++routeVersion; planner?.clear();
   } else if (msg.type === "route" && validPoint(msg.origin) && validPoint(msg.destination)) {
     const version = ++routeVersion;
+    const requested = (Array.isArray(msg.modes) ? msg.modes : [msg.mode || "walking"])
+      .filter((mode) => mode === "walking" || mode === "driving");
     try {
-      const details = await planner.search(msg.origin, msg.destination, msg.mode);
+      const details = await planner.searchModes(msg.origin, msg.destination, requested.length ? requested : ["walking"]);
       if (version === routeVersion) send({type:"routed", id:msg.id, ...details});
     } catch (error) {
       if (version === routeVersion) send({type:"route-error", id:msg.id, code:error.message});
@@ -69,5 +71,8 @@ try {
   AMap = await loadAMap(config);
   map = new AMap.Map("map", { viewMode: "2D", zoom: 10, center: [116.397428, 39.90923] });
   planner = createRoutePlanner(AMap, map, document.getElementById("route-panel"));
-  map.on("complete", () => { if (!ready) { ready = true; send({ type: "ready" }); } });
+  const markReady = () => { if (!ready) { ready = true; send({ type: "ready" }); } };
+  map.on("complete", markReady);
+  // Tile loading can stall. Route geometry can still be drawn on the existing map.
+  setTimeout(markReady, 1500);
 } catch { fail(); }
