@@ -41,6 +41,39 @@ def purchase(env, index=0, name="customer"):
     return booking.checkout(actor(env, name), {"quote_token": quote["quote_token"]}, key())
 
 
+def test_archiving_film_closes_existing_screenings_and_quotes(env):
+    hold, quote = prepare_quote(env)
+    sid, hid = hold["screening_id"], hold["hold_id"]
+    rival = actor(env, "customer2")
+    selection = {"screening_id": sid, "seat_ids": hold["seat_ids"]}
+    staff_id = actor(env, "staff1")["id"]
+    approval = booking.counter_hold_consent(rival, {**selection, "staff_id": staff_id})
+    public = client(env)
+    with db().begin() as c:
+        upd(c, "films", env["ids"]["film_id"], archived=True)
+
+    for show in (sid, env["ids"]["screenings"][3]):
+        assert public.get(f"/api/screenings/{show}/sale-status").json["data"]["saleable"] is False
+        assert public.get(f"/api/screenings/{show}/seats").json["data"]["saleable"] is False
+        assert public.get(f"/api/catalog/screenings/{show}").json["data"]["saleable"] is False
+    assert public.get("/api/screenings").json["data"]["total"] == 0
+    assert public.get("/api/ui/bootstrap").json["data"]["available_dates"] == []
+    for action, args in [
+        (booking.create_hold, (rival, selection, key())),
+        (booking.create_hold, (actor(env, "staff1"), approval, approval["request_key"])),
+        (booking.quote, (actor(env), hid, {"tickets": quote["tickets"]})),
+        (booking.checkout, (actor(env), {"quote_token": quote["quote_token"]}, key())),
+    ]:
+        with pytest.raises(Problem) as error:
+            action(*args)
+        assert error.value.code == "SALE_CLOSED"
+
+    with db().begin() as c:
+        assert one(c, "SELECT COUNT(*) AS n FROM payments")["n"] == 0
+        upd(c, "films", env["ids"]["film_id"], archived=False)
+    assert public.get(f"/api/screenings/{sid}/sale-status").json["data"]["saleable"] is True
+
+
 def test_checkout_committing_at_expiry_keeps_seat_and_recovers_receipt(env, monkeypatch):
     hold, quote = prepare_quote(env)
     hid, sid = hold["hold_id"], hold["screening_id"]

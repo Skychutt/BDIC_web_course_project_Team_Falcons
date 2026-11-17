@@ -141,9 +141,8 @@ class BackendCatalog(CatalogService):
                     return None
                 raise
             show, layout = result["screening"], result["layout"]
-            cinema = get(c, "cinemas", show["cinema_id"])
             return {**self._facts(c, show, locale), "status": show["status"].lower(),
-                    "saleable": show["status"] == "PUBLISHED" and show["starts_at"] > now() and bool(cinema["is_active"]),
+                    "saleable": result["saleable"],
                     "fares": self._fares(result["fares"]),
                     "seats": [{**self._seat(s, layout["row_count"]), "state": s["state"].lower()} for s in result["seats"]],
                     "layout": {"screen_direction": layout["screen_direction"], "row_count": layout["row_count"]},

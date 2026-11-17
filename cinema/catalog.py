@@ -252,6 +252,21 @@ def search(c, filters, *, end_exclusive=False):
     )
 
 
+def sale_closed_reason(c, sid):
+    # A sale and an administrative film update must agree on their commit order.
+    show = one(c, """SELECT s.status,s.starts_at,f.archived,ci.is_active
+        FROM screenings s JOIN films f ON f.id=s.film_id
+        JOIN cinemas ci ON ci.id=s.cinema_id WHERE s.id=:sid FOR SHARE OF f""", sid=sid)
+    require(show is not None, "NOT_FOUND", "screenings record not found", 404)
+    if show["status"] != "PUBLISHED" or show["starts_at"] <= now():
+        return "Screening is no longer on sale"
+    if show["archived"]:
+        return "This film has been archived"
+    if not show["is_active"]:
+        return "Cinema is inactive"
+    return None
+
+
 def seatmap(c, sid, actor=None):
     # A checkout can pass its deadline check just before expiry and still be committing.
     # All allocation writers lock the screening. Wait to read their outcome at the boundary.
@@ -282,6 +297,7 @@ def seatmap(c, sid, actor=None):
         seat["zone"] = seat_zone(seat["row_no"], layout["row_count"])
     return dict(
         screening=s,
+        saleable=sale_closed_reason(c, sid) is None,
         layout=layout,
         seats=seats,
         fares=rows(

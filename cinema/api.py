@@ -154,6 +154,12 @@ def seatmap(sid):
         return output(catalog.seatmap(c, sid, g.actor))
 
 
+@api.get("/screenings/<int:sid>/sale-status")
+def sale_status(sid):
+    with db().connect() as c:
+        return output({"saleable": catalog.sale_closed_reason(c, sid) is None})
+
+
 @api.post("/assistant/recommendations")
 def recommend():
     data = body()

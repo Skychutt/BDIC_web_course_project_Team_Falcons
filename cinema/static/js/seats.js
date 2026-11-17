@@ -38,6 +38,7 @@ export async function renderSeats(ctx, sid) {
   const { root, api, user, bootstrap, params, navigate, toast } = ctx;
   let alive = true,
     interval, saleTimer, renderedOnSale;
+  let saleCheck;
   let map = await api.request(
     "/screenings/" + encodeURIComponent(sid) + "/seats",
   );
@@ -209,8 +210,26 @@ export async function renderSeats(ctx, sid) {
     return state.hold && api.pending?.("pay:" + state.hold.id);
   }
   function onSale() {
-    return map.screening.status === "PUBLISHED" &&
+    return map.saleable &&
       new Date(map.screening.starts_at).getTime() > Date.now() + offset;
+  }
+  async function checkSale() {
+    if (!saleCheck) {
+      saleCheck = api.request("/screenings/" + sid + "/sale-status", {
+        signal: AbortSignal.timeout(8000),
+      }).finally(() => { saleCheck = null; });
+    }
+    const { saleable } = await saleCheck;
+    if (!alive) return false;
+    if (!saleable) {
+      map.saleable = false;
+      tick();
+    }
+    return onSale();
+  }
+  function checkVisibleSale() {
+    if (!document.hidden && onSale() && state.phase !== "complete")
+      void checkSale().catch(() => {}); // Retry on the next poll or seat click.
   }
   function grid() {
     const seats = map.seats;
@@ -289,9 +308,19 @@ export async function renderSeats(ctx, sid) {
     }
     root.querySelectorAll("[data-seat]").forEach(
       (button) =>
-        (button.onclick = () => {
+        (button.onclick = async () => {
           if (!onSale()) return render();
           const id = button.dataset.seat;
+          if (!state.selected.has(id)) {
+            try {
+              if (!(await checkSale())) return;
+            } catch {
+              if (alive) toast("Could not verify ticket availability. Please try again.", "error");
+              return;
+            }
+            if (state.working || state.phase !== "choose" ||
+                !root.querySelector(`[data-seat="${id}"]:enabled`)) return;
+          }
           if (state.selected.has(id)) state.selected.delete(id);
           else if (state.selected.size < state.target) state.selected.add(id);
           else {
@@ -419,6 +448,10 @@ export async function renderSeats(ctx, sid) {
               "Give this approval to the employee. Your seats are not held until they submit it.",
             );
           } catch (err) {
+            if (err.code === "SALE_CLOSED") {
+              map.saleable = false;
+              return render();
+            }
             showError(form.querySelector(".form-error"), err);
           }
         });
@@ -450,6 +483,10 @@ export async function renderSeats(ctx, sid) {
               `Only the named staff member can complete this ${state.quote.amount_due_minor < 0 ? "refund" : "payment"} of ${money(Math.abs(state.quote.amount_due_minor))}. The seat-hold deadline still applies.`,
             );
           } catch (err) {
+            if (err.code === "SALE_CLOSED") {
+              map.saleable = false;
+              return render();
+            }
             showError(form.querySelector(".form-error"), err);
           }
         });
@@ -531,6 +568,7 @@ export async function renderSeats(ctx, sid) {
     } catch (e) {
       if (!alive) return;
       state.error = e.userMessage || e.message;
+      if (e.code === "SALE_CLOSED") map.saleable = false;
       if (e.code === "SEAT_UNAVAILABLE") {
         try {
           map = await api.request("/screenings/" + sid + "/seats");
@@ -565,6 +603,7 @@ export async function renderSeats(ctx, sid) {
       render();
     } catch (e) {
       state.error = e.userMessage || e.message;
+      if (e.code === "SALE_CLOSED") map.saleable = false;
       if (["HOLD_EXPIRED", "TOKEN_EXPIRED"].includes(e.code))
         state.phase = "expired";
       render();
@@ -631,6 +670,7 @@ export async function renderSeats(ctx, sid) {
       );
     } catch (e) {
       state.error = e.userMessage || e.message;
+      if (e.code === "SALE_CLOSED") map.saleable = false;
       if (api.pending("pay:" + state.hold.id)) {
         state.phase = "recover";
         state.allowPaymentRetry = false;
@@ -665,9 +705,13 @@ export async function renderSeats(ctx, sid) {
   }
   render();
   interval = setInterval(tick, 1000);
+  const salePoll = setInterval(checkVisibleSale, 5000);
   document.addEventListener("visibilitychange", tick);
+  document.addEventListener("visibilitychange", checkVisibleSale);
   return () => {
     alive = false;
+    clearInterval(salePoll);
+    document.removeEventListener("visibilitychange", checkVisibleSale);
     document.removeEventListener("visibilitychange", tick);
     clearTimeout(saleTimer);
     clearInterval(interval);
