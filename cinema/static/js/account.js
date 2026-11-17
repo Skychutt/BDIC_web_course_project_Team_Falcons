@@ -13,6 +13,7 @@ const STATUS = {
   CONFIRMED: "Confirmed",
   RESCHEDULED: "Rescheduled",
   CINEMA_CANCELLED: "Cinema cancelled",
+  CUSTOMER_CANCELLED: "Refunded · tickets cancelled",
   ACTIVE: "Awaiting payment",
   CONVERTED: "Purchased",
   EXPIRED: "Expired",
@@ -77,14 +78,16 @@ function refundSummary(refunds = []) {
   return refunds
     .map(
       (r) => `<p>${badge(r.status)} <strong>${money(r.amount_minor)}</strong>
-    <span class="muted">${r.reason === "CINEMA_CANCELLATION" ? "Cinema cancellation" : "Rescheduling difference"}</span></p>`,
+    <span class="muted">${r.reason === "CUSTOMER_CANCELLATION" ? "Your ticket refund" : r.reason === "CINEMA_CANCELLATION" ? "Cinema cancellation" : "Rescheduling difference"}</span></p>`,
     )
     .join("");
 }
 
 function bookingDetails(b) {
   const coupon = b.compensation_coupon;
+  const cancellation = b.cancellation;
   return `<div class="stack">
+    ${cancellation ? `<section class="account-refund-receipt" aria-label="Ticket refund receipt"><h3>Tickets cancelled · seats released</h3><p>These tickets can no longer be used for admission.</p><div class="form-grid">${datum("Returned to demo wallet", `<strong>${money(cancellation.refund_minor)}</strong>`)}${datum("Cancellation fee", money(cancellation.fee_minor))}</div><p class="muted">Completed ${esc(dateTime(cancellation.created_at))} · Previous change fees are not refunded.</p></section>` : ""}
     <div class="form-grid">
       ${datum("Full ticket value", money(b.gross_ticket_minor))}
       ${datum("Net ticket value", money(b.net_ticket_minor))}
@@ -187,7 +190,7 @@ export async function renderAccount(ctx) {
         ${datum("Net ticket value", `<strong>${money(b.net_ticket_minor)}</strong>`)}
       </div>
       <div class="toolbar"><span class="muted">Booking · ${esc(shortId(b.id))}${Number(b.change_no) ? ` · ${Number(b.change_no)} ${Number(b.change_no) === 1 ? "change" : "changes"}` : ""}</span>
-        ${mayChange ? `<a class="button secondary" href="#/discover?source_booking_id=${encodeURIComponent(b.id)}">Reschedule party</a>` : b.status === "CONFIRMED" ? '<span class="muted">Changes close 30 minutes before the screening</span>' : ""}
+        ${mayChange ? `<div class="actions"><a class="button secondary" href="#/discover?source_booking_id=${encodeURIComponent(b.id)}">Reschedule party</a><button type="button" class="button secondary" data-action="refund-booking" data-id="${esc(b.id)}">Refund tickets</button></div>` : b.status === "CONFIRMED" ? '<span class="muted">Changes and refunds close 30 minutes before the screening</span>' : ""}
       </div>
       <details ${open ? "open" : ""} data-order-details="${esc(b.id)}"><summary class="button ghost">Seats, fees & compensation</summary><div class="stack" data-detail-content="${esc(b.id)}">${b.tickets ? bookingDetails(b) : '<p class="muted">Open to load full booking details.</p>'}</div></details>
     </article>`;
@@ -200,7 +203,7 @@ export async function renderAccount(ctx) {
       ["HISTORY", "History & cancellations"],
     ];
     return `<div class="toolbar"><div class="actions" aria-label="Filter booking status">${filters.map(([value, title]) => `<a class="button ${status === value ? "" : "secondary"}" ${status === value ? 'aria-current="true"' : ""} href="${accountURL("orders", value ? { status: value } : {})}">${title}</a>`).join("")}</div><button type="button" class="button ghost" data-action="refresh">Refresh</button></div>
-      ${notice("Change the whole party to the same film and cinema, keeping the fare mix. Fees: 0% at least 12 hours ahead; 5% from 6 to under 12 hours; 20% from 30 minutes to under 6 hours. Changes close 30 minutes before the current screening.")}
+      ${notice("Change the whole party to the same film and cinema, keeping the fare mix. Fees: 0% at least 12 hours ahead; 5% from 6 to under 12 hours; 20% from 30 minutes to under 6 hours. The same fee bands apply to whole-booking refunds. Changes and refunds close 30 minutes before the current screening. Refunds return the net ticket value minus the cancellation fee to your demo wallet; previous change fees are not refunded.")}
       ${focus && !data.items.some((b) => String(b.id) === String(focus.id)) ? `<section aria-label="Selected booking">${bookCard(focus)}</section>` : ""}
       ${data.items.length ? data.items.map((b) => bookCard(focus && String(focus.id) === String(b.id) ? focus : b)).join("") : empty("No tickets here yet", status ? "No bookings in this category. Try All bookings." : "Find a film you love and save a place for your next cinema visit.")}
       ${pagination(data, "orders", status ? { status } : {})}`;
@@ -246,7 +249,7 @@ export async function renderAccount(ctx) {
 
   function refundsMarkup(data) {
     return `<div class="toolbar"><p class="muted">Refunds and coupons have separate states. Successful refunds are credited to your demo wallet.</p><button type="button" class="button ghost" data-action="refresh">Refresh status</button></div>
-      ${data.items.length ? data.items.map((r) => `<article class="panel"><div class="panel-header"><div><p class="eyebrow">${esc(getCinema(r.cinema_id))}</p><h2>${money(r.amount_minor)}</h2></div>${badge(r.status)}</div><p>${r.reason === "CINEMA_CANCELLATION" ? "Cinema cancellation: current net tickets plus all accumulated fees in this booking chain." : "Rescheduling difference: the credit after settling new tickets and the current change fee."}</p><p class="muted">Requested ${esc(dateTime(r.created_at))}${r.settled_at ? ` · Received ${esc(dateTime(r.settled_at))}` : ""}</p>${r.status === "FAILED" ? notice("This refund has not reached your wallet. The cinema needs to retry it; keep your booking reference and check the status again later.", "warning") : ""}<a class="button secondary" href="${accountURL("orders", { booking: r.booking_id })}">View booking</a></article>`).join("") : empty("No refunds yet", "Track refunds here when rescheduling produces a credit or your cinema cancels a screening.")}
+      ${data.items.length ? data.items.map((r) => `<article class="panel"><div class="panel-header"><div><p class="eyebrow">${esc(getCinema(r.cinema_id))}</p><h2>${money(r.amount_minor)}</h2></div>${badge(r.status)}</div><p>${r.reason === "CUSTOMER_CANCELLATION" ? "Your ticket refund: net ticket value minus the cancellation fee. All seats have been released and these tickets are no longer valid." : r.reason === "CINEMA_CANCELLATION" ? "Cinema cancellation: current net tickets plus all accumulated fees in this booking chain." : "Rescheduling difference: the credit after settling new tickets and the current change fee."}</p><p class="muted">Requested ${esc(dateTime(r.created_at))}${r.settled_at ? ` · Received ${esc(dateTime(r.settled_at))}` : ""}</p>${r.status === "FAILED" ? notice("This refund has not reached your wallet. The cinema needs to retry it; keep your booking reference and check the status again later.", "warning") : ""}<a class="button secondary" href="${accountURL("orders", { booking: r.booking_id })}">View booking</a></article>`).join("") : empty("No refunds yet", "Track your ticket refunds, rescheduling credits and cinema cancellations here.")}
       ${pagination(data, "refunds")}`;
   }
 
@@ -341,6 +344,78 @@ export async function renderAccount(ctx) {
     tick();
   }
 
+  async function confirmRefund(id, opener) {
+    dialog?.remove();
+    const d = document.createElement("dialog");
+    dialog = d;
+    d.className = "panel account-dialog account-refund-dialog";
+    d.setAttribute("aria-labelledby", "refund-title");
+    d.innerHTML = `<h2 id="refund-title">Refund your tickets</h2><p data-refund-content>Checking the refund amount…</p><div data-refund-error role="alert"></div><div class="actions"><button type="button" class="button secondary" data-keep>Keep my tickets</button><button type="button" class="button danger" data-confirm-refund disabled>Confirm refund</button></div>`;
+    root.append(d);
+    const confirm = d.querySelector("[data-confirm-refund]");
+    const keep = d.querySelector("[data-keep]");
+    let preview = null;
+    let busy = false;
+    let needsPreview = true;
+    keep.addEventListener("click", () => d.close());
+    d.addEventListener("cancel", (event) => { if (busy) event.preventDefault(); });
+    d.addEventListener("close", () => {
+      d.remove();
+      if (dialog === d) dialog = null;
+      opener?.focus();
+      if (alive) void load();
+    }, { once: true });
+    const active = () => alive && d.isConnected;
+    const showError = (error) => {
+      d.querySelector("[data-refund-error]").innerHTML = notice(error.userMessage || error.message || "Unable to confirm this refund.", "error");
+    };
+    async function review() {
+      confirm.disabled = true;
+      d.querySelector("[data-refund-error]").innerHTML = "";
+      try {
+        preview = await api.request(`/bookings/${encodeURIComponent(id)}/refund-preview`, { method: "POST", body: {}, signal: lifecycle.signal });
+        if (!active()) return;
+        needsPreview = false;
+        d.querySelector("[data-refund-content]").outerHTML = `<div data-refund-content class="stack"><p><strong>${esc(preview.film_title)}</strong><br>${esc(preview.cinema_name)} · ${esc(preview.screen_name)}<br>${esc(dateTime(preview.starts_at))}</p><p class="muted">${preview.seats.map((seat) => esc(`Row ${seat.row_no} · Seat ${seat.seat_no}`)).join(" / ")}</p><div class="account-refund-amounts"><div class="toolbar"><span>Net ticket value</span><strong>${money(preview.ticket_value_minor)}</strong></div><div class="toolbar"><span>Cancellation fee (${Number(preview.fee_rate_bps) / 100}%)</span><strong>${Number(preview.fee_minor) ? "−" : ""}${money(preview.fee_minor)}</strong></div><div class="toolbar account-refund-total"><span>Back to your demo wallet</span><strong>${money(preview.refund_minor)}</strong></div></div><p>All ${preview.seats.length} tickets will be cancelled and their seats released. This cannot be undone; you can book again if seats are available.</p><p class="muted">Previous change fees (${money(preview.previous_fees_minor)}) are not refunded.${preview.coupon_used ? " Your used coupon will not be restored." : ""} No compensation coupon is issued for a voluntary refund. Any pending reschedule for this order will also be released.</p></div>`;
+        confirm.disabled = false;
+        confirm.textContent = `Confirm refund · ${money(preview.refund_minor)}`;
+      } catch (error) {
+        if (!active()) return;
+        showError(error);
+        needsPreview = true;
+        confirm.disabled = ["BOOKING_STATE", "REFUND_CLOSED", "FORBIDDEN", "NOT_FOUND"].includes(error.code);
+        confirm.textContent = "Review refund again";
+      }
+    }
+    confirm.addEventListener("click", async () => {
+      if (needsPreview) { await review(); return; }
+      busy = true;
+      confirm.disabled = true;
+      keep.disabled = true;
+      confirm.textContent = "Refunding…";
+      d.querySelector("[data-refund-error]").innerHTML = "";
+      try {
+        const receipt = await api.action(`refund:${id}`, `/bookings/${encodeURIComponent(id)}/refund`, { preview_token: preview.preview_token });
+        if (!active()) return;
+        d.close();
+        toast(`${money(receipt.refund_minor)} returned to your demo wallet. All ticket seats released.`);
+      } catch (error) {
+        if (!active()) return;
+        showError(error);
+        needsPreview = ["TOKEN_EXPIRED", "PREVIEW_CHANGED"].includes(error.code);
+        confirm.disabled = ["BOOKING_STATE", "REFUND_CLOSED", "FORBIDDEN", "NOT_FOUND"].includes(error.code);
+        confirm.textContent = needsPreview ? "Review updated refund" : "Retry this refund";
+        // A lost response keeps the exact signed preview and idempotency key for safe recovery.
+      } finally {
+        busy = false;
+        keep.disabled = false;
+      }
+    });
+    d.showModal();
+    keep.focus();
+    await review();
+  }
+
   function confirmRelease(id, opener) {
     dialog?.remove();
     dialog = document.createElement("dialog");
@@ -398,6 +473,10 @@ export async function renderAccount(ctx) {
       if (button.dataset.action === "refresh") {
         button.disabled = true;
         await load();
+        return;
+      }
+      if (button.dataset.action === "refund-booking") {
+        await confirmRefund(button.dataset.id, button);
         return;
       }
       if (button.dataset.action === "cancel-hold") {

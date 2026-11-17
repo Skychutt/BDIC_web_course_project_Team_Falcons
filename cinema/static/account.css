@@ -292,3 +292,8 @@
     align-items: stretch;
   }
 }
+
+.account-refund-dialog { width: min(620px, calc(100vw - 32px)); max-height: 90vh; overflow-y: auto; }
+.account-refund-amounts, .account-refund-receipt { padding: 20px; border-radius: 12px; background: var(--bg, #f6f7fa); }
+.account-refund-total { border-top: 1px solid var(--border, #e6e6ed); padding-top: 16px; margin-top: 12px; font-size: 1.1rem; }
+.account-refund-receipt h3 { margin-top: 0; }

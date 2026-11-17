@@ -246,10 +246,11 @@ try {
   );
   await check("Customer rating updates the real film aggregate", async () => {
     await page.goto(base + "/#/film/" + fixture.ids.film_id);
-    await page.getByRole("radio", { name: "8 points", exact: true }).check();
-    await page.getByRole("button", { name: "Save my rating" }).click();
+    await page.getByRole("link", { name: "Reviews & discussions", exact: true }).click();
+    await page.getByRole("radio", { name: "4 stars", exact: true }).check();
+    await page.locator("#community-review-form button[type=submit]").click();
     await page
-      .getByText("Your rating has been saved.", { exact: true })
+      .getByText("Saved. Your rating is included in the audience score.", { exact: true })
       .waitFor();
     const film = await api("/films/" + fixture.ids.film_id);
     assert.ok(film.rating.count >= 1);

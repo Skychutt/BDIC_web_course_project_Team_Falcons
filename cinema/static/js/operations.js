@@ -6,6 +6,7 @@ const statuses = {
   CONFIRMED: "Confirmed",
   RESCHEDULED: "Rescheduled",
   CINEMA_CANCELLED: "Cinema cancellation",
+  CUSTOMER_CANCELLED: "Customer refunded",
   PENDING: "Pending refund",
   FAILED: "Needs retry",
   SUCCEEDED: "Completed",
@@ -700,7 +701,7 @@ export async function renderOperations(ctx) {
           result.items.map((r) => [
             `…${esc(short(r.booking_id))}<div class="muted">${esc(r.film_title || "")}</div>`,
             money(r.amount_minor),
-            r.reason === "CINEMA_CANCELLATION"
+            r.reason === "CUSTOMER_CANCELLATION" ? "Customer ticket refund" : r.reason === "CINEMA_CANCELLATION"
               ? "Cinema cancellation"
               : "Change difference",
             status(r.status),
