@@ -2,7 +2,7 @@
 from types import SimpleNamespace
 
 from cinema import catalog as backend
-from cinema.core import db, get, now, rows, Problem
+from cinema.core import db, get, in_ids, now, rows, Problem
 
 from .catalog import CatalogService, HALL_LABELS
 from .domain import BEIJING, Cinema, Film
@@ -115,10 +115,13 @@ class BackendCatalog(CatalogService):
                     return []  # Never drop an unresolvable hard constraint.
                 query["district_id"] = district[0]["id"]
             result = backend.search(c, query, end_exclusive=True)
+            if not result["items"]:
+                return []
+            seat_ids = in_ids(sid for show in result["items"] for sid in show["suggestion"]["seat_ids"])
+            seats = {s["id"]: s for s in rows(c, f"SELECT * FROM seats WHERE id IN ({seat_ids})")}
             cards = []
             for show in result["items"]:
                 suggestion = show["suggestion"]
-                seats = {s["id"]: s for s in rows(c, "SELECT * FROM seats WHERE layout_id=:l", l=show["layout_id"])}
                 unmet = []
                 if not suggestion["adjacent"]:
                     unmet.append("split_seats")
