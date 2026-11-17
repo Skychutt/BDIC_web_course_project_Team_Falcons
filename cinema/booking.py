@@ -7,6 +7,7 @@ from flask import current_app
 from itsdangerous import BadData, URLSafeTimedSerializer
 
 from .core import *
+from .catalog import sale_closed_reason
 
 
 def signer(salt):
@@ -39,18 +40,9 @@ def rounded(amount, bps):
 
 
 def salable(c, s):
-    require(
-        s["status"] == "PUBLISHED" and s["starts_at"] > now(),
-        "SALE_CLOSED",
-        "Screening is no longer on sale",
-        409,
-    )
-    require(
-        get(c, "cinemas", s["cinema_id"])["is_active"],
-        "SALE_CLOSED",
-        "Cinema is inactive",
-        409,
-    )
+    reason = sale_closed_reason(c, s["id"])
+    if reason:
+        raise Problem("SALE_CLOSED", reason, 409)
 
 
 def source_ok(c, h, source):

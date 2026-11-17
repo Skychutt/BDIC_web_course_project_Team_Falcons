@@ -64,7 +64,8 @@ def bootstrap():
         dates = rows(
             c,
             """SELECT DISTINCT DATE(s.starts_at) AS date FROM screenings s
-            JOIN cinemas c ON c.id=s.cinema_id WHERE s.status='PUBLISHED'
+            JOIN cinemas c ON c.id=s.cinema_id JOIN films f ON f.id=s.film_id
+            WHERE s.status='PUBLISHED' AND f.archived=0
             AND c.is_active=1 AND s.starts_at>:at AND s.starts_at<:end ORDER BY date""",
             at=at, end=end,
         )

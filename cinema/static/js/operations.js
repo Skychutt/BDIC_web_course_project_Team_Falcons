@@ -1,7 +1,7 @@
 import { esc, money, dateTime } from "./ui.js";
 
 const statuses = {
-  PUBLISHED: "On sale",
+  PUBLISHED: "Published",
   CANCELLED: "Cancelled",
   CONFIRMED: "Confirmed",
   RESCHEDULED: "Rescheduled",
@@ -898,7 +898,7 @@ export async function renderOperations(ctx) {
     const selected = (f.genres || []).map((g) => String(g.id));
     const d = dialog(
       id ? "Edit film" : "Add film",
-      `<form class="stack"><div class="form-grid">${input("Film title", "title", f.title, "text", 'required maxlength="200"')}${input("Runtime (minutes)", "duration_minutes", f.duration_minutes || 120, "number", 'required min="1" max="1000"')}</div>${textarea("Synopsis", "synopsis", f.synopsis || "", 'maxlength="6000"')}<fieldset><legend>Genres</legend><div class="actions">${genres.map((g) => `<label><input type="checkbox" name="genre_ids" value="${esc(g.id)}" ${selected.includes(String(g.id)) ? "checked" : ""}> ${esc(g.name)}</label>`).join("")}</div></fieldset><label><input type="checkbox" name="archived" ${f.archived ? "checked" : ""}> Archive (unavailable for new screenings)</label>${alertBox("Changing the runtime affects future screenings only. Published screenings and issued tickets retain their original details.")}${formEnd("Save film")}</form>`,
+      `<form class="stack"><div class="form-grid">${input("Film title", "title", f.title, "text", 'required maxlength="200"')}${input("Runtime (minutes)", "duration_minutes", f.duration_minutes || 120, "number", 'required min="1" max="1000"')}</div>${textarea("Synopsis", "synopsis", f.synopsis || "", 'maxlength="6000"')}<fieldset><legend>Genres</legend><div class="actions">${genres.map((g) => `<label><input type="checkbox" name="genre_ids" value="${esc(g.id)}" ${selected.includes(String(g.id)) ? "checked" : ""}> ${esc(g.name)}</label>`).join("")}</div></fieldset><label><input type="checkbox" name="archived" ${f.archived ? "checked" : ""}> Archive (stop ticket sales and new screenings)</label>${alertBox("Changing the runtime affects future screenings only. Published screenings and issued tickets retain their original details.")}${formEnd("Save film")}</form>`,
     );
     formAction(d.querySelector("form"), async (fd) => {
       await request(
