@@ -1,4 +1,5 @@
 import { filmArtwork } from './film-artwork.js';
+import { getLanguage, tx } from "./locale.js";
 
 export const esc = (value = "") =>
   String(value ?? "").replace(
@@ -19,7 +20,7 @@ export function dateTime(value, opts = {}) {
   if (!value) return "—";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
-  return new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat(getLanguage() === "zh" ? "zh-CN" : "en-GB", {
     timeZone: "Asia/Shanghai",
     month: "short",
     day: "numeric",
@@ -46,24 +47,26 @@ export function beijingDate(offset = 0) {
   }).format(date);
 }
 export const screenName = (value) =>
-  ({ STANDARD: "Standard", IMAX: "IMAX", DOLBY_CINEMA: "Dolby Cinema" })[
-    value
-  ] ?? value;
+  ({
+    STANDARD: tx("Standard", "标准厅"),
+    IMAX: "IMAX",
+    DOLBY_CINEMA: tx("Dolby Cinema", "杜比影院"),
+  })[value] ?? value;
 export const statusName = (value) =>
   ({
-    CONFIRMED: "Confirmed",
-    RESCHEDULED: "Rescheduled",
-    CINEMA_CANCELLED: "Cinema cancelled",
-    PENDING: "Pending",
-    FAILED: "Needs retry",
-    SUCCEEDED: "Completed",
-    AVAILABLE: "Available",
-    USED: "Used",
-    ACTIVE: "Active",
-    EXPIRED: "Expired",
-    CONVERTED: "Purchased",
-    CANCELLED: "Cancelled",
-    PUBLISHED: "On sale",
+    CONFIRMED: tx("Confirmed", "已出票"),
+    RESCHEDULED: tx("Rescheduled", "已改签"),
+    CINEMA_CANCELLED: tx("Cinema cancelled", "影院取消"),
+    PENDING: tx("Pending", "处理中"),
+    FAILED: tx("Needs retry", "待重试"),
+    SUCCEEDED: tx("Completed", "已完成"),
+    AVAILABLE: tx("Available", "可使用"),
+    USED: tx("Used", "已使用"),
+    ACTIVE: tx("Active", "待支付"),
+    EXPIRED: tx("Expired", "已过期"),
+    CONVERTED: tx("Purchased", "已购票"),
+    CANCELLED: tx("Cancelled", "已取消"),
+    PUBLISHED: tx("On sale", "在售"),
   })[value] ?? value;
 export const empty = (title, description = "") =>
   `<div class="empty"><span class="empty-mark" aria-hidden="true">—</span><h3>${esc(title)}</h3><p>${esc(description)}</p></div>`;
@@ -95,7 +98,7 @@ export function toast(message, kind = "success") {
   region.replaceChildren(item);
   setTimeout(() => item.remove(), 6000);
 }
-export async function busy(button, fn, label = "Working…") {
+export async function busy(button, fn, label = tx("Working…", "处理中…")) {
   if (button.disabled) return;
   const before = button.innerHTML;
   button.disabled = true;
