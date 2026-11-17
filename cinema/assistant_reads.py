@@ -9,7 +9,7 @@ def orders(actor, status=None):
     role(actor, "CUSTOMER")
     where, params = "b.owner_id=:owner", {"owner": actor["id"]}
     if status:
-        require(status in ("CONFIRMED", "RESCHEDULED", "CINEMA_CANCELLED"), "VALIDATION", "Invalid status")
+        require(status in ("CONFIRMED", "RESCHEDULED", "CINEMA_CANCELLED", "CUSTOMER_CANCELLED"), "VALIDATION", "Invalid status")
         where += " AND b.status=:status"
         params["status"] = status
     with db().connect() as c:
