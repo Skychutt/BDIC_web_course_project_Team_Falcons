@@ -129,6 +129,7 @@ def search(c, filters, *, end_exclusive=False):
         )
     except (TypeError, ValueError):
         raise Problem("VALIDATION", "date must be YYYY-MM-DD")
+    require(day < date.max, "VALIDATION", "Choose a screening date on or before 9999-12-30.")
     lo = datetime.combine(day, time.min)
     hi = lo + timedelta(days=1)
     clauses = [

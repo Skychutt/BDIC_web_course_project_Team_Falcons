@@ -24,6 +24,18 @@ def client(env, name=None):
     return result
 
 
+def test_screening_search_date_upper_bound(env):
+    public = client(env)
+    response = public.get("/api/screenings?date=9999-12-31")
+    assert response.status_code == 400
+    assert response.json["error"]["code"] == "VALIDATION"
+    assert "9999-12-30" in response.json["error"]["message"]
+
+    last_day = public.get("/api/screenings?date=9999-12-30")
+    assert last_day.status_code == 200
+    assert last_day.json["data"]["items"] == []
+
+
 def key():
     return "frontend-test-" + secrets.token_hex(10)
 
