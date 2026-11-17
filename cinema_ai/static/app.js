@@ -83,6 +83,11 @@ function setLanguage() {
     words[language].message_placeholder = examples[language].recommend;
   }
   document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en';
+  document.querySelectorAll('[data-lang]').forEach((button) => {
+    const selected = button.dataset.lang === language;
+    button.classList.toggle('is-active', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  });
   document.querySelectorAll('[data-i18n]').forEach((node) => { node.textContent = t(node.dataset.i18n); });
   const headline = document.querySelector('[data-i18n="headline"]');
   headline.replaceChildren(document.createTextNode(language === 'zh' ? '好电影，' : 'Great stories. '), element('em', '', language === 'zh' ? '好座位。' : 'Better seats.'));
@@ -367,6 +372,7 @@ $('reset').addEventListener('click', async () => {
   try { const result = await api('/api/ai/session', { method: 'DELETE' }); $('conversation').replaceChildren(); responseViews.clear(); renderConditions(result.filters); addMessage('assistant', t('reset_done')); }
   catch (error) { showError(error.message || t('network')); } finally { setBusy(false); }
 });
+document.querySelectorAll('[data-lang]').forEach((button) => button.addEventListener('click', () => followLanguage(button.dataset.lang)));
 $('close-preview').addEventListener('click', () => { previewGeneration++; $('preview-dialog').close(); });
 $('preview-dialog').addEventListener('close', () => { previewGeneration++; });
 setLanguage();
