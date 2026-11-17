@@ -46,7 +46,7 @@ class RulesQuery(InputModel):
 
 
 class OrderQuery(InputModel):
-    status: Literal["CONFIRMED", "RESCHEDULED", "CINEMA_CANCELLED"] | None = None
+    status: Literal["CONFIRMED", "RESCHEDULED", "CINEMA_CANCELLED", "CUSTOMER_CANCELLED"] | None = None
 
 
 class CouponQuery(InputModel):
