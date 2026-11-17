@@ -107,7 +107,7 @@ def create_app(config=None):
         if request.endpoint == "maps.embed":
             response.headers["X-Frame-Options"] = "SAMEORIGIN"
             response.headers["Content-Security-Policy"] = (
-                "default-src 'self'; script-src 'self' 'unsafe-eval' https://webapi.amap.com; "
+                "default-src 'self'; script-src 'self' 'unsafe-eval' https://webapi.amap.com https://jsapi-service.amap.com; "
                 "style-src 'self' 'unsafe-inline'; "
                 "img-src 'self' data: blob: https://*.amap.com https://*.autonavi.com; "
                 "font-src 'self' data:; connect-src 'self' https://*.amap.com https://*.autonavi.com; "
