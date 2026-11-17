@@ -116,7 +116,7 @@ class CatalogService:
                 "currency": "CNY", "price_basis": "per_ticket_before_coupons", "reserved": False,
                 "checked_at": now.isoformat(), "version": screening.version}
 
-    def recommend(self, filters: Filters, locale="zh", limit=3):
+    def recommend(self, filters: Filters, locale="zh", limit=3, *, exclude_screening_id=None):
         now = self.clock()
         if filters.city != "beijing" or not filters.party_size:
             return []
@@ -128,7 +128,7 @@ class CatalogService:
         cinemas = {c.id: c for c in self.repository.cinemas()}
         results = []
         for show in self.repository.screenings():
-            if (show.status != "published" or show.starts_at <= now or show.film_id not in film_ids
+            if (show.id == exclude_screening_id or show.status != "published" or show.starts_at <= now or show.film_id not in film_ids
                     or show.starts_at.date().isoformat() != filters.date):
                 continue
             if filters.district and cinemas[show.cinema_id].district != filters.district:

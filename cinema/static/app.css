@@ -717,6 +717,10 @@ main {
   color: var(--muted);
   text-align: right;
 }
+.session-total {
+  grid-column: 1 / -1;
+  font-size: 12px;
+}
 .session-availability {
   font-size: 9px;
   color: var(--success);

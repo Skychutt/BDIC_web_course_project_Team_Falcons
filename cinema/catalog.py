@@ -108,6 +108,7 @@ def search(c, filters, *, end_exclusive=False):
         "zone",
         "page",
         "page_size",
+        "exclude_screening_id",
         "screening_id", "genre", "keyword", "min_rating", "rated_only", "sort_by_rating",
         "budget_minor", "budget_scope", "fare_type", "require_contiguous",
     }
@@ -172,6 +173,9 @@ def search(c, filters, *, end_exclusive=False):
         if filters.get(field):
             clauses.append(f"{column}=:{field}")
             params[field] = integer(filters[field], field)
+    if "exclude_screening_id" in filters:
+        clauses.append("s.id <> :exclude_screening_id")
+        params["exclude_screening_id"] = integer(filters["exclude_screening_id"], "exclude_screening_id")
     if filters.get("genre_id"):
         clauses.append(
             "EXISTS(SELECT 1 FROM film_genres fg WHERE fg.film_id=s.film_id AND fg.genre_id=:g)"

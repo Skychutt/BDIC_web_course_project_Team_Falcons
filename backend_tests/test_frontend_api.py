@@ -54,6 +54,25 @@ def purchase(env, index=0, name="customer"):
     return booking.checkout(actor(env, name), {"quote_token": quote["quote_token"]}, key())
 
 
+def test_reschedule_search_excludes_original_before_count_and_pagination(env):
+    public = client(env)
+    early, late = map(str, env["ids"]["screenings"][:2])
+    filters = dict(date="2026-10-23", film_id=env["ids"]["film_id"], cinema_id=env["ids"]["cinemas"][0])
+
+    def search(**extra):
+        response = public.get("/api/screenings", query_string={**filters, **extra})
+        assert response.status_code == 200
+        data = response.json["data"]
+        return data["total"], [s["id"] for s in data["items"]]
+
+    assert search(page_size=1) == (2, [early])
+    assert search(page_size=1, page=2) == (2, [late])
+    assert search(exclude_screening_id=early, page_size=1) == (1, [late])
+    assert search(exclude_screening_id=early, page_size=1, page=2) == (1, [])
+    assert search(exclude_screening_id=early, start_to="14:00") == (0, [])
+    assert search(exclude_screening_id=early, start_from="15:00") == (1, [late])
+
+
 def test_search_batches_inventory_but_keeps_seats_and_fares_per_screening(env):
     early, late = env["ids"]["screenings"][:2]
     seats = env["ids"]["seats"][str(env["ids"]["layouts"][0])]

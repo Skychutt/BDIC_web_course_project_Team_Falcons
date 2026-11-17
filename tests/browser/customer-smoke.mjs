@@ -81,10 +81,13 @@ try {
       await page.locator("input[name=date]").fill(first.starts_at.slice(0, 10));
       await page.locator("select[name=cinema_id]").selectOption(cinemaId);
       await page.locator("select[name=party_size]").selectOption("2");
+      await page.locator(".search-advanced summary").click();
+      await page.locator("select[name=fare_type]").selectOption("student");
+      await page.locator("input[name=budget_yuan]").fill("1000");
+      await page.locator("select[name=require_contiguous]").selectOption("true");
       await page.getByRole("button", { name: "Find showtimes" }).click();
-      await page
-        .locator(`.session-button[href^="#/seats/${first.id}?"]`)
-        .waitFor();
+      const card = page.locator(`.session-button[href^="#/seats/${first.id}?"]`);
+      assert.match(await card.innerText(), /2 student tickets · .* total before coupons/);
       await noOverflow();
       await shot("discovery-desktop");
     },
@@ -123,7 +126,8 @@ try {
         (h) => h.id === holdId,
       );
       assert.equal(after.expires_at, before.expires_at);
-      await page.locator("[data-fare]").nth(1).selectOption("STUDENT");
+      assert.deepEqual(await page.locator("[data-fare]").evaluateAll(xs => xs.map(x => x.value)), ["STUDENT", "STUDENT"]);
+      await page.locator("[data-fare]").first().selectOption("STANDARD");
       await page.locator("#quote-form button[type=submit]").click();
       await page.locator("#pay-now").waitFor();
       await shot("checkout-desktop");

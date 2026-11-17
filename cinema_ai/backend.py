@@ -89,7 +89,7 @@ class BackendCatalog(CatalogService):
     def _fares(fares):
         return {"regular" if f["fare_type"] == "STANDARD" else "student": f["price_minor"] for f in fares}
 
-    def recommend(self, filters, locale="zh", limit=3):
+    def recommend(self, filters, locale="zh", limit=3, *, exclude_screening_id=None):
         if filters.city != "beijing" or not filters.party_size:
             return []
         films = self.find_films(filters.film_query)
@@ -101,6 +101,7 @@ class BackendCatalog(CatalogService):
         for field, value in (("start_from", filters.time_start), ("start_to", filters.time_end),
                              ("screen_type", HALLS.get(filters.hall_type)), ("zone", ZONES.get(filters.zone)),
                              ("film_id", filters.film_id), ("cinema_id", filters.cinema_id),
+                             ("exclude_screening_id", exclude_screening_id),
                              ("screening_id", filters.screening_id), ("genre", filters.genre), ("keyword", filters.keyword),
                              ("min_rating", filters.min_rating), ("budget_minor", filters.budget_minor),
                              ("budget_scope", filters.budget_scope)):
