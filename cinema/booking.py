@@ -280,6 +280,24 @@ def release_hold(actor, hid):
     return transaction(work)
 
 
+def payment_result(actor, hid):
+    def read(c):
+        # Wait for a checkout already holding this row before interpreting the deadline.
+        h = get(c, "seat_holds", hid, lock=True)
+        owner(actor, h)
+        status = h["status"]
+        if status == "CONVERTED":
+            op = one(c, """SELECT result_json FROM operations WHERE result_hold_id=:h
+                          AND operation_type IN ('PURCHASE','RESCHEDULE')""", h=hid)
+            require(op is not None, "RECEIPT_UNAVAILABLE", "Payment receipt is unavailable", 503)
+            return dict(status="CONFIRMED", receipt=json.loads(op["result_json"]))
+        if status == "ACTIVE" and h["expires_at"] <= now():
+            status = "EXPIRED"
+        return dict(status=status)
+
+    return transaction(read)
+
+
 def price(c, h, choices, coupon_id):
     s = get(c, "screenings", h["screening_id"])
     held = rows(c, "SELECT seat_id FROM seat_allocations WHERE hold_id=:h", h=h["id"])
@@ -563,7 +581,7 @@ def checkout(actor, body, key):
             else None
         )
         # A wallet lock may have waited: recheck time-dependent conditions at settlement.
-        active_hold(c, hid)
+        salable(c, get(c, "screenings", h["screening_id"]))
         if source:
             require(
                 source_ok(c, h, source) == q["fee_rate_bps"],
@@ -572,6 +590,7 @@ def checkout(actor, body, key):
                 409,
             )
         at = now()
+        require(at < h["expires_at"], "HOLD_EXPIRED", "Hold expired before settlement", 409)
         ins(
             c,
             "bookings",
@@ -604,13 +623,14 @@ def checkout(actor, body, key):
                 layout_id=h["layout_id"],
                 **t,
             )
-            execute(
+            sold = execute(
                 c,
                 "UPDATE seat_allocations SET state='SOLD', hold_id=NULL, ticket_id=:t WHERE hold_id=:h AND seat_id=:s",
                 t=tid,
                 h=hid,
                 s=t["seat_id"],
             )
+            require(sold.rowcount == 1, "SEAT_UNAVAILABLE", "The held seat is unavailable", 409)
         upd(c, "seat_holds", hid, status="CONVERTED")
         if source:
             upd(c, "bookings", source["id"], status="RESCHEDULED")

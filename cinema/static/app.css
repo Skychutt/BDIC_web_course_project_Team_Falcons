@@ -23,7 +23,7 @@ body {
   margin: 0;
   background: var(--paper);
   color: var(--ink);
-  font-family: var(--font);
+  font-family: var(--font), sans-serif;
   font-size: 15px;
   line-height: 1.55;
 }
@@ -104,7 +104,7 @@ h3 {
   line-height: 1.15;
 }
 h1 {
-  font-family: var(--serif);
+  font-family: var(--serif), serif;
   font-weight: 500;
   font-size: clamp(32px, 4vw, 52px);
   letter-spacing: -1.4px;
@@ -485,7 +485,7 @@ main {
   min-width: 0;
 }
 .film-group-copy h2 {
-  font-family: var(--serif);
+  font-family: var(--serif), serif;
   font-weight: 500;
   font-size: 28px;
   line-height: 1.2;
@@ -603,7 +603,7 @@ main {
   top: 23px;
 }
 .poster-type {
-  font-family: var(--serif);
+  font-family: var(--serif), serif;
   font-size: 27px;
   line-height: 0.99;
   font-weight: 500;
@@ -733,7 +733,7 @@ main {
   margin-bottom: 18px;
 }
 .aside-card h3 {
-  font-family: var(--serif);
+  font-family: var(--serif), serif;
   font-size: 29px;
   font-weight: 500;
   line-height: 1.12;
@@ -965,7 +965,7 @@ table td {
 }
 .empty-mark {
   display: block;
-  font-family: var(--serif);
+  font-family: var(--serif), serif;
   font-size: 45px;
   line-height: 1;
   color: #9eaa92;
@@ -1053,7 +1053,7 @@ table td {
   min-height: 530px;
 }
 .auth-story h2 {
-  font-family: var(--serif);
+  font-family: var(--serif), serif;
   font-size: 48px;
   font-weight: 500;
   line-height: 1.06;
@@ -1074,7 +1074,7 @@ table td {
   padding: 43px 40px;
 }
 .auth-form h1 {
-  font-family: var(--font);
+  font-family: var(--font), sans-serif;
   font-size: 28px;
   letter-spacing: -0.7px;
   font-weight: 600;
@@ -1112,7 +1112,7 @@ table td {
   color: #c9d4c3;
   display: flex;
   align-items: flex-end;
-  font-family: var(--serif);
+  font-family: var(--serif), serif;
   font-size: 33px;
   position: relative;
 }
@@ -1321,7 +1321,10 @@ table td {
 }
 .auditorium {
   display: grid;
-  grid-template-areas: "top top top" "left seats right" "bottom bottom bottom";
+  grid-template-areas:
+    "screen-top screen-top screen-top"
+    "screen-left seats screen-right"
+    "screen-bottom screen-bottom screen-bottom";
   grid-template-columns: auto auto auto;
   width: max-content;
   min-width: 100%;
@@ -1339,32 +1342,36 @@ table td {
   min-width: 150px;
 }
 .screen-line.top {
-  grid-area: top;
+  grid-area: screen-top;
   border-top: 3px solid #9cae93;
   border-radius: 50% 50% 0 0;
   margin-bottom: 10px;
 }
 .screen-line.bottom {
-  grid-area: bottom;
+  grid-area: screen-bottom;
   border-bottom: 3px solid #9cae93;
   border-radius: 0 0 50% 50%;
   margin-top: 10px;
 }
 .screen-line.left {
-  grid-area: left;
+  grid-area: screen-left;
   border-left: 3px solid #9cae93;
   writing-mode: vertical-rl;
   min-width: 22px;
 }
 .screen-line.right {
-  grid-area: right;
+  grid-area: screen-right;
   border-right: 3px solid #9cae93;
   writing-mode: vertical-rl;
   min-width: 22px;
 }
 .seat-grid {
+  --seat-columns: 20px 20px;
+  --seat-rows: none;
   grid-area: seats;
   display: grid;
+  grid-template-columns: var(--seat-columns);
+  grid-template-rows: var(--seat-rows);
   gap: 8px;
   position: relative;
 }
@@ -1559,7 +1566,7 @@ table td {
   background: #f5f7ef;
 }
 .success-ticket h2 {
-  font-family: var(--serif);
+  font-family: var(--serif), serif;
   font-size: 27px;
   font-weight: 500;
 }
@@ -1599,7 +1606,7 @@ table td {
   margin-bottom: 14px;
 }
 .recommendation h3 {
-  font-family: var(--serif);
+  font-family: var(--serif), serif;
   font-size: 25px;
   font-weight: 500;
 }

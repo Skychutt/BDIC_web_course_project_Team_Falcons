@@ -133,22 +133,32 @@ try {
   const entriesBefore = await api("/me/wallet-entries?page_size=100");
   let receipt;
   await check(
-    "Lost successful payment response recovers after reload with one debit",
+    "Result checks are read-only and a lost receipt recovers after reload with one debit",
     async () => {
       let locked = false;
+      const paymentKeys = [];
       await page.route("**/api/bookings", async (route) => {
         if (route.request().method() !== "POST") return route.continue();
+        paymentKeys.push(route.request().headers()["idempotency-key"]);
+        if (paymentKeys.length === 1) {
+          locked =
+            (await page.locator("[data-fare]").first().isDisabled()) &&
+            (await page.locator("#coupon").isDisabled()) &&
+            (await page.locator("#change-seats").isDisabled());
+          return route.abort("failed");
+        }
         const response = await route.fetch();
         const j = await response.json();
         assert.equal(response.status(), 201);
         receipt = j.data;
-        locked =
-          (await page.locator("[data-fare]").first().isDisabled()) &&
-          (await page.locator("#coupon").isDisabled()) &&
-          (await page.locator("#change-seats").isDisabled());
         await route.abort("failed");
       });
       await page.locator("#pay-now").click();
+      await page.getByRole("button", { name: "Check payment result" }).click();
+      await page.getByRole("button", { name: "Retry the same payment" }).waitFor();
+      assert.equal(paymentKeys.length, 1);
+      assert.equal((await api("/me/wallet")).balance_minor, walletBefore.balance_minor);
+      await page.getByRole("button", { name: "Retry the same payment" }).click();
       await page
         .getByRole("button", { name: "Check payment result" })
         .waitFor();
@@ -156,16 +166,14 @@ try {
         locked,
         "All checkout-changing controls must lock during payment",
       );
-      await page.unroute("**/api/bookings");
       await page.reload();
-      await page
-        .getByRole("button", { name: "Check payment result" })
-        .waitFor();
-      assert.equal(await page.locator(".seat-tag").count(), 2);
-      await page.getByRole("button", { name: "Check payment result" }).click();
       await page
         .getByRole("heading", { name: "See you at the cinema." })
         .waitFor();
+      assert.equal(await page.locator(".seat-tag").count(), 2);
+      assert.ok(paymentKeys[0]);
+      assert.deepEqual(paymentKeys, [paymentKeys[0], paymentKeys[0]]);
+      await page.unroute("**/api/bookings");
       const walletAfter = await api("/me/wallet");
       assert.equal(
         walletBefore.balance_minor - walletAfter.balance_minor,

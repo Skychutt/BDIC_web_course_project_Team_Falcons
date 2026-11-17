@@ -37,6 +37,9 @@ export class CinemaAPI {
       sessionStorage.getItem(`falcons.action.${this.userId}.${name}`),
     );
   }
+  clearPending(name) {
+    sessionStorage.removeItem(`falcons.action.${this.userId}.${name}`);
+  }
   async init() {
     this.csrf = (await this.request("/auth/csrf")).csrf_token;
     return this;
@@ -89,7 +92,7 @@ export class CinemaAPI {
     this.csrf = null;
     await this.init();
   }
-  async action(name, path, body) {
+  async action(name, path, body, { signal } = {}) {
     // Store only a digest and random request key, never credentials or request bodies.
     const input = new TextEncoder().encode(JSON.stringify({ path, body }));
     const fingerprint = Array.from(
@@ -124,6 +127,7 @@ export class CinemaAPI {
         method: "POST",
         body,
         requestKey: record.key,
+        signal,
       });
       clear();
       return data;

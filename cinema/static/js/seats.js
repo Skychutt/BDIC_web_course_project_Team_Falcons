@@ -8,7 +8,6 @@ import {
   poster,
   icon,
   notice,
-  empty,
   busy,
   showError,
 } from "./ui.js";
@@ -20,6 +19,7 @@ function readDraft(key) {
     return null;
   }
 }
+const counterSalesUrl = "#/operations?tab=counter";
 const seatLabel = (s) => `Row ${s.row_no} · Seat ${s.seat_no}`;
 const fareLabel = (f) => (f === "STUDENT" ? "Student" : "Standard");
 async function allRows(api, path) {
@@ -49,6 +49,8 @@ export async function renderSeats(ctx, sid) {
   let offset = new Date(map.as_of).getTime() - Date.now();
   const draftKey = `falcons.checkout.${user?.id || "guest"}.${sid}`;
   let draft = readDraft(draftKey);
+  let checkDelay = 2000;
+  let nextResultCheck = Date.now() + checkDelay;
   const state = {
     phase: "choose",
     selected: new Set(),
@@ -63,6 +65,7 @@ export async function renderSeats(ctx, sid) {
     ),
     error: null,
     receipt: null,
+    allowPaymentRetry: false,
     counterBundle: null,
   };
   const customer = user?.role === "CUSTOMER";
@@ -211,7 +214,7 @@ export async function renderSeats(ctx, sid) {
     const geometry = seatGeometry(seats);
     const kind = map.screening.screen_type || "STANDARD";
     const direction = map.layout.screen_direction.toLowerCase();
-    return `<div class="auditorium-meta"><strong>${map.layout.row_count} rows · ${seats.length} seats</strong><span>${kind === "DOLBY_CINEMA" ? "Recliner seating · extra legroom" : kind === "IMAX" ? "Wide auditorium · tiered seating" : "Classic auditorium · divided seating blocks"}</span></div><div class="seat-scroll auditorium-${kind.toLowerCase()}" tabindex="0" aria-label="Seat map, scroll horizontally to see all seats"><div class="auditorium"><div class="screen-line ${direction}">SCREEN · ${esc(screenName(kind))}</div><div class="seat-grid" role="group" aria-label="Seats, rows numbered nearest to furthest from the screen" style="grid-template-columns:20px ${geometry.columnTracks} 20px;grid-template-rows:${geometry.rowTracks}">${geometry.labels.map(({y, label}) => `<span class="row-label" aria-hidden="true" style="grid-column:1;grid-row:${y + 1}">${label}</span><span class="row-label" aria-hidden="true" style="grid-column:${geometry.columns + 2};grid-row:${y + 1}">${label}</span>`).join("")}${seats
+    return `<div class="auditorium-meta"><strong>${map.layout.row_count} rows · ${seats.length} seats</strong><span>${kind === "DOLBY_CINEMA" ? "Recliner seating · extra legroom" : kind === "IMAX" ? "Wide auditorium · tiered seating" : "Classic auditorium · divided seating blocks"}</span></div><div class="seat-scroll auditorium-${kind.toLowerCase()}" tabindex="0" aria-label="Seat map, scroll horizontally to see all seats"><div class="auditorium"><div class="screen-line ${direction}">SCREEN · ${esc(screenName(kind))}</div><div class="seat-grid" role="group" aria-label="Seats, rows numbered nearest to furthest from the screen" style="--seat-columns:20px ${geometry.columnTracks} 20px;--seat-rows:${geometry.rowTracks || "none"}">${geometry.labels.map(({y, label}) => `<span class="row-label" aria-hidden="true" style="grid-column:1;grid-row:${y + 1}">${label}</span><span class="row-label" aria-hidden="true" style="grid-column:${geometry.columns + 2};grid-row:${y + 1}">${label}</span>`).join("")}${seats
       .map((seat) => {
         const selected = state.selected.has(seat.id);
         const selectable =
@@ -254,7 +257,7 @@ export async function renderSeats(ctx, sid) {
       renderSuccess();
       return;
     }
-    const isHeld = ["held", "quoted", "recover"].includes(state.phase);
+    const isHeld = ["held", "quoted"].includes(state.phase);
     const source = state.source;
     const previousMap = root.querySelector(".seat-scroll");
     const mapScroll = previousMap ? { left: previousMap.scrollLeft, top: previousMap.scrollTop } : null;
@@ -351,9 +354,12 @@ export async function renderSeats(ctx, sid) {
         busy(
           e.currentTarget,
           () => lockWhile(pay),
-          state.phase === "recover" ? "Checking result…" : "Confirming…",
+          "Confirming…",
         ),
       );
+    root.querySelector("#check-result")?.addEventListener("click", () =>
+      lockWhile(checkPaymentResult),
+    );
     root
       .querySelector("#change-seats")
       ?.addEventListener("click", (e) =>
@@ -430,7 +436,7 @@ export async function renderSeats(ctx, sid) {
   }
   function controls() {
     if (state.phase === "recover")
-      return `${notice("The previous payment response was not confirmed. Check its result before making any further changes. Retrying this action cannot charge you twice.", "warning")}${paymentSummary()}<button class="button wide" id="pay-now">Check payment result ${icon("arrow")}</button><a class="button ghost wide" style="margin-top:10px" href="#/account">View my tickets</a>`;
+      return `${notice(state.allowPaymentRetry ? "No receipt yet. We’ll keep checking. You can also retry the same payment while the hold is active." : "Checking your payment. You can find confirmed tickets in your account.", "warning")}${paymentSummary()}<button class="button wide" id="check-result">Check payment result</button>${state.allowPaymentRetry && remaining() > 0 ? '<button class="button ghost wide" id="pay-now">Retry the same payment</button>' : ""}<a class="button ghost wide" href="#/account">View my tickets</a>`;
     if (state.phase === "converted")
       return `${notice("This hold has already been purchased. Your issued tickets are in your account.")}<a class="button wide" href="#/account">View my tickets ${icon("arrow")}</a>`;
     if (state.phase === "expired")
@@ -444,7 +450,7 @@ export async function renderSeats(ctx, sid) {
             0),
         0,
       );
-      return `<div class="summary-line"><span>Selected</span><strong>${selected} / ${state.target} seats</strong></div><div class="summary-line summary-total"><span>Face price estimate</span><strong>${money(ticketTotal)}</strong></div><p class="fine-print">Choose ticket types and an eligible coupon at the next step. Any change fee is quoted before confirmation.</p>${!user ? `<a class="button wide" href="#/login?next=${encodeURIComponent("#/seats/" + sid + "?" + new URLSearchParams({ party_size: String(state.target), seat_ids: [...state.selected].join(","), ...(state.source ? { source_booking_id: state.source.id } : {}), ...(params.get("from") === "assistant" ? { from: "assistant" } : {}) }))}">Sign in to hold seats ${icon("arrow")}</a>` : !customer ? `<p class="notice">Customer accounts book here. For assisted sales, open the cinema workspace.</p><a class="button wide" href="#/operations?tab=counter">Open counter sales</a>` : `<button class="button wide" id="create-hold" ${selected !== state.target || s.status !== "PUBLISHED" || new Date(s.starts_at).getTime() <= Date.now() + offset ? "disabled" : ""}>Hold ${selected || "your"} ${selected === 1 ? "seat" : "seats"} ${icon("arrow")}</button>`}<p class="fine-print">A hold lasts up to 5 minutes. Browsing and selecting do not reserve a seat.</p>`;
+      return `<div class="summary-line"><span>Selected</span><strong>${selected} / ${state.target} seats</strong></div><div class="summary-line summary-total"><span>Face price estimate</span><strong>${money(ticketTotal)}</strong></div><p class="fine-print">Choose ticket types and an eligible coupon at the next step. Any change fee is quoted before confirmation.</p>${!user ? `<a class="button wide" href="#/login?next=${encodeURIComponent("#/seats/" + sid + "?" + new URLSearchParams({ party_size: String(state.target), seat_ids: [...state.selected].join(","), ...(state.source ? { source_booking_id: state.source.id } : {}), ...(params.get("from") === "assistant" ? { from: "assistant" } : {}) }))}">Sign in to hold seats ${icon("arrow")}</a>` : !customer ? `<p class="notice">Customer accounts book here. For assisted sales, open the cinema workspace.</p><a class="button wide" href="${counterSalesUrl}">Open counter sales</a>` : `<button class="button wide" id="create-hold" ${selected !== state.target || s.status !== "PUBLISHED" || new Date(s.starts_at).getTime() <= Date.now() + offset ? "disabled" : ""}>Hold ${selected || "your"} ${selected === 1 ? "seat" : "seats"} ${icon("arrow")}</button>`}<p class="fine-print">A hold lasts up to 5 minutes. Browsing and selecting do not reserve a seat.</p>`;
     }
     return `<form id="quote-form"><div class="fare-choices">${tickets()
       .map((t) => {
@@ -468,6 +474,12 @@ export async function renderSeats(ctx, sid) {
       state.phase = payPending() ? "recover" : "expired";
       render();
     }
+    if (state.phase === "recover" && state.allowPaymentRetry && ms <= 0) {
+      state.allowPaymentRetry = false;
+      render();
+    }
+    if (!state.working && state.phase === "recover" && Date.now() >= nextResultCheck)
+      void lockWhile(checkPaymentResult);
   }
   async function createHold() {
     try {
@@ -544,6 +556,30 @@ export async function renderSeats(ctx, sid) {
       render();
     }
   }
+  async function checkPaymentResult() {
+    try {
+      const result = await api.request(`/holds/${state.hold.id}/payment-result`, {
+        signal: AbortSignal.timeout(12000),
+      });
+      if (!alive) return;
+      state.error = null;
+      if (result.status === "ACTIVE") {
+        state.allowPaymentRetry = true;
+      } else if (["CONFIRMED", "EXPIRED", "CANCELLED"].includes(result.status)) {
+        api.clearPending("pay:" + state.hold.id);
+        sessionStorage.removeItem(draftKey);
+        state.receipt = result.receipt;
+        state.phase = result.status === "CONFIRMED" ? "complete" : "expired";
+      }
+    } catch (e) {
+      state.error = e.userMessage || e.message;
+      state.allowPaymentRetry = false;
+    } finally {
+      nextResultCheck = Date.now() + checkDelay;
+      checkDelay = Math.min(15000, checkDelay * 2);
+      render();
+    }
+  }
   async function pay() {
     if (!state.quote) return;
     save();
@@ -551,7 +587,7 @@ export async function renderSeats(ctx, sid) {
       state.error = null;
       state.receipt = await api.action("pay:" + state.hold.id, "/bookings", {
         quote_token: state.quote.quote_token,
-      });
+      }, { signal: AbortSignal.timeout(12000) });
       state.phase = "complete";
       sessionStorage.removeItem(draftKey);
       render();
@@ -562,14 +598,18 @@ export async function renderSeats(ctx, sid) {
       );
     } catch (e) {
       state.error = e.userMessage || e.message;
-      if (api.pending("pay:" + state.hold.id)) state.phase = "recover";
-      else if (["HOLD_EXPIRED", "TOKEN_EXPIRED"].includes(e.code))
+      if (api.pending("pay:" + state.hold.id)) {
+        state.phase = "recover";
+        state.allowPaymentRetry = false;
+        checkDelay = 2000;
+        nextResultCheck = Date.now() + checkDelay;
+      } else if (["HOLD_EXPIRED", "TOKEN_EXPIRED"].includes(e.code))
         state.phase = "expired";
       else if (e.code === "QUOTE_CHANGED") {
         state.phase = "held";
         state.quote = null;
         save();
-      }
+      } else state.phase = "quoted";
       render();
     }
   }

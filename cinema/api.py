@@ -198,6 +198,14 @@ def quote(hid):
     return output(booking.quote(g.actor, hid, body()))
 
 
+@api.get("/holds/<int:hid>/payment-result")
+@logged
+def payment_result(hid):
+    response, status = output(booking.payment_result(g.actor, hid))
+    response.cache_control.no_store = True
+    return response, status
+
+
 @api.post("/holds/<int:hid>/counter-consent")
 @logged
 def consent(hid):

@@ -253,7 +253,11 @@ def search(c, filters, *, end_exclusive=False):
 
 
 def seatmap(c, sid, actor=None):
-    s = get(c, "screenings", sid)
+    # A checkout can pass its deadline check just before expiry and still be committing.
+    # All allocation writers lock the screening. Wait to read their outcome at the boundary.
+    s = one(c, "SELECT * FROM screenings WHERE id=:id FOR SHARE", id=sid)
+    require(s is not None, "NOT_FOUND", "screenings record not found", 404)
+    as_of = now()
     screen = get(c, "screens", s["screen_id"])
     s["screen_name"] = screen["name"]
     s["screen_type"] = screen["screen_type"]
@@ -271,7 +275,7 @@ def seatmap(c, sid, actor=None):
         status = seat.pop("hold_status")
         expires = seat.pop("expires_at")
         seat.pop("hold_owner_id")
-        if seat["state"] == "HELD" and (status != "ACTIVE" or expires <= now()):
+        if seat["state"] == "HELD" and (status != "ACTIVE" or expires <= as_of):
             seat["state"] = None
         seat["state"] = seat["state"] or "AVAILABLE"
         seat["held_by_me"] = owned and seat["state"] == "HELD"
@@ -285,7 +289,7 @@ def seatmap(c, sid, actor=None):
             "SELECT fare_type,price_minor FROM fares WHERE screening_id=:s ORDER BY fare_type",
             s=sid,
         ),
-        as_of=now(),
+        as_of=as_of,
     )
 
 

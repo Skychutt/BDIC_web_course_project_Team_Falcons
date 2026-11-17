@@ -487,9 +487,7 @@ export async function renderOperations(ctx) {
     return { row_count: rowCount, screen_direction: direction, seats, width };
   }
   function layoutMap(layout) {
-    const maxX = Math.max(...layout.seats.map((s) => s.map_x)) + 1;
-    const maxY = Math.max(...layout.seats.map((s) => s.map_y)) + 1;
-    return `<div class="notice">Screen position: ${{ TOP: "Top", BOTTOM: "Bottom", LEFT: "Left", RIGHT: "Right" }[layout.screen_direction]}. Row 1 is nearest the screen. ${layout.seats.length} seats.</div><div style="overflow:auto;padding:12px 0;max-height:340px"><div style="display:grid;grid-template-columns:repeat(${maxX},32px);grid-template-rows:repeat(${maxY},28px);gap:5px;width:max-content;margin:auto">${layout.seats.map((s) => `<span class="badge" title="Row ${s.row_no}, seat ${s.seat_no} · segment ${s.aisle_segment}" style="grid-column:${s.map_x + 1};grid-row:${s.map_y + 1};padding:3px;text-align:center;font-size:10px">${s.row_no}-${s.seat_no}</span>`).join("")}</div></div>`;
+    return `<div class="notice">Screen position: ${{ TOP: "Top", BOTTOM: "Bottom", LEFT: "Left", RIGHT: "Right" }[layout.screen_direction]}. Row 1 is nearest the screen. ${layout.seats.length} seats.</div><div style="overflow:auto;padding:12px 0;max-height:340px"><div style="display:grid;grid-auto-columns:32px;grid-auto-rows:28px;gap:5px;width:max-content;margin:auto">${layout.seats.map((s) => `<span class="badge" title="Row ${s.row_no}, seat ${s.seat_no} · segment ${s.aisle_segment}" style="grid-column:${s.map_x + 1};grid-row:${s.map_y + 1};padding:3px;text-align:center;font-size:10px">${s.row_no}-${s.seat_no}</span>`).join("")}</div></div>`;
   }
   async function layoutDialog(screenId) {
     const recommended = await request(`/staff/screens/${screenId}/layout-template`);

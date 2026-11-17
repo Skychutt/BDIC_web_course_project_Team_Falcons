@@ -1,10 +1,14 @@
 """Real-MySQL checks for browser read models and the signed counter preview."""
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 import secrets
+from threading import Event
+
+import pytest
 
 from cinema import booking, management
-from cinema.core import db, get, ins, one, now, upd
+from cinema.core import Problem, db, get, ins, one, now, upd
 
 
 def actor(env, name="customer"):
@@ -35,6 +39,106 @@ def prepare_quote(env, index=0, name="customer"):
 def purchase(env, index=0, name="customer"):
     _, quote = prepare_quote(env, index, name)
     return booking.checkout(actor(env, name), {"quote_token": quote["quote_token"]}, key())
+
+
+def test_checkout_committing_at_expiry_keeps_seat_and_recovers_receipt(env, monkeypatch):
+    hold, quote = prepare_quote(env)
+    hid, sid = hold["hold_id"], hold["screening_id"]
+    seat = hold["seat_ids"][0]
+    path = f"/api/holds/{hid}/payment-result"
+    buyer, rival = actor(env), actor(env, "customer2")
+    assert client(env, "customer2").get(path).status_code == 403
+    assert client(env, "customer").get(path).json["data"] == {"status": "ACTIVE"}
+
+    settling, allow_commit = Event(), Event()
+    settle = booking.settlement
+
+    def pause_before_commit(*args):
+        settle(*args)
+        settling.set()
+        assert allow_commit.wait(10)
+
+    monkeypatch.setattr(booking, "settlement", pause_before_commit)
+    env["clock"][0] = hold["expires_at"] - timedelta(seconds=2)
+    body, request_key = {"quote_token": quote["quote_token"]}, key()
+
+    def run(fn, *args):
+        with env["app"].app_context():
+            return fn(*args)
+
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        paying = pool.submit(run, booking.checkout, buyer, body, request_key)
+        try:
+            assert settling.wait(5)
+            env["clock"][0] = hold["expires_at"]
+            cleanup = pool.submit(run, booking.expire_holds)
+            retry = pool.submit(run, booking.create_hold, rival, {"screening_id": sid, "seat_ids": [seat]}, key())
+            result = pool.submit(client(env, "customer").get, path)
+            seatmap = pool.submit(client(env, "customer2").get, f"/api/screenings/{sid}/seats")
+            # While the checkout holds its locks these reads cannot report expiry or availability.
+            with pytest.raises(TimeoutError):
+                result.result(timeout=0.2)
+            with pytest.raises(TimeoutError):
+                seatmap.result(timeout=0.2)
+        finally:
+            allow_commit.set()
+        receipt = paying.result()
+        cleanup.result()
+        with pytest.raises(Problem, match="seats were taken"):
+            retry.result()
+        states = {st["id"]: st["state"] for st in seatmap.result().json["data"]["seats"]}
+        assert states[str(seat)] == "SOLD"
+        saved = result.result().json["data"]
+
+    assert saved["status"] == "CONFIRMED"
+    assert saved["receipt"]["booking_id"] == str(receipt["booking_id"])
+    assert booking.checkout(buyer, body, request_key) == saved["receipt"]
+    with db().connect() as c:
+        assert one(c, "SELECT COUNT(*) AS n FROM payments")["n"] == 1
+        assert one(c, "SELECT balance_minor FROM wallets WHERE customer_id=:u", u=buyer["id"])["balance_minor"] == 100000 - receipt["amount_due_minor"]
+
+
+def test_wallet_lock_wait_crossing_deadline_releases_to_next_customer(env, monkeypatch):
+    hold, quote = prepare_quote(env)
+    buyer, rival = actor(env), actor(env, "customer2")
+    path = f"/api/holds/{hold['hold_id']}/payment-result"
+    env["clock"][0] = hold["expires_at"] - timedelta(seconds=2)
+    waiting = Event()
+    read_one = booking.one
+
+    def observe_wallet_lock(c, sql, **params):
+        if "FROM wallets" in sql and "FOR UPDATE" in sql:
+            waiting.set()
+        return read_one(c, sql, **params)
+
+    monkeypatch.setattr(booking, "one", observe_wallet_lock)
+    body, request_key = {"quote_token": quote["quote_token"]}, key()
+
+    def pay():
+        with env["app"].app_context():
+            return booking.checkout(buyer, body, request_key)
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        with db().begin() as c:
+            one(c, "SELECT id FROM wallets WHERE customer_id=:u FOR UPDATE", u=buyer["id"])
+            payment = pool.submit(pay)
+            assert waiting.wait(5)
+            env["clock"][0] = hold["expires_at"]
+        with pytest.raises(Problem) as exc:
+            payment.result()
+        assert exc.value.code == "HOLD_EXPIRED"
+
+    assert client(env, "customer").get(path).json["data"] == {"status": "EXPIRED"}
+    new_hold = booking.create_hold(rival, {"screening_id": hold["screening_id"], "seat_ids": hold["seat_ids"]}, key())
+    with pytest.raises(Problem) as exc:
+        booking.checkout(buyer, body, request_key)
+    assert exc.value.code == "HOLD_EXPIRED"
+    booking.expire_holds()
+    with db().connect() as c:
+        assert get(c, "seat_holds", new_hold["hold_id"])["status"] == "ACTIVE"
+        assert one(c, "SELECT hold_id FROM seat_allocations WHERE seat_id=:s", s=hold["seat_ids"][0])["hold_id"] == new_hold["hold_id"]
+        assert one(c, "SELECT COUNT(*) AS n FROM payments")["n"] == 0
+        assert one(c, "SELECT balance_minor FROM wallets WHERE customer_id=:u", u=buyer["id"])["balance_minor"] == 100000
 
 
 def cancellation(env, index):
