@@ -211,6 +211,18 @@ try {
         .click();
       await page.locator("#create-hold").click();
       await page.locator("#quote-form").waitFor();
+      await page.goto(base + "/#/account?tab=holds");
+      await page.locator(`[data-resume][href^="#/seats/${target.id}?"]`).click();
+      await page.locator("#change-seats").click();
+      await page.locator("#party-size").waitFor();
+      await page.reload();
+      await page.locator("#party-size").waitFor();
+      assert.ok(await page.locator("#party-size").isDisabled());
+      assert.equal(await page.locator("#party-size").inputValue(), "2");
+      for (let i = 0; i < 2; i++)
+        await page.locator('[data-seat]:enabled[aria-pressed=false]').first().click();
+      await page.locator("#create-hold").click();
+      await page.locator("#quote-form").waitFor();
       assert.equal(await page.locator("[data-fare]:disabled").count(), 2);
       assert.deepEqual(
         (

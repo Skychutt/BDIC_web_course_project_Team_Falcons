@@ -548,6 +548,8 @@ export async function renderSeats(ctx, sid) {
       state.phase = "choose";
       state.error = null;
       params.delete("hold_id");
+      if (state.source) params.set("source_booking_id", state.source.id);
+      else params.delete("source_booking_id");
       history.replaceState(null, "", "#/seats/" + sid + "?" + params);
       map = await api.request("/screenings/" + sid + "/seats");
       render();
