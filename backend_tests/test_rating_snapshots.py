@@ -36,6 +36,54 @@ def test_snapshot_import_is_repeatable_and_keeps_customer_votes_separate(env):
     assert data["rating_snapshot"]["distribution"][0] == {"stars": 5, "percent": "10.6"}
     assert data["rating_snapshot"]["checked_on"] == "2026-11-14"
     assert "film_id" not in data["rating_snapshot"]
+    assert data["film"]["rating"] == {"average": "6.6", "count": 7457, "scale": 10}
+    assert data["imported_votes"] == 7456
+
+
+def test_source_and_customer_votes_form_one_score_across_all_features(env):
+    from cinema_ai.backend import BackendRepository
+
+    fid = env["ids"]["film_id"]
+    first, h1 = client_for(env)
+    second, h2 = client_for(env, "customer2")
+    path = f"/api/community/films/{fid}"
+    with db().begin() as c:
+        title = one(c, "SELECT title FROM films WHERE id=:f", f=fid)["title"]
+        # The old baseline must not be added again when a newer snapshot exists.
+        execute(c, "INSERT INTO film_rating_baselines VALUES(:f,7.3,99)", f=fid)
+        item = dict(snapshot(title), score=8, vote_count=10,
+                    star_5=50, star_4=25, star_3=10, star_2=5, star_1=10)
+        import_snapshots(c, [item])
+
+    def check(average, count):
+        expected = dict(average=average, count=count, scale=10)
+        detail = first.get(path).json["data"]
+        assert detail["film"]["rating"] == expected
+        assert first.get(f"/api/films/{fid}").json["data"]["rating"] == expected
+        for films in (first.get("/api/ui/bootstrap").json["data"]["films"],
+                      first.get("/api/community/films").json["data"]):
+            assert next(f for f in films if f["id"] == str(fid))["rating"] == expected
+        shows = first.get("/api/screenings", query_string={"date": "2026-10-23", "film_id": fid}).json["data"]["items"]
+        assert shows and all(s["rating"] == expected for s in shows)
+        film = next(f for f in BackendRepository().films() if f.id == fid)
+        assert film.rating == float(average) and film.rating_count == count
+        return detail
+
+    check("8.0", 10)
+    assert first.put(path + "/review", headers=h1, json={"stars": 10}).status_code == 200
+    assert check("8.2", 11)["own_rating"]["stars"] == 10
+    assert second.put(path + "/review", headers=h2, json={"stars": 2}).status_code == 200
+    check("7.7", 12)
+    # Editing from the existing film-detail form updates the same customer vote.
+    assert first.put(f"/api/films/{fid}/rating", headers=h1, json={"stars": 4}).status_code == 200
+    detail = check("7.2", 12)
+    assert sorted(detail["votes"], key=lambda row: row["stars"]) == [dict(stars=2, count=1), dict(stars=4, count=1)]
+    with db().begin() as c:
+        updated = dict(item, score=9, vote_count=20, star_5=75, star_4=10, star_3=5, star_2=10, star_1=0)
+        import_snapshots(c, [updated])
+        import_snapshots(c, [updated])
+        assert one(c, "SELECT COUNT(*) n FROM ratings WHERE film_id=:f", f=fid)["n"] == 2
+    assert check("8.5", 22)["imported_votes"] == 20
 
 
 def test_invalid_batch_cannot_partially_import_or_replace_newer_snapshots(env):

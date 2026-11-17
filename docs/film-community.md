@@ -18,7 +18,8 @@ Restart `main.py` after updating the code. This repeatable command only creates
 `film_reviews`, `film_threads`, and `film_replies` if absent. It does not recreate
 the database, import a programme, or change existing accounts, bookings or ratings.
 New installations include these tables through the existing `init-db` command.
-The second command adds `film_rating_snapshots` and imports the verified source
+The unified rating display needs no additional migration when these tables and
+snapshots are already installed. The second command adds `film_rating_snapshots` and imports the verified source
 records. Run it after the film programme import, so the exact catalogue titles
 exist. It is repeatable and preserves customer votes and imported baselines.
 
@@ -30,22 +31,34 @@ exist. It is repeatable and preserves customer votes and imported baselines.
 - Each customer has one rating and one optional short review per film. Saving
   updates both atomically. Clearing a short review removes its text; deleting the
   short review keeps the star rating.
-- Catalogue, ticketing and AI scores keep the existing weighted aggregate of
-  imported baselines and customer votes. In the community rating card, **Douban**
-  shows a verified source snapshot and **Falcons** shows live local votes. Each
-  selection uses the same source for its average, sample size and histogram.
-  Saving a rating switches the card to Falcons so the result is immediately visible.
+- The rating card has one audience score, count and five-star breakdown, with no
+  source selector. Catalogue, ticketing, the community and AI use the same aggregate.
+  When a verified Douban snapshot exists, its score and count replace the older
+  baseline in the calculation; the baseline is not added a second time. The total
+  count is the snapshot count plus actual customer votes. The score is
+  `(snapshot score × snapshot count + sum of customer scores) / total count`,
+  displayed to one decimal place. Films without snapshots retain their older
+  baseline, or use customer votes alone if no baseline exists.
+- Saving a rating refreshes the shared score and histogram and shows “Your rating
+  is included”. Editing the same customer's rating replaces that vote, keeping
+  the total count unchanged. With millions of imported votes, one new vote may
+  not visibly change the rounded average or percentages; it still counts fully.
 - All five programme films have source snapshots checked on 14 November 2026.
   `data/film-rating-snapshots-20261114.json` records their canonical subject URLs,
   source titles, verification dates, scores, counts and published percentages.
   Film identity was checked against the title, year and director on each source
   page. These are captured values, not a live Douban API connection.
-- Published one-decimal percentages are preserved as given, so their sum can be
-  99.9% or 100.1%. Exact bucket counts are unavailable and are never reconstructed
-  from the rounded percentages. No synthetic votes are inserted in `ratings`.
-  When no source snapshot exists, the card shows only actual Falcons votes.
-  A film with no local votes shows an empty state rather than an invented distribution.
-- Historical odd ten-point votes keep their exact value in the local average;
+- Each combined star percentage is
+  `(published percentage × snapshot count + local bucket votes × 100) / total count`.
+  This preserves the published percentages before any local votes and includes
+  new votes in their respective star buckets. Published percentages are rounded,
+  so this weighted breakdown remains approximate and can total 99.9% or 100.1%.
+  A small source link and snapshot date remain available below the unified card.
+  Exact imported bucket counts are not claimed or persisted, and no synthetic
+  votes are inserted in `ratings`. The original snapshot is never changed by a vote.
+  A legacy baseline without a histogram shows an unavailable breakdown; with no
+  baseline or snapshot, only actual local votes are used. No votes means an empty state.
+- Historical odd ten-point votes keep their exact value in the combined average;
   the histogram groups half-star votes with the next whole-star bucket.
 - Public readers see display names only. Email addresses, credentials, session
   data and idempotency keys are not returned in public conversations.

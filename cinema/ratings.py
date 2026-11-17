@@ -28,10 +28,11 @@ def attach_ratings(c, films):
     ids = in_ids(f["id"] for f in films)
     values = {item.pop("film_id"): item for item in rows(c, f"""
         SELECT f.id AS film_id,
-          ROUND((COALESCE(b.score*b.vote_count,0)+COALESCE(v.total,0)) /
-                NULLIF(COALESCE(b.vote_count,0)+COALESCE(v.votes,0),0),1) AS average,
-          COALESCE(b.vote_count,0)+COALESCE(v.votes,0) AS count
+          ROUND((COALESCE(s.score*s.vote_count,b.score*b.vote_count,0)+COALESCE(v.total,0)) /
+                NULLIF(COALESCE(s.vote_count,b.vote_count,0)+COALESCE(v.votes,0),0),1) AS average,
+          COALESCE(s.vote_count,b.vote_count,0)+COALESCE(v.votes,0) AS count
         FROM films f LEFT JOIN film_rating_baselines b ON b.film_id=f.id
+        LEFT JOIN film_rating_snapshots s ON s.film_id=f.id
         LEFT JOIN (SELECT film_id,SUM(stars) AS total,COUNT(*) AS votes
                    FROM ratings WHERE film_id IN ({ids}) GROUP BY film_id) v ON v.film_id=f.id
         WHERE f.id IN ({ids})""")}

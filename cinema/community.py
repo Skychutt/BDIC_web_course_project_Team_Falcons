@@ -66,10 +66,11 @@ def overview(fid):
         if g.actor:
             own_rating = one(c, "SELECT stars FROM ratings WHERE film_id=:f AND customer_id=:u", f=fid, u=g.actor["id"])
             own_review = one(c, "SELECT body,spoiler FROM film_reviews WHERE film_id=:f AND customer_id=:u", f=fid, u=g.actor["id"])
-        imported = one(c, "SELECT vote_count FROM film_rating_baselines WHERE film_id=:f", f=fid)
+        snapshot = get_snapshot(c, fid)
+        imported = snapshot or one(c, "SELECT vote_count FROM film_rating_baselines WHERE film_id=:f", f=fid)
         return output(dict(film=film, counts=counts, votes=votes, own_rating=own_rating,
                            own_review=own_review, imported_votes=imported["vote_count"] if imported else 0,
-                           rating_snapshot=get_snapshot(c, fid)))
+                           rating_snapshot=snapshot))
 
 
 @community.get("/films/<int:fid>/reviews")

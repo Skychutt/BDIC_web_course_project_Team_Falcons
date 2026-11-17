@@ -1,17 +1,25 @@
-// A source score, sample size and histogram always travel together.
-export function ratingSummary(data, source = "douban") {
+// Use the same aggregate as film listings, ticketing and AI recommendations.
+export function ratingSummary(data) {
   const snapshot = data.rating_snapshot;
-  if (source === "douban" && snapshot) {
-    return { source: "douban", average: Number(snapshot.score), count: snapshot.vote_count,
-      distribution: snapshot.distribution.map(row => ({ stars: row.stars, percent: Number(row.percent) })),
-      url: snapshot.source_url, checkedOn: snapshot.checked_on };
-  }
+  const rating = data.film.rating;
   const votes = data.votes || [];
-  const count = votes.reduce((sum, vote) => sum + vote.count, 0);
-  const average = count ? votes.reduce((sum, vote) => sum + vote.stars * vote.count, 0) / count : null;
-  return { source: "falcons", average, count, distribution: [5, 4, 3, 2, 1].map(stars => {
-    // Preserve historical half-star votes, grouping them with the next whole star.
-    const n = votes.filter(vote => Math.ceil(vote.stars / 2) === stars).reduce((sum, vote) => sum + vote.count, 0);
-    return { stars, count: n, percent: count ? n / count * 100 : null };
-  }) };
+  const count = Number(rating.count);
+  const importedCount = Number(snapshot?.vote_count ?? data.imported_votes ?? 0);
+  // An old baseline with no published histogram cannot supply a full breakdown.
+  const hasDistribution = Boolean(snapshot) || importedCount === 0;
+  return {
+    average: rating.average == null ? null : Number(rating.average), count,
+    hasDistribution, url: snapshot?.source_url, checkedOn: snapshot?.checked_on,
+    distribution: [5, 4, 3, 2, 1].map(stars => {
+      // Preserve historical half-star scores, grouping them with the next star.
+      const localVotes = votes.filter(vote => Math.ceil(vote.stars / 2) === stars)
+        .reduce((sum, vote) => sum + Number(vote.count), 0);
+      const sourcePercent = Number(snapshot?.distribution.find(row => row.stars === stars)?.percent ?? 0);
+      // Source percentages are rounded. Weight them directly; never invent or
+      // store exact imported bucket counts or synthetic customer ratings.
+      const percent = count && hasDistribution
+        ? (sourcePercent * importedCount + localVotes * 100) / count : null;
+      return { stars, percent };
+    }),
+  };
 }
