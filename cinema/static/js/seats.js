@@ -41,11 +41,10 @@ export async function renderSeats(ctx, sid) {
   let map = await api.request(
     "/screenings/" + encodeURIComponent(sid) + "/seats",
   );
-  const s = map.screening;
   const film =
-    bootstrap.films.find((f) => f.id === s.film_id) ||
-    (await api.request("/films/" + s.film_id));
-  const cinema = bootstrap.cinemas.find((c) => c.id === s.cinema_id);
+    bootstrap.films.find((f) => f.id === map.screening.film_id) ||
+    (await api.request("/films/" + map.screening.film_id));
+  const cinema = bootstrap.cinemas.find((c) => c.id === map.screening.cinema_id);
   let offset = new Date(map.as_of).getTime() - Date.now();
   const draftKey = `falcons.checkout.${user?.id || "guest"}.${sid}`;
   let draft = readDraft(draftKey);
@@ -74,7 +73,7 @@ export async function renderSeats(ctx, sid) {
   if (customer) {
     const holds = await allRows(api, "/me/holds");
     coupons = (await allRows(api, "/me/coupons")).filter(
-      (c) => c.cinema_id === s.cinema_id && c.status === "AVAILABLE",
+      (c) => c.cinema_id === map.screening.cinema_id && c.status === "AVAILABLE",
     );
     const pending = draft?.hold_id && api.pending?.("pay:" + draft.hold_id);
     if (pending && draft.quote) {
@@ -209,18 +208,21 @@ export async function renderSeats(ctx, sid) {
   function payPending() {
     return state.hold && api.pending?.("pay:" + state.hold.id);
   }
+  function onSale() {
+    return map.screening.status === "PUBLISHED" &&
+      new Date(map.screening.starts_at).getTime() > Date.now() + offset;
+  }
   function grid() {
     const seats = map.seats;
     const geometry = seatGeometry(seats);
+    const canChoose = state.phase === "choose" && onSale();
     const kind = map.screening.screen_type || "STANDARD";
     const direction = map.layout.screen_direction.toLowerCase();
     return `<div class="auditorium-meta"><strong>${map.layout.row_count} rows · ${seats.length} seats</strong><span>${kind === "DOLBY_CINEMA" ? "Recliner seating · extra legroom" : kind === "IMAX" ? "Wide auditorium · tiered seating" : "Classic auditorium · divided seating blocks"}</span></div><div class="seat-scroll auditorium-${kind.toLowerCase()}" tabindex="0" aria-label="Seat map, scroll horizontally to see all seats"><div class="auditorium"><div class="screen-line ${direction}">SCREEN · ${esc(screenName(kind))}</div><div class="seat-grid" role="group" aria-label="Seats, rows numbered nearest to furthest from the screen" style="--seat-columns:20px ${geometry.columnTracks} 20px;--seat-rows:${geometry.rowTracks || "none"}">${geometry.labels.map(({y, label}) => `<span class="row-label" aria-hidden="true" style="grid-column:1;grid-row:${y + 1}">${label}</span><span class="row-label" aria-hidden="true" style="grid-column:${geometry.columns + 2};grid-row:${y + 1}">${label}</span>`).join("")}${seats
       .map((seat) => {
         const selected = state.selected.has(seat.id);
         const selectable =
-          state.phase === "choose" &&
-          (seat.state === "AVAILABLE" || seat.held_by_me) &&
-          s.status === "PUBLISHED";
+          canChoose && (seat.state === "AVAILABLE" || seat.held_by_me);
         return `<button type="button" class="seat ${seat.state === "SOLD" ? "sold" : ""} ${seat.state === "HELD" && !selected ? "held" : ""}" style="grid-column:${seat.map_x + 2};grid-row:${seat.map_y + 1}" data-seat="${esc(seat.id)}" aria-label="${esc(seatLabel(seat))}, ${selected ? "selected" : seat.state === "AVAILABLE" ? "available" : seat.held_by_me ? "held by you" : seat.state.toLowerCase()}, ${seat.zone.toLowerCase()} zone" aria-pressed="${selected}" title="${esc(seatLabel(seat))} · ${seat.zone.toLowerCase()}" ${selectable ? "" : "disabled"}>${seat.seat_no}</button>`;
       })
       .join("")}</div></div></div>`;
@@ -242,7 +244,7 @@ export async function renderSeats(ctx, sid) {
     }</div>`;
   }
   function counterSelection() {
-    return customer && state.phase === "choose"
+    return customer && onSale() && state.phase === "choose"
       ? `<details class="consent-box"><summary>Booking at a cinema counter?</summary><p class="fine-print">You can approve a specific employee to hold these seats for you. This approval cannot charge your balance.</p><form id="hold-consent-form"><label class="field"><span>Staff ID provided at the counter</span><input name="staff_id" inputmode="numeric" pattern="[0-9]+" required></label><button type="submit" class="button ghost small" style="margin-top:12px" ${state.selected.size !== state.target ? "disabled" : ""}>Approve seat hold</button><div class="form-error"></div></form><div class="token-output" id="hold-consent-output"></div></details>`
       : "";
   }
@@ -257,11 +259,23 @@ export async function renderSeats(ctx, sid) {
       renderSuccess();
       return;
     }
+    const s = map.screening;
+    if (!onSale() && ["choose", "held", "quoted"].includes(state.phase)) {
+      if (payPending()) {
+        state.phase = "recover";
+        state.allowPaymentRetry = false;
+      } else {
+        state.selected.clear();
+        state.hold = null;
+        state.quote = null;
+        state.phase = "choose";
+      }
+    }
     const isHeld = ["held", "quoted"].includes(state.phase);
     const source = state.source;
     const previousMap = root.querySelector(".seat-scroll");
     const mapScroll = previousMap ? { left: previousMap.scrollLeft, top: previousMap.scrollTop } : null;
-    root.innerHTML = `<div class="breadcrumb"><a href="#/discover${source ? "?source_booking_id=" + esc(source.id) : ""}">Showtimes</a>${icon("chevron")}<span>${esc(film.title)}</span></div><div class="booking-progress"><span class="${state.phase === "choose" ? "active" : ""}"><b>1</b>Choose seats</span><i class="rule"></i><span class="${isHeld ? "active" : ""}"><b>2</b>Review & confirm</span><i class="rule"></i><span><b>3</b>Your tickets</span></div><div class="page-heading"><div><p class="eyebrow">${source ? "RESCHEDULE YOUR WHOLE BOOKING" : "A GOOD NIGHT STARTS WITH A GOOD SEAT"}</p><h1>${state.phase === "recover" ? "Let’s confirm your booking." : isHeld ? "Your seats are on hold." : "Choose your seats."}</h1></div><span class="live-note">${dateTime(s.starts_at)} · Beijing time</span></div>${source ? notice(`Changing ${source.tickets.length} ticket(s) from ${dateTime(source.starts_at)}. Your original booking stays valid until this change completes.`) : ""}<div id="seat-errors">${state.error ? notice(state.error, "error") : ""}</div>${s.status !== "PUBLISHED" || new Date(s.starts_at).getTime() <= Date.now() + offset ? notice("This screening is no longer on sale. Please choose another showtime.", "warning") : ""}<div class="seat-layout"><section class="seat-panel"><div class="panel-header"><div><h2>${esc(cinema?.name || "Cinema")} <span class="muted" style="font-size:13px;font-weight:400">· ${esc(s.screen_name || "Screen")} · ${esc(screenName(map.screening.screen_type || "STANDARD"))}</span></h2><p class="muted" style="font-size:12px;margin:7px 0 0">${esc(cinema?.address || "Beijing")} · ${dateTime(s.starts_at)}</p></div><button class="button ghost small" id="refresh-map" aria-label="Refresh seat availability">Refresh</button></div><div class="seat-legend"><span><i class="legend-box"></i>Available</span><span><i class="legend-box selected"></i>Your selection</span><span><i class="legend-box held"></i>On hold</span><span><i class="legend-box sold"></i>Sold</span></div>${grid()}<p class="seat-help">Rows count from the screen. Clear lanes are aisles; adjacent-seat suggestions never cross them. Scroll the map sideways if needed, or use Tab and Enter.</p>${isHeld ? notice("These seats are reserved until the countdown ends. Refreshing does not extend the hold.") : ""}</section><aside class="panel booking-summary"><div class="summary-film">${poster(film, true)}<div><h3>${esc(film.title)}</h3><p>${s.duration_minutes_snapshot ?? film.duration_minutes} min · ${esc(timeOnly(s.starts_at))}–${esc(timeOnly(s.ends_at))}</p></div></div><div class="summary-line"><span>Cinema</span><strong>${esc(cinema?.name || "Beijing")}</strong></div><div class="summary-line"><span>Date</span><strong>${dateTime(s.starts_at, { hour: undefined, minute: undefined })}</strong></div>${state.phase === "choose" ? `<label class="field" style="margin-top:16px"><span>Number of tickets</span><select id="party-size" ${source ? "disabled" : ""}>${Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}" ${i + 1 === state.target ? "selected" : ""}>${i + 1} ${i === 0 ? "ticket" : "tickets"}</option>`).join("")}</select></label>` : ""}${chosenTags()}${isHeld ? `<div class="hold-clock">${icon("clock")}<span>Seats held for</span><strong id="countdown">—</strong></div>` : ""}<div id="checkout-controls">${controls()}</div>${counterSelection()}${counterPayment()}</aside></div>`;
+    root.innerHTML = `<div class="breadcrumb"><a href="#/discover${source ? "?source_booking_id=" + esc(source.id) : ""}">Showtimes</a>${icon("chevron")}<span>${esc(film.title)}</span></div><div class="booking-progress"><span class="${state.phase === "choose" ? "active" : ""}"><b>1</b>Choose seats</span><i class="rule"></i><span class="${isHeld ? "active" : ""}"><b>2</b>Review & confirm</span><i class="rule"></i><span><b>3</b>Your tickets</span></div><div class="page-heading"><div><p class="eyebrow">${source ? "RESCHEDULE YOUR WHOLE BOOKING" : "A GOOD NIGHT STARTS WITH A GOOD SEAT"}</p><h1>${state.phase === "recover" ? "Let’s confirm your booking." : isHeld ? "Your seats are on hold." : "Choose your seats."}</h1></div><span class="live-note">${dateTime(s.starts_at)} · Beijing time</span></div>${source ? notice(`Changing ${source.tickets.length} ticket(s) from ${dateTime(source.starts_at)}. Your original booking stays valid until this change completes.`) : ""}<div id="seat-errors">${state.error ? notice(state.error, "error") : ""}</div>${!onSale() ? notice("This screening is no longer on sale. Please choose another showtime.", "warning") : ""}<div class="seat-layout"><section class="seat-panel"><div class="panel-header"><div><h2>${esc(cinema?.name || "Cinema")} <span class="muted" style="font-size:13px;font-weight:400">· ${esc(s.screen_name || "Screen")} · ${esc(screenName(map.screening.screen_type || "STANDARD"))}</span></h2><p class="muted" style="font-size:12px;margin:7px 0 0">${esc(cinema?.address || "Beijing")} · ${dateTime(s.starts_at)}</p></div><button class="button ghost small" id="refresh-map" aria-label="Refresh seat availability">Refresh</button></div><div class="seat-legend"><span><i class="legend-box"></i>Available</span><span><i class="legend-box selected"></i>Your selection</span><span><i class="legend-box held"></i>On hold</span><span><i class="legend-box sold"></i>Sold</span></div>${grid()}<p class="seat-help">Rows count from the screen. Clear lanes are aisles; adjacent-seat suggestions never cross them. Scroll the map sideways if needed, or use Tab and Enter.</p>${isHeld ? notice("These seats are reserved until the countdown ends. Refreshing does not extend the hold.") : ""}</section><aside class="panel booking-summary"><div class="summary-film">${poster(film, true)}<div><h3>${esc(film.title)}</h3><p>${s.duration_minutes_snapshot ?? film.duration_minutes} min · ${esc(timeOnly(s.starts_at))}–${esc(timeOnly(s.ends_at))}</p></div></div><div class="summary-line"><span>Cinema</span><strong>${esc(cinema?.name || "Beijing")}</strong></div><div class="summary-line"><span>Date</span><strong>${dateTime(s.starts_at, { hour: undefined, minute: undefined })}</strong></div>${state.phase === "choose" ? `<label class="field" style="margin-top:16px"><span>Number of tickets</span><select id="party-size" ${source ? "disabled" : ""}>${Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}" ${i + 1 === state.target ? "selected" : ""}>${i + 1} ${i === 0 ? "ticket" : "tickets"}</option>`).join("")}</select></label>` : ""}${chosenTags()}${isHeld ? `<div class="hold-clock">${icon("clock")}<span>Seats held for</span><strong id="countdown">—</strong></div>` : ""}<div id="checkout-controls">${controls()}</div>${counterSelection()}${counterPayment()}</aside></div>`;
     if (mapScroll) {
       const currentMap = root.querySelector(".seat-scroll");
       currentMap.scrollLeft = mapScroll.left;
@@ -436,7 +450,7 @@ export async function renderSeats(ctx, sid) {
   }
   function controls() {
     if (state.phase === "recover")
-      return `${notice(state.allowPaymentRetry ? "No receipt yet. We’ll keep checking. You can also retry the same payment while the hold is active." : "Checking your payment. You can find confirmed tickets in your account.", "warning")}${paymentSummary()}<button class="button wide" id="check-result">Check payment result</button>${state.allowPaymentRetry && remaining() > 0 ? '<button class="button ghost wide" id="pay-now">Retry the same payment</button>' : ""}<a class="button ghost wide" href="#/account">View my tickets</a>`;
+      return `${notice(state.allowPaymentRetry ? "No receipt yet. We’ll keep checking. You can also retry the same payment while the hold is active." : "Checking your payment. You can find confirmed tickets in your account.", "warning")}${paymentSummary()}<button class="button wide" id="check-result">Check payment result</button>${state.allowPaymentRetry && onSale() && remaining() > 0 ? '<button class="button ghost wide" id="pay-now">Retry the same payment</button>' : ""}<a class="button ghost wide" href="#/account">View my tickets</a>`;
     if (state.phase === "converted")
       return `${notice("This hold has already been purchased. Your issued tickets are in your account.")}<a class="button wide" href="#/account">View my tickets ${icon("arrow")}</a>`;
     if (state.phase === "expired")
@@ -450,7 +464,7 @@ export async function renderSeats(ctx, sid) {
             0),
         0,
       );
-      return `<div class="summary-line"><span>Selected</span><strong>${selected} / ${state.target} seats</strong></div><div class="summary-line summary-total"><span>Face price estimate</span><strong>${money(ticketTotal)}</strong></div><p class="fine-print">Choose ticket types and an eligible coupon at the next step. Any change fee is quoted before confirmation.</p>${!user ? `<a class="button wide" href="#/login?next=${encodeURIComponent("#/seats/" + sid + "?" + new URLSearchParams({ party_size: String(state.target), seat_ids: [...state.selected].join(","), ...(state.source ? { source_booking_id: state.source.id } : {}), ...(params.get("from") === "assistant" ? { from: "assistant" } : {}) }))}">Sign in to hold seats ${icon("arrow")}</a>` : !customer ? `<p class="notice">Customer accounts book here. For assisted sales, open the cinema workspace.</p><a class="button wide" href="${counterSalesUrl}">Open counter sales</a>` : `<button class="button wide" id="create-hold" ${selected !== state.target || s.status !== "PUBLISHED" || new Date(s.starts_at).getTime() <= Date.now() + offset ? "disabled" : ""}>Hold ${selected || "your"} ${selected === 1 ? "seat" : "seats"} ${icon("arrow")}</button>`}<p class="fine-print">A hold lasts up to 5 minutes. Browsing and selecting do not reserve a seat.</p>`;
+      return `<div class="summary-line"><span>Selected</span><strong>${selected} / ${state.target} seats</strong></div><div class="summary-line summary-total"><span>Face price estimate</span><strong>${money(ticketTotal)}</strong></div><p class="fine-print">Choose ticket types and an eligible coupon at the next step. Any change fee is quoted before confirmation.</p>${!onSale() ? '<button class="button wide" id="create-hold" disabled>Booking closed</button>' : !user ? `<a class="button wide" href="#/login?next=${encodeURIComponent("#/seats/" + sid + "?" + new URLSearchParams({ party_size: String(state.target), seat_ids: [...state.selected].join(","), ...(state.source ? { source_booking_id: state.source.id } : {}), ...(params.get("from") === "assistant" ? { from: "assistant" } : {}) }))}">Sign in to hold seats ${icon("arrow")}</a>` : !customer ? `<p class="notice">Customer accounts book here. For assisted sales, open the cinema workspace.</p><a class="button wide" href="${counterSalesUrl}">Open counter sales</a>` : `<button class="button wide" id="create-hold" ${selected !== state.target ? "disabled" : ""}>Hold ${selected || "your"} ${selected === 1 ? "seat" : "seats"} ${icon("arrow")}</button>`}<p class="fine-print">A hold lasts up to 5 minutes. Browsing and selecting do not reserve a seat.</p>`;
     }
     return `<form id="quote-form"><div class="fare-choices">${tickets()
       .map((t) => {
@@ -616,6 +630,7 @@ export async function renderSeats(ctx, sid) {
     }
   }
   function renderSuccess() {
+    const s = map.screening;
     const r = state.receipt;
     root.innerHTML = `<section class="panel success-panel"><div class="success-mark">${icon("check")}</div><p class="eyebrow">${state.source ? "NEW PLANS, CONFIRMED" : "YOU’RE GOING TO THE MOVIES"}</p><h1>${state.source ? "Your booking is changed." : "See you at the cinema."}</h1><p class="muted">${state.source ? "Your old seats have been released and your new tickets are ready." : "Your tickets are confirmed. Find the details in your account anytime."}</p><div class="success-ticket"><span class="badge">Confirmed</span><h2 style="margin-top:15px">${esc(film.title)}</h2><p class="muted" style="font-size:13px">${esc(cinema?.name || "Cinema")} · ${esc(s.screen_name || "Screen")} · ${dateTime(s.starts_at)}</p>${chosenTags()}<div class="summary-line"><span>${r.amount_due_minor < 0 ? "Returned to balance" : "Paid from balance"}</span><strong>${money(Math.abs(r.amount_due_minor))}</strong></div><div class="summary-line"><span>Remaining balance</span><strong>${money(r.balance_minor)}</strong></div><p class="fine-print" style="margin-bottom:0">Booking ${esc(r.booking_id)}</p></div><div class="actions"><a class="button" href="#/account?tab=orders&booking=${esc(r.booking_id)}">View my tickets ${icon("arrow")}</a><a class="button ghost" href="#/discover">Back to showtimes</a></div></section>`;
   }
