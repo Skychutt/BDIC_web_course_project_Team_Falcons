@@ -379,7 +379,7 @@ class BusinessTools:
             state = merge_filters(self.conversation.filters, FilterPatch(date=args.date), self.clock().date())
             # Original film/cinema/party are required by the business rule, not a model preference.
             state = Filters(date=state.date, film_id=int(value["film_id"]), cinema_id=int(value["cinema_id"]), party_size=value["party_size"])
-            cards = [c for c in self.catalog.recommend(state, self.locale, limit=4) if int(c["screening_id"]) != int(value["screening_id"])][:3]
+            cards = self.catalog.recommend(state, self.locale, exclude_screening_id=int(value["screening_id"]))
             self.remember("cards", cards)
         reply = self.text("该订单当前可申请同影院、同影片整单改签。费用仅供预览，请在原页面确认。" if value["eligible"] else "该订单当前不满足改签条件：已失效，或距离开场不足 30 分钟。", "This booking is currently eligible for a whole-party change at the same cinema for the same film. Confirm fees on the booking page." if value["eligible"] else "This booking cannot be changed: it is inactive or starts in under 30 minutes.")
         return self.result(reply, reschedule=value, cards=cards, intent="reschedule", private=True)

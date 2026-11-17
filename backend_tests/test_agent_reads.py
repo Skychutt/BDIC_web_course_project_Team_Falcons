@@ -142,7 +142,7 @@ def test_private_tool_chaining_sends_only_indices_to_model(env):
     requests = []
     turns = iter([
         AgentTurn(calls=[ToolCall(id="a", name="get_my_orders", arguments={})]),
-        AgentTurn(calls=[ToolCall(id="b", name="check_reschedule", arguments={"order_index": 1})]),
+        AgentTurn(calls=[ToolCall(id="b", name="check_reschedule", arguments={"order_index": 1, "date": "2026-10-23"})]),
         AgentTurn(content="已完成查询，请查看下方详情。"),
     ])
     def run(**kwargs):
@@ -152,6 +152,7 @@ def test_private_tool_chaining_sends_only_indices_to_model(env):
     before = snapshot()
     result = client.post("/api/assistant/chat", json={"message": "我的最近订单能改签吗", "locale": "zh"}, headers={"X-CSRF-Token": "test-csrf"}).json["data"]
     assert result["reschedule"]["eligible"] and result["orders"] and snapshot() == before
+    assert [int(card["screening_id"]) for card in result["cards"]] == [env["ids"]["screenings"][0]]
     outbound = json.dumps(requests, ensure_ascii=False)
     assert str(receipt["booking_id"]) not in outbound and str(actor(env)["id"]) not in outbound
     assert "owner_id" not in outbound and "net_ticket_minor" not in outbound

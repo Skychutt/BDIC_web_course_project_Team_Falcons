@@ -111,6 +111,8 @@ export async function renderCinemaMap(ctx) {
   let activeCinemaId = null, routeInfo = null;
   let locate;
   let map, disposed = false, running = false, expireTimer, requestVersion = 0;
+  let mapAvailable = config.enabled;
+  const routesDisabled = () => running || !mapAvailable;
   let status = config.enabled ? "idle" : "not_configured";
   const t = (key) => words[language][key] || words[language].unavailable;
   const readyStatus = () => bootstrap.cinemas.some((c) => c.coordinate_system === "GCJ02" && c.latitude != null && c.longitude != null) ? "ready" : "noPins";
@@ -126,7 +128,7 @@ export async function renderCinemaMap(ctx) {
     el("locate").disabled = running || !config.enabled;
     el("load").disabled = running || !config.enabled;
     root.querySelectorAll("[data-route]").forEach((button) => {
-      button.disabled = running || !config.enabled;
+      button.disabled = routesDisabled();
     });
     el("clear").hidden = !position;
     el("nearest").disabled = !position;
@@ -171,7 +173,7 @@ export async function renderCinemaMap(ctx) {
       });
     });
     el("list").querySelectorAll("[data-route]").forEach((button) => {
-      button.disabled = running;
+      button.disabled = routesDisabled();
       button.onclick = () => run(async () => {
         const cinema = values.find((c) => String(c.id) === button.dataset.route);
         if (!cinema?.position) return;
@@ -214,8 +216,14 @@ export async function renderCinemaMap(ctx) {
     }, config);
     map = frame;
     try { await frame.ready; }
-    catch (error) { frame.destroy(); if (map === frame) map = null; throw error; }
+    catch (error) {
+      mapAvailable = false;
+      frame.destroy();
+      if (map === frame) map = null;
+      throw error;
+    }
     if (disposed) return;
+    mapAvailable = true;
     status = readyStatus();
     draw(); message();
   }

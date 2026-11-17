@@ -21,17 +21,39 @@ def seat_zone(row_no, row_count):
     )
 
 
-def available_seats(c, s):
-    return rows(
+def available_seats_by_screening(c, screenings):
+    """Reuse each layout's seats, but exclude allocations only from their own show."""
+    layout_ids = in_ids(s["layout_id"] for s in screenings)
+    seats_by_layout = defaultdict(list)
+    for seat in rows(
+        c, f"SELECT * FROM seats WHERE layout_id IN ({layout_ids}) ORDER BY layout_id,row_no,seat_no"
+    ):
+        seats_by_layout[seat["layout_id"]].append(seat)
+
+    screening_ids = in_ids(s["id"] for s in screenings)
+    occupied = defaultdict(set)
+    for allocation in rows(
         c,
-        """SELECT st.* FROM seats st WHERE st.layout_id=:l AND NOT EXISTS (
-        SELECT 1 FROM seat_allocations a LEFT JOIN seat_holds h ON h.id=a.hold_id
-        WHERE a.screening_id=:s AND a.seat_id=st.id AND
-        (a.state='SOLD' OR (h.status='ACTIVE' AND h.expires_at>:n))) ORDER BY st.row_no,st.seat_no""",
-        l=s["layout_id"],
-        s=s["id"],
-        n=now(),
-    )
+        f"""SELECT a.screening_id,a.seat_id FROM seat_allocations a
+            LEFT JOIN seat_holds h ON h.id=a.hold_id
+            WHERE a.screening_id IN ({screening_ids})
+            AND (a.state='SOLD' OR (h.status='ACTIVE' AND h.expires_at>:at))""",
+        at=now(),
+    ):
+        occupied[allocation["screening_id"]].add(allocation["seat_id"])
+
+    available = {}
+    for show in screenings:
+        seats = seats_by_layout[show["layout_id"]]
+        taken = occupied[show["id"]]
+        if taken:
+            seats = [seat for seat in seats if seat["id"] not in taken]
+        available[show["id"]] = seats
+    return available
+
+
+def available_seats(c, s):
+    return available_seats_by_screening(c, [s])[s["id"]]
 
 
 def choose_seats(seats, size, row_count, preference=None):
@@ -86,6 +108,7 @@ def search(c, filters, *, end_exclusive=False):
         "zone",
         "page",
         "page_size",
+        "exclude_screening_id",
         "screening_id", "genre", "keyword", "min_rating", "rated_only", "sort_by_rating",
         "budget_minor", "budget_scope", "fare_type", "require_contiguous",
     }
@@ -129,6 +152,7 @@ def search(c, filters, *, end_exclusive=False):
         )
     except (TypeError, ValueError):
         raise Problem("VALIDATION", "date must be YYYY-MM-DD")
+    require(day < date.max, "VALIDATION", "Choose a screening date on or before 9999-12-30.")
     lo = datetime.combine(day, time.min)
     hi = lo + timedelta(days=1)
     clauses = [
@@ -149,6 +173,9 @@ def search(c, filters, *, end_exclusive=False):
         if filters.get(field):
             clauses.append(f"{column}=:{field}")
             params[field] = integer(filters[field], field)
+    if "exclude_screening_id" in filters:
+        clauses.append("s.id <> :exclude_screening_id")
+        params["exclude_screening_id"] = integer(filters["exclude_screening_id"], "exclude_screening_id")
     if filters.get("genre_id"):
         clauses.append(
             "EXISTS(SELECT 1 FROM film_genres fg WHERE fg.film_id=s.film_id AND fg.genre_id=:g)"
@@ -198,38 +225,47 @@ def search(c, filters, *, end_exclusive=False):
         **params,
     )
     result = []
-    metadata = {}
     if candidates:
         from .frontend_api import film_metadata
         from .discovery import match_film
         from types import SimpleNamespace
         film_ids = in_ids(s["film_id"] for s in candidates)
-        metadata = {f["id"]: f for f in film_metadata(c, rows(c, f"SELECT * FROM films WHERE id IN ({film_ids})"))}
+        films = film_metadata(c, rows(c, f"SELECT * FROM films WHERE id IN ({film_ids})"))
         film_filters = SimpleNamespace(film_id=None, genre=filters.get("genre"), keyword=filters.get("keyword"),
             min_rating=minimum, rated_only=rated_only, showing_only=False, recent=False)
+        ratings = {}
+        for film in films:
+            record = SimpleNamespace(id=film["id"], titles={"title": film["title"]}, synopsis={"text": film["synopsis"]},
+                genres=[g["name"] for g in film["genres"]], rating=film["rating"]["average"], rating_count=film["rating"]["count"])
+            if match_film(record, film_filters):
+                ratings[film["id"]] = film["rating"]
+        candidates = [s for s in candidates if s["film_id"] in ratings]
+
+    if candidates:
+        seats_by_screening = available_seats_by_screening(c, candidates)
+        screening_ids = in_ids(s["id"] for s in candidates)
+        fares_by_screening = defaultdict(list)
+        for fare in rows(
+            c,
+            f"""SELECT screening_id,fare_type,price_minor FROM fares
+                WHERE screening_id IN ({screening_ids}) ORDER BY screening_id,fare_type""",
+        ):
+            fares_by_screening[fare.pop("screening_id")].append(fare)
+
     for s in candidates:
-        film = metadata[s["film_id"]]
-        record = SimpleNamespace(id=film["id"], titles={"title": film["title"]}, synopsis={"text": film["synopsis"]},
-            genres=[g["name"] for g in film["genres"]], rating=film["rating"]["average"], rating_count=film["rating"]["count"])
-        if not match_film(record, film_filters):
-            continue
-        seats = available_seats(c, s)
+        seats = seats_by_screening[s["id"]]
         if len(seats) < size:
             continue
         s["suggestion"] = choose_seats(seats, size, s["row_count"], zone)
         if contiguous_only and not s["suggestion"]["adjacent"]:
             continue
         s["available_count"] = len(seats)
-        s["fares"] = rows(
-            c,
-            "SELECT fare_type,price_minor FROM fares WHERE screening_id=:s ORDER BY fare_type",
-            s=s["id"],
-        )
+        s["fares"] = fares_by_screening[s["id"]]
         if budget is not None:
             fare = next((f["price_minor"] for f in s["fares"] if f["fare_type"] == ("STANDARD" if fare_type == "regular" else "STUDENT")), None)
             if fare is None or fare * (size if filters["budget_scope"] == "total" else 1) > budget:
                 continue
-        s["rating"] = film["rating"]
+        s["rating"] = ratings[s["film_id"]]
         result.append(s)
     result.sort(
         key=lambda s: (

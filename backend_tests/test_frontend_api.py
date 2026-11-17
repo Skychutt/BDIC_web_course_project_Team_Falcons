@@ -6,8 +6,9 @@ import secrets
 from threading import Event
 
 import pytest
+from sqlalchemy import event
 
-from cinema import booking, management
+from cinema import booking, catalog, management
 from cinema.core import Problem, db, get, ins, one, now, upd
 
 
@@ -22,6 +23,18 @@ def client(env, name=None):
             session["user_id"] = str(actor(env, name)["id"])
             session["csrf"] = "frontend-test-csrf"
     return result
+
+
+def test_screening_search_date_upper_bound(env):
+    public = client(env)
+    response = public.get("/api/screenings?date=9999-12-31")
+    assert response.status_code == 400
+    assert response.json["error"]["code"] == "VALIDATION"
+    assert "9999-12-30" in response.json["error"]["message"]
+
+    last_day = public.get("/api/screenings?date=9999-12-30")
+    assert last_day.status_code == 200
+    assert last_day.json["data"]["items"] == []
 
 
 def key():
@@ -39,6 +52,54 @@ def prepare_quote(env, index=0, name="customer"):
 def purchase(env, index=0, name="customer"):
     _, quote = prepare_quote(env, index, name)
     return booking.checkout(actor(env, name), {"quote_token": quote["quote_token"]}, key())
+
+
+def test_reschedule_search_excludes_original_before_count_and_pagination(env):
+    public = client(env)
+    early, late = map(str, env["ids"]["screenings"][:2])
+    filters = dict(date="2026-10-23", film_id=env["ids"]["film_id"], cinema_id=env["ids"]["cinemas"][0])
+
+    def search(**extra):
+        response = public.get("/api/screenings", query_string={**filters, **extra})
+        assert response.status_code == 200
+        data = response.json["data"]
+        return data["total"], [s["id"] for s in data["items"]]
+
+    assert search(page_size=1) == (2, [early])
+    assert search(page_size=1, page=2) == (2, [late])
+    assert search(exclude_screening_id=early, page_size=1) == (1, [late])
+    assert search(exclude_screening_id=early, page_size=1, page=2) == (1, [])
+    assert search(exclude_screening_id=early, start_to="14:00") == (0, [])
+    assert search(exclude_screening_id=early, start_from="15:00") == (1, [late])
+
+
+def test_search_batches_inventory_but_keeps_seats_and_fares_per_screening(env):
+    early, late = env["ids"]["screenings"][:2]
+    seats = env["ids"]["seats"][str(env["ids"]["layouts"][0])]
+    purchase(env)  # Sells the first seat for the early show.
+    management.update_fares(actor(env, "manager1"), late, {
+        "revision_no": 1, "fares": {"STANDARD": 12000, "STUDENT": 4000}
+    })
+    hold = booking.create_hold(actor(env), {"screening_id": late, "seat_ids": [seats[2]]}, key())
+    filters = {"date": "2026-10-23", "party_size": 2}
+    with db().connect() as c:
+        queries = []
+        event.listen(c, "before_cursor_execute", lambda conn, cursor, sql, *args: queries.append(sql))
+        catalog.search(c, {**filters, "screening_id": early})
+        single_count = len(queries)
+        queries.clear()
+        shows = {s["id"]: s for s in catalog.search(c, filters)["items"]}
+        assert len(shows) > 1 and len(queries) == single_count
+        assert shows[early]["suggestion"]["seat_ids"] == seats[2:4]  # Across the aisle from seat 2.
+        assert shows[late]["suggestion"]["seat_ids"] == seats[:2]
+        assert shows[late]["available_count"] == shows[early]["available_count"] == len(seats) - 1
+        budget = {**filters, "fare_type": "student", "budget_minor": 8000, "budget_scope": "total"}
+        assert [s["id"] for s in catalog.search(c, budget)["items"]] == [late]
+
+        env["clock"][0] = hold["expires_at"]
+        shows = {s["id"]: s for s in catalog.search(c, filters)["items"]}
+        assert shows[early]["available_count"] == len(seats) - 1
+        assert shows[late]["available_count"] == len(seats)
 
 
 def test_archiving_film_closes_existing_screenings_and_quotes(env):

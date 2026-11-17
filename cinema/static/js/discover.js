@@ -31,9 +31,11 @@ const allowed = [
   "page",
   "page_size",
 ];
+const comparisonFilters = ["fare_type", "budget_minor", "budget_scope", "require_contiguous"];
 function filtersFrom(params) {
   const f = { date: beijingDate(), party_size: "1" };
-  for (const name of allowed) if (params.get(name)) f[name] = params.get(name);
+  const names = params.get("source_booking_id") ? allowed : [...allowed, ...comparisonFilters];
+  for (const name of names) if (params.get(name)) f[name] = params.get(name);
   return f;
 }
 const shortDate = (value) =>
@@ -49,12 +51,27 @@ function dateLabel(value) {
       ? "Tomorrow"
       : shortDate(value);
 }
+function comparisonFields(f) {
+  const budget = f.budget_minor === undefined ? "" : Number(f.budget_minor) / 100;
+  return `<label class="field"><span>Ticket type</span><select name="fare_type">
+      <option value="regular">Standard</option><option value="student" ${f.fare_type === "student" ? "selected" : ""}>Student</option>
+    </select></label>
+    <label class="field"><span>Maximum budget (¥)</span><input type="number" name="budget_yuan" min="0" max="100000" step="0.01" placeholder="No limit" value="${esc(budget)}"></label>
+    <label class="field"><span>Budget applies to</span><select name="budget_scope">
+      <option value="total">Whole group</option><option value="per_ticket" ${f.budget_scope === "per_ticket" ? "selected" : ""}>Per ticket</option>
+    </select></label>
+    <label class="field"><span>Seat arrangement</span><select name="require_contiguous">
+      <option value="">Allow separate seats</option><option value="true" ${["true", "1"].includes(f.require_contiguous) ? "selected" : ""}>Must sit together</option>
+    </select></label>`;
+}
 function fields(bootstrap, f, source, compact = false) {
   const cinemas = bootstrap.cinemas.filter(
     (c) => c.is_active && (!f.district_id || c.district_id === f.district_id),
   );
   const fixed = source ? "disabled" : "";
-  return `${source ? `<input type="hidden" name="cinema_id" value="${esc(source.cinema_id)}"><input type="hidden" name="film_id" value="${esc(source.film_id)}"><input type="hidden" name="party_size" value="${source.tickets.length}">` : ""}<div class="${compact ? "form-grid" : "search-main"}"><label class="field"><span>District</span><select name="district_id" ${source ? "disabled" : ""}>${options(bootstrap.districts, f.district_id, "name", "All Beijing")}</select></label><label class="field"><span>Cinema</span><select name="cinema_id" ${fixed}>${options(cinemas, f.cinema_id, "name", "All cinemas")}</select></label><label class="field"><span>Date</span><input name="date" type="date" value="${esc(f.date)}" required></label><label class="field"><span>People</span><select name="party_size" ${fixed}>${Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}" ${String(i + 1) === String(f.party_size) ? "selected" : ""}>${i + 1} ${i === 0 ? "person" : "people"}</option>`).join("")}</select></label>${compact ? "" : `<button class="button" type="submit">${icon("search")} Find showtimes</button>`}</div><${compact ? "div" : "details"} class="${compact ? "form-grid" : "search-advanced"}" ${!compact && (f.film_id || f.genre_id || f.zone || f.screen_type || f.start_from) ? "open" : ""}>${compact ? "" : '<summary><span>Film, screen & seat preferences</span><span>＋</span></summary><div class="form-grid three">'}<label class="field"><span>Film</span><select name="film_id" ${fixed}>${options(bootstrap.films, f.film_id, "title", "All films")}</select></label><label class="field"><span>Genre</span><select name="genre_id" ${source ? "disabled" : ""}>${options(bootstrap.genres, f.genre_id, "name", "Any genre")}</select></label><label class="field"><span>Screen type</span><select name="screen_type">${options(
+  const expanded = f.film_id || f.genre_id || f.zone || f.screen_type || f.start_from || f.start_to
+    || f.fare_type === "student" || f.budget_minor !== undefined || f.budget_scope === "per_ticket" || f.require_contiguous;
+  return `${source ? `<input type="hidden" name="cinema_id" value="${esc(source.cinema_id)}"><input type="hidden" name="film_id" value="${esc(source.film_id)}"><input type="hidden" name="party_size" value="${source.tickets.length}">` : ""}<div class="${compact ? "form-grid" : "search-main"}"><label class="field"><span>District</span><select name="district_id" ${source ? "disabled" : ""}>${options(bootstrap.districts, f.district_id, "name", "All Beijing")}</select></label><label class="field"><span>Cinema</span><select name="cinema_id" ${fixed}>${options(cinemas, f.cinema_id, "name", "All cinemas")}</select></label><label class="field"><span>Date</span><input name="date" type="date" value="${esc(f.date)}" max="9999-12-30" required></label><label class="field"><span>People</span><select name="party_size" ${fixed}>${Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}" ${String(i + 1) === String(f.party_size) ? "selected" : ""}>${i + 1} ${i === 0 ? "person" : "people"}</option>`).join("")}</select></label>${compact ? "" : `<button class="button" type="submit">${icon("search")} Find showtimes</button>`}</div><${compact ? "div" : "details"} class="${compact ? "form-grid" : "search-advanced"}" ${!compact && expanded ? "open" : ""}>${compact ? "" : `<summary><span>${source ? "Film, screen & seat preferences" : "Ticket prices, seating & other filters"}</span><span>＋</span></summary><div class="form-grid three">`}<label class="field"><span>Film</span><select name="film_id" ${fixed}>${options(bootstrap.films, f.film_id, "title", "All films")}</select></label><label class="field"><span>Genre</span><select name="genre_id" ${source ? "disabled" : ""}>${options(bootstrap.genres, f.genre_id, "name", "Any genre")}</select></label><label class="field"><span>Screen type</span><select name="screen_type">${options(
     [
       { id: "STANDARD", name: "Standard" },
       { id: "IMAX", name: "IMAX" },
@@ -72,7 +89,7 @@ function fields(bootstrap, f, source, compact = false) {
     f.zone,
     "name",
     "No preference",
-  )}</select></label>${compact ? "" : "</div>"}</${compact ? "div" : "details"}>${compact ? `<button class="button wide" type="submit">Find my screening ${icon("arrow")}</button>` : ""}`;
+  )}</select></label>${source ? "" : comparisonFields(f)}${compact ? "" : "</div>"}</${compact ? "div" : "details"}>${compact ? `<button class="button wide" type="submit">Find my screening ${icon("arrow")}</button>` : ""}`;
 }
 function bindCinemaFilter(form, bootstrap, source) {
   if (source) return;
@@ -95,21 +112,35 @@ function bindCinemaFilter(form, bootstrap, source) {
 function formFilters(form) {
   const result = {};
   for (const [key, value] of new FormData(form))
-    if (value && allowed.includes(key)) result[key] = String(value);
+    if (value && (allowed.includes(key) || comparisonFilters.includes(key))) result[key] = String(value);
+  const budget = form.elements.budget_yuan;
+  if (budget && budget.value !== "") result.budget_minor = String(Math.round(budget.valueAsNumber * 100));
   return result;
 }
-function seatLink(screening, source) {
+function seatLink(screening, source, fareType) {
   const params = new URLSearchParams({
     party_size: String(screening.suggestion.seat_ids.length),
     seat_ids: screening.suggestion.seat_ids.join(","),
   });
   if (source) params.set("source_booking_id", source.id);
+  else if (fareType === "student") params.set("fare_type", "student");
   return `#/seats/${screening.id}?${params}`;
 }
-function renderGroups(items, bootstrap, source) {
+function sessionCard(s, cinema, source, fareType) {
+  const student = !source && fareType === "student";
+  const price = s.fares.find((fare) => fare.fare_type === (student ? "STUDENT" : "STANDARD"))?.price_minor;
+  const count = s.suggestion.seat_ids.length;
+  const total = price == null ? "Price unavailable" : `${money(count * price)} total before coupons`;
+  const ticketLabel = `${count} ${student ? "student" : "standard"} ticket${count === 1 ? "" : "s"}`;
+  const comparison = source ? "" : `<span class="session-total">${ticketLabel} · ${total}</span>`;
+  return `<a class="session-button" href="${seatLink(s, source, fareType)}" aria-label="${esc(timeOnly(s.starts_at))} at ${esc(cinema?.name || s.cinema_name)}${source ? "" : `, ${ticketLabel}, ${total}`}, choose seats">
+    <span class="session-time">${timeOnly(s.starts_at)}</span><span class="session-price">${price == null ? "—" : money(price)}${source ? "" : " each"}</span>
+    <span class="session-end">Ends ${timeOnly(s.ends_at)}</span><span class="session-screen">${esc(screenName(s.screen_type))} · ${esc(s.screen_name)}</span>
+    ${comparison}<span class="session-availability">${icon("check")}${s.suggestion.adjacent ? "Seats together available" : "Separate seats suggested"} · ${s.available_count} left</span></a>`;
+}
+function renderGroups(items, bootstrap, source, fareType) {
   const groups = new Map();
   for (const s of items) {
-    if (source && s.id === source.screening_id) continue;
     if (!groups.has(s.film_id)) groups.set(s.film_id, []);
     groups.get(s.film_id).push(s);
   }
@@ -130,7 +161,7 @@ function renderGroups(items, bootstrap, source) {
       ]
         .map(([cid, list]) => {
           const cinema = bootstrap.cinemas.find((c) => c.id === cid);
-          return `<div class="cinema-session"><div class="cinema-title"><h3>${esc(cinema?.name || list[0].cinema_name)}</h3><span class="badge">${esc(screenName(list[0].screen_type))}</span></div><div class="cinema-address">${icon("pin")}${esc(cinema?.address || "Beijing")}</div><div class="session-list">${list.map((s) => `<a class="session-button" href="${seatLink(s, source)}" aria-label="${esc(timeOnly(s.starts_at))} at ${esc(cinema?.name || s.cinema_name)}, choose seats"><span class="session-time">${timeOnly(s.starts_at)}</span><span class="session-price">${money(s.fares.find((f) => f.fare_type === "STANDARD")?.price_minor || s.fares[0]?.price_minor)}</span><span class="session-end">Ends ${timeOnly(s.ends_at)}</span><span class="session-screen">${esc(screenName(s.screen_type))} · ${esc(s.screen_name)}</span><span class="session-availability">${icon("check")}${s.suggestion.adjacent ? "Seats together available" : "Separate seats suggested"} · ${s.available_count} left</span></a>`).join("")}</div></div>`;
+          return `<div class="cinema-session"><div class="cinema-title"><h3>${esc(cinema?.name || list[0].cinema_name)}</h3><span class="badge">${esc(screenName(list[0].screen_type))}</span></div><div class="cinema-address">${icon("pin")}${esc(cinema?.address || "Beijing")}</div><div class="session-list">${list.map((s) => sessionCard(s, cinema, source, fareType)).join("")}</div></div>`;
         })
         .join("")}</section>`;
     })
@@ -161,10 +192,9 @@ export async function renderDiscover(ctx) {
     delete f.genre_id;
   }
   const query = new URLSearchParams(f);
+  if (source) query.set("exclude_screening_id", source.screening_id);
   const data = await api.request("/screenings?" + query);
-  const items = source
-    ? data.items.filter((s) => s.id !== source.screening_id)
-    : data.items;
+  const { items } = data;
   const dates = [
     ...new Set([
       beijingDate(),
@@ -177,7 +207,10 @@ export async function renderDiscover(ctx) {
     .slice(0, 6);
   const catalogue = !source && !params.toString() ? renderCatalogue(bootstrap, f) : "";
   const headingTag = catalogue ? "h2" : "h1";
-  root.innerHTML = `${catalogue}<div class="page-heading showtimes-heading"><div><p class="eyebrow">${source ? "A CHANGE OF PLANS" : "ON THE BIG SCREEN · BEIJING"}</p><${headingTag}>${source ? "Find your next screening." : "Find your next screening"}</${headingTag}><p class="muted">${source ? "Choose a new time. Your current tickets stay valid until the change is confirmed." : "The right film. Your favourite cinema. A seat for everyone."}</p></div><span class="live-note"><span class="live-dot"></span>Live seat availability · Beijing time</span></div>${source ? notice(`Rescheduling ${source.film_title} at ${source.cinema_name} · ${source.tickets.length} ticket(s). Same film, cinema and fare mix; fees are confirmed before payment.`) : ""}<form id="search-form" class="search-panel">${fields(bootstrap, f, source)}</form><div class="quick-dates" aria-label="Choose screening date">${dates.map((d) => `<button type="button" class="date-chip ${d === f.date ? "active" : ""}" data-date="${esc(d)}" aria-pressed="${d === f.date}">${dateLabel(d)}${dateLabel(d) !== shortDate(d) ? ` <span class="muted">${shortDate(d)}</span>` : ""}</button>`).join("")}</div><div class="results-heading"><h2>${source ? "Choose a new time" : "Find your screening"}</h2><p>${items.length ? `${data.total}${source ? " total" : ""} screenings` : "No matches"} · ${shortDate(f.date)} · ${Number(f.party_size)} ${Number(f.party_size) === 1 ? "person" : "people"}</p></div><div class="browse-grid"><div class="screening-results">${items.length ? renderGroups(items, bootstrap, source) : empty("No screenings match these plans.", "Try another date or adjust your filters. We keep your chosen film, cinema and group size exactly as requested.")}${
+  const resultCount = data.total
+    ? `${data.total}${source ? " alternative" : ""} screening${data.total === 1 ? "" : "s"}`
+    : "No matches";
+  root.innerHTML = `${catalogue}<div class="page-heading showtimes-heading"><div><p class="eyebrow">${source ? "A CHANGE OF PLANS" : "ON THE BIG SCREEN · BEIJING"}</p><${headingTag}>${source ? "Find your next screening." : "Find your next screening"}</${headingTag}><p class="muted">${source ? "Choose a new time. Your current tickets stay valid until the change is confirmed." : "The right film. Your favourite cinema. A seat for everyone."}</p></div><span class="live-note"><span class="live-dot"></span>Live seat availability · Beijing time</span></div>${source ? notice(`Rescheduling ${source.film_title} at ${source.cinema_name} · ${source.tickets.length} ticket(s). Same film, cinema and fare mix; fees are confirmed before payment.`) : ""}<form id="search-form" class="search-panel">${fields(bootstrap, f, source)}</form><div class="quick-dates" aria-label="Choose screening date">${dates.map((d) => `<button type="button" class="date-chip ${d === f.date ? "active" : ""}" data-date="${esc(d)}" aria-pressed="${d === f.date}">${dateLabel(d)}${dateLabel(d) !== shortDate(d) ? ` <span class="muted">${shortDate(d)}</span>` : ""}</button>`).join("")}</div><div class="results-heading"><h2>${source ? "Choose a new time" : "Find your screening"}</h2><p>${resultCount} · ${shortDate(f.date)} · ${Number(f.party_size)} ${Number(f.party_size) === 1 ? "person" : "people"}</p></div><div class="browse-grid"><div class="screening-results">${items.length ? renderGroups(items, bootstrap, source, f.fare_type) : empty("No screenings match these plans.", "Try another date or adjust your filters. We keep your chosen film, cinema and group size exactly as requested.")}${
     !items.length && bootstrap.available_dates.length
       ? `<div class="notice">Upcoming screening dates: <div class="chips" style="margin-top:10px">${bootstrap.available_dates
           .slice(0, 6)
@@ -191,7 +224,9 @@ export async function renderDiscover(ctx) {
   const form = root.querySelector("#search-form");
   bindCinemaFilter(form, bootstrap, source);
   const go = (changes = {}) => {
+    if (!form.reportValidity()) return;
     const next = { ...formFilters(form), ...changes };
+    if (f.page_size) next.page_size = f.page_size;
     if (source) next.source_booking_id = source.id;
     navigate("#/discover?" + new URLSearchParams(next));
   };

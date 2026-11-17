@@ -178,11 +178,12 @@ export async function renderSeats(ctx, sid) {
   function selectedSeats() {
     return map.seats.filter((seat) => state.selected.has(seat.id));
   }
+  const searchFare = !state.source && params.get("fare_type") === "student" ? "STUDENT" : "STANDARD";
   function tickets() {
     const original = state.source?.tickets || [];
     return selectedSeats().map((seat, i) => ({
       seat_id: seat.id,
-      fare_type: state.fares[seat.id] || original[i]?.fare_type || "STANDARD",
+      fare_type: state.fares[seat.id] || original[i]?.fare_type || searchFare,
     }));
   }
   function save() {
@@ -509,7 +510,7 @@ export async function renderSeats(ctx, sid) {
             0),
         0,
       );
-      return `<div class="summary-line"><span>Selected</span><strong>${selected} / ${state.target} seats</strong></div><div class="summary-line summary-total"><span>Face price estimate</span><strong>${money(ticketTotal)}</strong></div><p class="fine-print">Choose ticket types and an eligible coupon at the next step. Any change fee is quoted before confirmation.</p>${!onSale() ? '<button class="button wide" id="create-hold" disabled>Booking closed</button>' : !user ? `<a class="button wide" href="#/login?next=${encodeURIComponent("#/seats/" + sid + "?" + new URLSearchParams({ party_size: String(state.target), seat_ids: [...state.selected].join(","), ...(state.source ? { source_booking_id: state.source.id } : {}), ...(params.get("from") === "assistant" ? { from: "assistant" } : {}) }))}">Sign in to hold seats ${icon("arrow")}</a>` : !customer ? `<p class="notice">Customer accounts book here. For assisted sales, open the cinema workspace.</p><a class="button wide" href="${counterSalesUrl}">Open counter sales</a>` : `<button class="button wide" id="create-hold" ${selected !== state.target ? "disabled" : ""}>Hold ${selected || "your"} ${selected === 1 ? "seat" : "seats"} ${icon("arrow")}</button>`}<p class="fine-print">A hold lasts up to 5 minutes. Browsing and selecting do not reserve a seat.</p>`;
+      return `<div class="summary-line"><span>Selected</span><strong>${selected} / ${state.target} seats</strong></div><div class="summary-line summary-total"><span>Face price estimate</span><strong>${money(ticketTotal)}</strong></div><p class="fine-print">Choose ticket types and an eligible coupon at the next step. Any change fee is quoted before confirmation.</p>${!onSale() ? '<button class="button wide" id="create-hold" disabled>Booking closed</button>' : !user ? `<a class="button wide" href="#/login?next=${encodeURIComponent("#/seats/" + sid + "?" + new URLSearchParams({ party_size: String(state.target), seat_ids: [...state.selected].join(","), ...(state.source ? { source_booking_id: state.source.id } : {}), ...(searchFare === "STUDENT" ? { fare_type: "student" } : {}), ...(params.get("from") === "assistant" ? { from: "assistant" } : {}) }))}">Sign in to hold seats ${icon("arrow")}</a>` : !customer ? `<p class="notice">Customer accounts book here. For assisted sales, open the cinema workspace.</p><a class="button wide" href="${counterSalesUrl}">Open counter sales</a>` : `<button class="button wide" id="create-hold" ${selected !== state.target ? "disabled" : ""}>Hold ${selected || "your"} ${selected === 1 ? "seat" : "seats"} ${icon("arrow")}</button>`}<p class="fine-print">A hold lasts up to 5 minutes. Browsing and selecting do not reserve a seat.</p>`;
     }
     return `<form id="quote-form"><div class="fare-choices">${tickets()
       .map((t) => {
