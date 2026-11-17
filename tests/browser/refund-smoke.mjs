@@ -77,12 +77,14 @@ try {
   assert.equal(wallet.balance_minor,receipt.balance_minor+receipt.net_ticket_minor);
   const after=await api(`/screenings/${sid}/seats`);
   for(const seat of seats) assert.equal(after.seats.find(s=>s.id===seat.id).state,'AVAILABLE');
-  assert.equal(await refundButton.count(),0);
+  assert.ok(await refundButton.isDisabled());
+  assert.equal(await page.locator(`[id="refund-reason-${receipt.booking_id}"]`).innerText(), 'This booking has already been refunded.');
   await page.screenshot({path:new URL('./results/refund-completed.png',import.meta.url).pathname});
   console.log('PASS lost response retries with same key, credits once, releases all seats and invalidates tickets');
   await page.reload();
   await page.getByRole('heading',{name:'Tickets cancelled · seats released'}).waitFor();
-  assert.equal(await refundButton.count(),0);
+  assert.ok(await refundButton.isDisabled());
+  assert.equal(await page.locator(`[id="refund-reason-${receipt.booking_id}"]`).innerText(), 'This booking has already been refunded.');
   await page.goto(base+'/#/account?tab=refunds');
   await page.getByText(/Your ticket refund: net ticket value/).first().waitFor();
   console.log('PASS refund receipt survives reload and appears in refund history');

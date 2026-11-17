@@ -297,3 +297,33 @@
 .account-refund-amounts, .account-refund-receipt { padding: 20px; border-radius: 12px; background: var(--bg, #f6f7fa); }
 .account-refund-total { border-top: 1px solid var(--border, #e6e6ed); padding-top: 16px; margin-top: 12px; font-size: 1.1rem; }
 .account-refund-receipt h3 { margin-top: 0; }
+
+.account-page .account-refund-actions {
+  max-width: 32rem;
+  text-align: right;
+}
+.account-page .account-refund-actions .actions {
+  justify-content: flex-end;
+}
+.account-page .account-refund-reason {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.account-page [data-action="refund-booking"]:disabled {
+  background: #ededed;
+  color: #707070;
+  border-color: #d6d6d6;
+  box-shadow: none;
+  opacity: 1;
+  cursor: not-allowed;
+}
+@media (max-width: 640px) {
+  .account-page .account-refund-actions {
+    width: 100%;
+    text-align: left;
+  }
+  .account-page .account-refund-actions .actions {
+    justify-content: flex-start;
+  }
+}

@@ -83,6 +83,28 @@ function refundSummary(refunds = []) {
     .join("");
 }
 
+function refundDisabledReason(booking, current = Date.now()) {
+  if (booking.status === "CUSTOMER_CANCELLED")
+    return "This booking has already been refunded.";
+  if (booking.status === "CINEMA_CANCELLED")
+    return "Cancelled by the cinema. Check Refunds for your refund status.";
+  if (booking.status === "RESCHEDULED")
+    return "This booking was rescheduled. Open your new booking to request a refund.";
+  if (booking.status !== "CONFIRMED")
+    return "This booking is not eligible for a refund.";
+  const start = Date.parse(booking.starts_at);
+  const end = Date.parse(booking.ends_at);
+  if (!Number.isFinite(start))
+    return "Screening time is unavailable. Refresh to check refund eligibility.";
+  if (Number.isFinite(end) && end <= current)
+    return "This screening has ended. Refunds are closed.";
+  if (start <= current)
+    return "This screening has already started. Refunds are closed.";
+  if (start - current < 30 * 60 * 1000)
+    return "Less than 30 minutes to showtime. Refunds are closed.";
+  return "";
+}
+
 function bookingDetails(b) {
   const coupon = b.compensation_coupon;
   const cancellation = b.cancellation;
@@ -179,6 +201,7 @@ export async function renderAccount(ctx) {
       start - Date.now() >= 30 * 60 * 1000;
     const ended =
       b.status === "CONFIRMED" && Number.isFinite(start) && start <= Date.now();
+    const refundReason = refundDisabledReason(b);
     const open = String(selectedBooking || "") === String(b.id);
     const partySize = Number(b.ticket_count ?? b.tickets?.length ?? 0);
     return `<article class="panel" data-booking="${esc(b.id)}">
@@ -190,7 +213,10 @@ export async function renderAccount(ctx) {
         ${datum("Net ticket value", `<strong>${money(b.net_ticket_minor)}</strong>`)}
       </div>
       <div class="toolbar"><span class="muted">Booking · ${esc(shortId(b.id))}${Number(b.change_no) ? ` · ${Number(b.change_no)} ${Number(b.change_no) === 1 ? "change" : "changes"}` : ""}</span>
-        ${mayChange ? `<div class="actions"><a class="button secondary" href="#/discover?source_booking_id=${encodeURIComponent(b.id)}">Reschedule party</a><button type="button" class="button secondary" data-action="refund-booking" data-id="${esc(b.id)}">Refund tickets</button></div>` : b.status === "CONFIRMED" ? '<span class="muted">Changes and refunds close 30 minutes before the screening</span>' : ""}
+        <div class="account-refund-actions"><div class="actions">
+          ${mayChange ? `<a class="button secondary" href="#/discover?source_booking_id=${encodeURIComponent(b.id)}">Reschedule party</a>` : ""}
+          <button type="button" class="button secondary" data-action="refund-booking" data-id="${esc(b.id)}" data-booking-status="${esc(b.status)}" data-starts-at="${esc(b.starts_at || "")}" data-ends-at="${esc(b.ends_at || "")}" aria-describedby="refund-reason-${esc(b.id)}" ${refundReason ? "disabled" : ""}>Refund tickets</button>
+        </div><p id="refund-reason-${esc(b.id)}" class="muted account-refund-reason" data-refund-reason aria-live="polite" ${refundReason ? "" : "hidden"}>${esc(refundReason)}</p></div>
       </div>
       <details ${open ? "open" : ""} data-order-details="${esc(b.id)}"><summary class="button ghost">Seats, fees & compensation</summary><div class="stack" data-detail-content="${esc(b.id)}">${b.tickets ? bookingDetails(b) : '<p class="muted">Open to load full booking details.</p>'}</div></details>
     </article>`;
@@ -260,6 +286,17 @@ export async function renderAccount(ctx) {
 
   function tick() {
     if (!alive) return;
+    root.querySelectorAll('[data-action="refund-booking"]').forEach((button) => {
+      const reason = refundDisabledReason({
+        status: button.dataset.bookingStatus,
+        starts_at: button.dataset.startsAt,
+        ends_at: button.dataset.endsAt,
+      });
+      button.disabled = Boolean(reason);
+      const hint = button.closest(".account-refund-actions").querySelector("[data-refund-reason]");
+      if (hint.textContent !== reason) hint.textContent = reason;
+      hint.hidden = !reason;
+    });
     root.querySelectorAll("[data-expires]").forEach((card) => {
       const remain = Math.max(
         0,
