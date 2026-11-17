@@ -1,4 +1,5 @@
 import { esc, money, dateTime, empty, notice } from "./ui.js";
+import { openTicketCard } from "./ticket-card.js";
 
 const PAGE_SIZE = 8;
 const TABS = [
@@ -141,6 +142,7 @@ export async function renderAccount(ctx) {
   let alive = true;
   let timer = null;
   let dialog = null;
+  let closeTicket = null;
   let version = 0;
   function cleanup() {
     alive = false;
@@ -148,6 +150,7 @@ export async function renderAccount(ctx) {
     lifecycle.abort();
     clearInterval(timer);
     dialog?.remove();
+    closeTicket?.();
   }
   // Cancel this view immediately when navigation starts, even while its initial
   // read is pending and the router has not received our cleanup callback yet.
@@ -214,6 +217,7 @@ export async function renderAccount(ctx) {
       </div>
       <div class="toolbar"><span class="muted">Booking · ${esc(shortId(b.id))}${Number(b.change_no) ? ` · ${Number(b.change_no)} ${Number(b.change_no) === 1 ? "change" : "changes"}` : ""}</span>
         <div class="account-refund-actions"><div class="actions">
+          <button type="button" class="button" data-action="view-ticket" data-id="${esc(b.id)}">View ticket</button>
           ${mayChange ? `<a class="button secondary" href="#/discover?source_booking_id=${encodeURIComponent(b.id)}">Reschedule party</a>` : ""}
           <button type="button" class="button secondary" data-action="refund-booking" data-id="${esc(b.id)}" data-booking-status="${esc(b.status)}" data-starts-at="${esc(b.starts_at || "")}" data-ends-at="${esc(b.ends_at || "")}" aria-describedby="refund-reason-${esc(b.id)}" ${refundReason ? "disabled" : ""}>Refund tickets</button>
         </div><p id="refund-reason-${esc(b.id)}" class="muted account-refund-reason" data-refund-reason aria-live="polite" ${refundReason ? "" : "hidden"}>${esc(refundReason)}</p></div>
@@ -507,6 +511,11 @@ export async function renderAccount(ctx) {
     async (event) => {
       const button = event.target.closest("[data-action]");
       if (!button || !root.contains(button) || button.disabled) return;
+      if (button.dataset.action === "view-ticket") {
+        closeTicket?.();
+        closeTicket = openTicketCard(api, button.dataset.id, button);
+        return;
+      }
       if (button.dataset.action === "refresh") {
         button.disabled = true;
         await load();

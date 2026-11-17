@@ -8,6 +8,7 @@ import {
 import { createAssistantWidget } from "./assistant-widget.js";
 import { renderSeats } from "./seats.js";
 import { renderAccount } from "./account.js";
+import { renderTicketPage } from "./ticket-card.js";
 import { renderOperations } from "./operations.js";
 import { renderReviews, renderFilmReviews, renderDiscussion } from "./community.js";
 
@@ -120,7 +121,7 @@ async function route() {
     refresh,
     route,
   };
-  const guarded = path.startsWith("/account") || path.startsWith("/operations");
+  const guarded = path.startsWith("/account") || path.startsWith("/operations") || path.startsWith("/ticket/");
   if (guarded && !user) {
     navigate("#/login?next=" + encodeURIComponent("#" + hash));
     return;
@@ -138,6 +139,7 @@ async function route() {
     else if (path.startsWith("/seats/"))
       dispose = await renderSeats(ctx, path.split("/")[2]);
     else if (path === "/account") dispose = await renderAccount(ctx);
+    else if (path.startsWith("/ticket/")) dispose = renderTicketPage(ctx, path.split("/")[2]);
     else if (path === "/operations") dispose = await renderOperations(ctx);
     else if (path === "/login" || path === "/register")
       renderAuth(ctx, path === "/register");
