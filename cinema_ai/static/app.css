@@ -7,3 +7,7 @@
 
 .intro-note p,.search-footnote p{white-space:pre-line}
 .layout-viewport{overflow:auto;max-height:55vh;padding:18px 0}.physical-layout{display:grid;width:max-content;margin:auto;gap:18px;grid-template-areas:"screen" "seats"}.physical-screen{grid-area:screen;text-align:center;align-content:center;color:#819574;border-top:4px solid #94a787;border-radius:35%;font-size:10px;letter-spacing:3px;padding:6px}.physical-seats{grid-area:seats;position:relative}.physical-seats .seat{position:absolute;width:32px;height:30px}.physical-layout.screen-bottom{grid-template-areas:"seats" "screen"}.screen-bottom .physical-screen{border-top:0;border-bottom:4px solid #94a787}.physical-layout.screen-left{grid-template-areas:"screen seats"}.screen-left .physical-screen{writing-mode:vertical-rl;border-top:0;border-left:4px solid #94a787}.physical-layout.screen-right{grid-template-areas:"seats screen"}.screen-right .physical-screen{writing-mode:vertical-rl;border-top:0;border-right:4px solid #94a787}
+
+.lang-switch{display:inline-flex;align-items:center;border:1px solid #cbd3c7;border-radius:40px;overflow:hidden;background:#fff}
+.lang-switch .language-button{border:0;border-radius:0;min-width:4.5rem;justify-content:center}
+.lang-switch .language-button.is-active{background:var(--ink);color:var(--paper)}
