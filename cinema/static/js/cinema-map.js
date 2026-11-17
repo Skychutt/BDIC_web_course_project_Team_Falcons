@@ -1,5 +1,4 @@
 import { esc, icon, options, empty } from "./ui.js";
-import { getLanguage, setLanguage } from "./locale.js";
 import { orderedCinemas } from "./geo.js";
 import { createMapFrame, locateDevice } from "./amap.js";
 
@@ -108,7 +107,7 @@ export async function renderCinemaMap(ctx) {
   const { root, api, bootstrap } = ctx;
   let config;
   try { config = await api.request("/maps/config"); } catch { config = { enabled: false }; }
-  let language = getLanguage(), district = "", nearest = false, position = null, address = null, accuracy = null;
+  let language = "en", district = "", nearest = false, position = null, address = null, accuracy = null;
   let activeCinemaId = null, routeInfo = null;
   let locate;
   let map, disposed = false, running = false, expireTimer, requestVersion = 0;
@@ -241,7 +240,10 @@ export async function renderCinemaMap(ctx) {
     root.lang = language === "zh" ? "zh-CN" : "en";
     el("language").onclick = () => {
       if (running) return;
-      setLanguage(language === "en" ? "zh" : "en");
+      const hadMap = !!map;
+      activeCinemaId = routeInfo = null;
+      language = language === "en" ? "zh" : "en"; mount();
+      if (hadMap) run(async () => { await ensureMap(); if (position) { map.focus(position, 13); status = "located"; } });
     };
     el("load").onclick = () => run(async () => { status = "loading"; message(); await ensureMap(); status = position ? "located" : readyStatus(); });
     el("locate").onclick = () => run(locate);
