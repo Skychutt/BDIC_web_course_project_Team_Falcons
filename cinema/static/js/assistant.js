@@ -1,4 +1,5 @@
 import { esc, money, icon, notice, empty } from "./ui.js";
+import { getLanguage, onLanguage, setLanguage } from "./locale.js";
 import { assistantDate, genreLabel, statusLabel, localizeResult, selectedFilmTitle, replyLanguage } from "./assistant-locale.js";
 
 const copy = {
@@ -83,8 +84,12 @@ export function businessLink(kind, id) {
 export async function mountConversation(ctx, panel, results) {
   const { api } = ctx;
   const floating = Boolean(ctx.floating);
-  let language = "en";
-  try { language = localStorage.getItem("falcons-language") === "zh" ? "zh" : "en"; } catch {}
+  let language = getLanguage();
+  const stopLanguage = onLanguage((next) => {
+    if (!alive || next === language) return;
+    language = next;
+    labels();
+  });
   let session, filters, conditionState = {}, taskKind, working = false, alive = true, currentCards = [], currentResult = null;
   const controller = ctx.controller || new AbortController();
   controller.signal.addEventListener("abort", () => { alive = false; }, { once: true });
@@ -234,8 +239,8 @@ export async function mountConversation(ctx, panel, results) {
   }
   function setState(data) {
     if (data.locale && data.locale !== language) {
-      language = data.locale;
-      try { localStorage.setItem("falcons-language", language); } catch {}
+      language = data.locale === "zh" ? "zh" : "en";
+      setLanguage(language);
       labels();
     }
     filters = data.filters;
@@ -259,7 +264,7 @@ export async function mountConversation(ctx, panel, results) {
     text = text.trim();
     if (working || ctx.assistantBusy || !text || text.length > 2000 || !session) return;
     language = replyLanguage(text, language);
-    try { localStorage.setItem("falcons-language", language); } catch {}
+    setLanguage(language);
     labels();
     if (floating) { el("ai-welcome").hidden = true; results.hidden = true; }
     setWorking(true); message("you", text); el("ai-message").value = ""; el("ai-count").textContent = "0 / 2000";
@@ -290,10 +295,10 @@ export async function mountConversation(ctx, panel, results) {
         el("chat-form").hidden = true;
       } else panel.innerHTML = notice(t("failure"), "error");
     }
-    return () => controller.abort();
+    return () => { alive = false; stopLanguage(); controller.abort(); };
   }
   finally { if (alive && el("ai-transcript")) setWorking(false); }
-  if (!alive) return () => controller.abort();
+  if (!alive) return () => { alive = false; stopLanguage(); controller.abort(); };
   el("chat-form").onsubmit = (event) => { event.preventDefault(); send(el("ai-message").value); };
   el("ai-message").oninput = () => { el("ai-count").textContent = `${el("ai-message").value.length} / 2000`; };
   el("ai-message").onkeydown = (event) => { if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); el("chat-form").requestSubmit(); } };
@@ -324,5 +329,5 @@ export async function mountConversation(ctx, panel, results) {
     } catch (error) { await failure(error); }
     finally { if (alive) setWorking(false); }
   };
-  return () => { alive = false; controller.abort(); };
+  return () => { alive = false; stopLanguage(); controller.abort(); };
 }
