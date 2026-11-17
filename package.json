@@ -6,6 +6,7 @@
     "check:community": "node tests/browser/community-smoke.mjs",
     "check:customer": "node tests/browser/customer-smoke.mjs",
     "check:account": "node tests/browser/account-smoke.mjs",
+    "check:ticket": "node tests/browser/ticket-smoke.mjs",
     "check:operations": "node tests/browser/operations-smoke.mjs",
     "check:counter": "node tests/browser/counter-smoke.mjs",
     "check:hold-boundary": "node tests/browser/hold-boundary-smoke.mjs",
