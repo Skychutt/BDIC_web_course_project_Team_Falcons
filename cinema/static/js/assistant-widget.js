@@ -1,5 +1,6 @@
 import { mountConversation } from "./assistant.js";
 import { icon } from "./ui.js";
+import { getLanguage, onLanguage } from "./locale.js";
 
 // One instance lives beside <main>, so page changes never discard the conversation or draft.
 // Nothing is persisted in browser storage except the existing language preference.
@@ -14,11 +15,11 @@ export function createAssistantWidget(api) {
   const launcher = host.querySelector(".ai-launcher");
   const tooltip = host.querySelector(".ai-launcher-tooltip");
   const unread = host.querySelector(".ai-launcher-unread");
-  let opened = false, mounted = false, controller, identity = api.userId, language = "en";
+  let opened = false, mounted = false, controller, identity = api.userId, language = getLanguage();
   let previousFocus = null;
   const compact = window.matchMedia("(max-width: 600px)");
   const background = [...document.querySelectorAll("#site-header, #main, .site-footer, .skip-link")];
-  try { language = localStorage.getItem("falcons-language") === "zh" ? "zh" : "en"; } catch {}
+  onLanguage((next) => labels(next));
 
   function labels(value = language) {
     language = value;
