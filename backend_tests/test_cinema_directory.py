@@ -41,7 +41,7 @@ def test_six_cinemas_keep_identifiers_and_existing_programme(env, tmp_path):
             ids = in_ids([x["id"] for x in before])
             assert rows(c, f"SELECT * FROM {table} WHERE id IN ({ids}) ORDER BY id") == before
         assert len(read_halls(c)) == 6
-        assert one(c, "SELECT COUNT(*) n FROM seats")["n"] == 432
+        assert one(c, "SELECT COUNT(*) n FROM seats")["n"] == 1064
         assert one(c, "SELECT COUNT(*) n FROM screenings")["n"] == 252
         assert one(c, "SELECT COUNT(*) n FROM screenings a JOIN screenings b ON a.screen_id=b.screen_id AND a.id<b.id AND a.starts_at<b.occupied_until AND b.starts_at<a.occupied_until")["n"] == 0
     repeated = apply_directory(env, tmp_path / "repeat")

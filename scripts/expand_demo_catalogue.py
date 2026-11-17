@@ -26,6 +26,7 @@ from werkzeug.security import generate_password_hash
 
 from cinema.core import BEIJING, Problem, get, ins, make_engine, one, require, rows, upd, wire
 from cinema.management import insert_programme, validate_programme
+from cinema.seating import insert_auditorium
 from cinema.rating_snapshots import import_snapshots, validate_snapshot
 from scripts.import_film_programme import ensure_films, load_programme, write_private_json
 
@@ -124,16 +125,12 @@ def ensure_hall(c, spec, at):
         get(c, "screens", screen["id"], True)
         require(screen["screen_type"] == spec["screen_type"], "HALL_CHANGED", "Demo hall type changed; review before importing")
         layouts = rows(c, "SELECT * FROM layouts WHERE screen_id=:s ORDER BY version_no", s=screen["id"])
-        require(len(layouts) == 1, "HALL_CHANGED", "Demo layout changed; review before importing")
-        lid = layouts[0]["id"]
+        require(bool(layouts), "HALL_CHANGED", "Demo hall has no layout")
+        lid = layouts[-1]["id"]
     else:
         sid = ins(c, "screens", cinema_id=cinema["id"], name=spec["screen_name"], screen_type=spec["screen_type"])
         screen = get(c, "screens", sid)
-        lid = ins(c, "layouts", screen_id=sid, version_no=1, screen_direction="TOP", row_count=12, created_at=at)
-        for row in range(1, 13):
-            for seat in range(1, 7):
-                ins(c, "seats", layout_id=lid, row_no=row, seat_no=seat, aisle_segment=1,
-                    segment_position=seat, map_x=seat - 1, map_y=row - 1)
+        lid, _ = insert_auditorium(c, sid, spec["screen_type"], at)
     return dict(screen_id=screen["id"], layout_id=lid, manager_user_id=cinema["manager_user_id"])
 
 
@@ -175,7 +172,7 @@ def expand_catalogue(engine, manifest, start, days, at, output_dir):
                     fid = film_ids[slot["key"]]
                     existing = unique(c, "screenings", screen_id=hall["screen_id"], starts_at=slot["starts_at"])
                     if existing:
-                        require(existing["film_id"] == fid and existing["layout_id"] == hall["layout_id"]
+                        require(existing["film_id"] == fid
                                 and all(existing[k] == slot[k] for k in ("ends_at", "occupied_until")),
                                 "SLOT_CHANGED", "A demo slot was changed; review before importing")
                         # Preserve staff cancellations, price edits and booking history.

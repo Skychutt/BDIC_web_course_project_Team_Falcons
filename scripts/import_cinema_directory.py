@@ -24,6 +24,7 @@ from werkzeug.security import generate_password_hash
 
 from cinema.core import BEIJING, Problem, get, ins, make_engine, one, require, rows, upd, wire
 from cinema.management import validate_programme, insert_programme
+from cinema.seating import insert_auditorium
 from scripts.import_film_programme import load_programme, plan_programme, write_private_json
 
 
@@ -88,12 +89,7 @@ def import_directory(engine, directory, start, days, at, output_dir):
                 upd(c, "cinemas", cid, manager_user_id=uid, is_active=True)
                 accounts.append(dict(cinema_id=cid, cinema_name=item["name"], email=email, password=password))
                 sid = ins(c, "screens", cinema_id=cid, name="Demo Screen 1", screen_type=item["demo_screen_type"])
-                lid = ins(c, "layouts", screen_id=sid, version_no=1, screen_direction="TOP", row_count=12, created_at=at)
-                # Same 72-seat demonstration layout as the retained halls.
-                for row in range(1, 13):
-                    for seat in range(1, 7):
-                        ins(c, "seats", layout_id=lid, row_no=row, seat_no=seat, aisle_segment=1,
-                            segment_position=seat, map_x=seat-1, map_y=row-1)
+                lid, _ = insert_auditorium(c, sid, item["demo_screen_type"], at)
                 new_halls.append(dict(screen_id=sid, layout_id=lid, cinema_id=cid,
                                       cinema_name=item["name"], screen_type=item["demo_screen_type"], manager_user_id=uid))
             updated.append(dict(cinema_id=cid, name=item["name"], district=item["district_name"], created=existing is None))

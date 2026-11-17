@@ -171,8 +171,9 @@ def import_programme(engine, programme, start_date, days, at, backup_dir):
             match = rows(c, """SELECT * FROM screenings WHERE screen_id=:s AND starts_at=:t
                             ORDER BY id FOR UPDATE""", s=slot["screen_id"], t=slot["starts_at"])
             if match:
+                # Layout versions are immutable. A booked existing slot may still
+                # use an older version of this same physical auditorium.
                 require(len(match) == 1 and match[0]["film_id"] == fid and
-                        match[0]["layout_id"] == slot["layout_id"] and
                         match[0]["status"] == "PUBLISHED" and
                         match[0]["ends_at"] == slot["ends_at"] and
                         match[0]["occupied_until"] == slot["occupied_until"],

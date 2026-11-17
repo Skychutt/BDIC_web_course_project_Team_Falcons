@@ -3,6 +3,7 @@
 from datetime import timedelta
 from werkzeug.security import generate_password_hash
 from .core import *
+from .seating import insert_auditorium
 
 
 def seed(password):
@@ -116,32 +117,8 @@ def seed(password):
                 name="Screen 1",
                 screen_type=["STANDARD", "IMAX", "DOLBY_CINEMA"][index - 1],
             )
-            lid = ins(
-                c,
-                "layouts",
-                screen_id=screen,
-                version_no=1,
-                screen_direction="TOP",
-                row_count=12,
-                created_at=at,
-            )
+            lid, seats = insert_auditorium(c, screen, ["STANDARD", "IMAX", "DOLBY_CINEMA"][index - 1], at)
             result["layouts"].append(lid)
-            seats = []
-            for row in range(1, 13):
-                for number in range(1, 7):
-                    seats.append(
-                        ins(
-                            c,
-                            "seats",
-                            layout_id=lid,
-                            row_no=row,
-                            seat_no=number,
-                            aisle_segment=1,
-                            segment_position=number,
-                            map_x=number - 1,
-                            map_y=row - 1,
-                        )
-                    )
             result["seats"][str(lid)] = seats
             for offset, price in [(3, 10000), (8, 10000), (25, 8000)]:
                 starts = at + timedelta(hours=offset)

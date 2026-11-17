@@ -7,6 +7,7 @@ import pytest
 
 from cinema import booking, catalog
 from cinema.core import Problem, db, get, in_ids, one, rows, upd
+from cinema.seating import insert_auditorium
 from cinema_ai.backend import BackendCatalog, BackendRepository, backend_clock
 from cinema_ai.domain import Filters
 from backend_tests.test_community import client_for
@@ -35,7 +36,7 @@ def test_expansion_is_additive_repeatable_and_reaches_public_features(env, tmp_p
                   ("films", "cinemas", "screens", "layouts", "seats", "users", "wallets", "screenings", "fares", "bookings", "tickets")}
     manifest = load_expansion()
     result = expand_catalogue(db(), manifest, date(2026, 10, 24), 2, env["clock"][0], tmp_path / "expansion")
-    assert result["added"] == dict(films=5, cinemas=3, screens=12, seats=864, screenings=120)
+    assert result["added"] == dict(films=5, cinemas=3, screens=12, seats=2204, screenings=120)
     assert Path(result["private_accounts_file"]).stat().st_mode & 0o777 == 0o600
     assert len(json.loads(Path(result["private_accounts_file"]).read_text())["accounts"]) == 3
     with db().connect() as c:
@@ -54,7 +55,7 @@ def test_expansion_is_additive_repeatable_and_reaches_public_features(env, tmp_p
                 assert shows["items"], (cinema["name"], film["title"])
         new_show = one(c, "SELECT * FROM screenings WHERE film_id=:f ORDER BY starts_at LIMIT 1", f=new_ids["Interstellar"])
         seats = catalog.available_seats(c, new_show)
-        assert len(seats) == 72
+        assert len(seats) in {168, 300, 92}
     # New-room inventory supports the same signed hold/quote/checkout flow.
     held = booking.create_hold(customer, dict(screening_id=new_show["id"], seat_ids=[seats[0]["id"]]), "new-film-hold")
     quoted = booking.quote(customer, held["hold_id"], dict(tickets=[dict(seat_id=seats[0]["id"], fare_type="STANDARD")]))
@@ -82,6 +83,10 @@ def test_expansion_is_additive_repeatable_and_reaches_public_features(env, tmp_p
     with db().begin() as c:
         other = one(c, "SELECT id FROM screenings WHERE screen_id=:s AND id<>:id LIMIT 1", s=new_show["screen_id"], id=new_show["id"])
         upd(c, "screenings", other["id"], status="CANCELLED")
+    # A newer layout must not invalidate an already booked slot on its old version.
+    with db().begin() as c:
+        screen = get(c, "screens", new_show["screen_id"], True)
+        insert_auditorium(c, screen["id"], screen["screen_type"], env["clock"][0])
     repeat = expand_catalogue(db(), manifest, date(2026, 10, 24), 2, env["clock"][0], tmp_path / "repeat")
     assert all(n == 0 for n in repeat["added"].values())
     assert repeat["private_accounts_file"] is None
