@@ -496,6 +496,7 @@ export async function renderSeats(ctx, sid) {
       void lockWhile(checkPaymentResult);
   }
   async function createHold() {
+    const initialHash = location.hash;
     try {
       state.error = null;
       const h = await api.action("hold:" + sid, "/holds", {
@@ -503,6 +504,7 @@ export async function renderSeats(ctx, sid) {
         seat_ids: [...state.selected],
         source_booking_id: state.source?.id || null,
       });
+      if (!alive || location.hash !== initialHash) return;
       state.hold = { ...h, id: h.hold_id };
       state.phase = "held";
       state.quote = null;
@@ -510,9 +512,11 @@ export async function renderSeats(ctx, sid) {
       params.set("hold_id", h.hold_id);
       history.replaceState(null, "", "#/seats/" + sid + "?" + params);
       map = await api.request("/screenings/" + sid + "/seats");
+      if (!alive) return;
       render();
       toast("Your seats are on hold. Review ticket types and price.");
     } catch (e) {
+      if (!alive) return;
       state.error = e.userMessage || e.message;
       if (e.code === "SEAT_UNAVAILABLE") {
         try {
