@@ -37,15 +37,15 @@ async function allRows(api, path) {
 export async function renderSeats(ctx, sid) {
   const { root, api, user, bootstrap, params, navigate, toast } = ctx;
   let alive = true,
-    interval;
+    interval, saleTimer, renderedOnSale;
   let map = await api.request(
     "/screenings/" + encodeURIComponent(sid) + "/seats",
   );
+  let offset = new Date(map.as_of).getTime() - Date.now();
   const film =
     bootstrap.films.find((f) => f.id === map.screening.film_id) ||
     (await api.request("/films/" + map.screening.film_id));
   const cinema = bootstrap.cinemas.find((c) => c.id === map.screening.cinema_id);
-  let offset = new Date(map.as_of).getTime() - Date.now();
   const draftKey = `falcons.checkout.${user?.id || "guest"}.${sid}`;
   let draft = readDraft(draftKey);
   let checkDelay = 2000;
@@ -255,12 +255,18 @@ export async function renderSeats(ctx, sid) {
   }
   function render() {
     if (!alive) return;
+    clearTimeout(saleTimer);
     if (state.phase === "complete") {
       renderSuccess();
       return;
     }
     const s = map.screening;
-    if (!onSale() && ["choose", "held", "quoted"].includes(state.phase)) {
+    renderedOnSale = onSale();
+    if (renderedOnSale) {
+      const untilStart = Date.parse(s.starts_at) - Date.now() - offset;
+      if (untilStart <= 2147483647) saleTimer = setTimeout(tick, untilStart);
+    }
+    if (!renderedOnSale && ["choose", "held", "quoted", "expired"].includes(state.phase)) {
       if (payPending()) {
         state.phase = "recover";
         state.allowPaymentRetry = false;
@@ -284,6 +290,7 @@ export async function renderSeats(ctx, sid) {
     root.querySelectorAll("[data-seat]").forEach(
       (button) =>
         (button.onclick = () => {
+          if (!onSale()) return render();
           const id = button.dataset.seat;
           if (state.selected.has(id)) state.selected.delete(id);
           else if (state.selected.size < state.target) state.selected.add(id);
@@ -389,6 +396,7 @@ export async function renderSeats(ctx, sid) {
       .querySelector("#hold-consent-form")
       ?.addEventListener("submit", async (e) => {
         e.preventDefault();
+        if (!onSale()) return render();
         const form = e.currentTarget;
         await busy(form.querySelector("[type=submit]"), async () => {
           try {
@@ -476,7 +484,10 @@ export async function renderSeats(ctx, sid) {
       )}</div>${state.source ? '<p class="fine-print">Your original ticket mix and discount are carried forward.</p>' : `<label class="field" style="margin:18px 0"><span>Coupon</span><select id="coupon"><option value="">No coupon</option>${coupons.map((c) => `<option value="${esc(c.id)}" ${state.coupon_id === c.id ? "selected" : ""}>50% off · coupon ${esc(c.id.slice(-6))}</option>`).join("")}</select><small>Only unused coupons from this cinema apply.</small></label>`}<p class="fine-print">Student eligibility is checked at admission.</p>${state.phase === "quoted" ? `${paymentSummary()}<button class="button wide" type="button" id="pay-now">${state.quote.amount_due_minor < 0 ? "Confirm change & refund " + money(-state.quote.amount_due_minor) : state.quote.amount_due_minor === 0 ? "Confirm change — no payment" : "Pay " + money(state.quote.amount_due_minor) + (state.source ? " & change" : " & book")}${icon("arrow")}</button><p class="fine-print">${state.source ? "Only a successful change releases your old tickets." : "Payment uses your demo wallet balance."} The server verifies the current price and seat hold again.</p>` : `<button class="button wide" type="submit">Review final price ${icon("arrow")}</button>`}</form><button class="button ghost wide small" id="change-seats" style="margin-top:12px">Release hold & change seats</button>`;
   }
   function tick() {
-    if (!alive || !state.hold) return;
+    if (!alive || state.phase === "complete") return;
+    if (renderedOnSale && !onSale() && (!state.working || state.phase === "choose"))
+      return render();
+    if (!state.hold) return;
     const ms = remaining();
     const clock = root.querySelector("#countdown");
     if (clock)
@@ -496,6 +507,7 @@ export async function renderSeats(ctx, sid) {
       void lockWhile(checkPaymentResult);
   }
   async function createHold() {
+    if (!onSale()) return render();
     const initialHash = location.hash;
     try {
       state.error = null;
@@ -505,6 +517,7 @@ export async function renderSeats(ctx, sid) {
         source_booking_id: state.source?.id || null,
       });
       if (!alive || location.hash !== initialHash) return;
+      if (!onSale()) return render();
       state.hold = { ...h, id: h.hold_id };
       state.phase = "held";
       state.quote = null;
@@ -514,7 +527,7 @@ export async function renderSeats(ctx, sid) {
       map = await api.request("/screenings/" + sid + "/seats");
       if (!alive) return;
       render();
-      toast("Your seats are on hold. Review ticket types and price.");
+      if (state.phase === "held") toast("Your seats are on hold. Review ticket types and price.");
     } catch (e) {
       if (!alive) return;
       state.error = e.userMessage || e.message;
@@ -652,8 +665,11 @@ export async function renderSeats(ctx, sid) {
   }
   render();
   interval = setInterval(tick, 1000);
+  document.addEventListener("visibilitychange", tick);
   return () => {
     alive = false;
+    document.removeEventListener("visibilitychange", tick);
+    clearTimeout(saleTimer);
     clearInterval(interval);
   };
 }
