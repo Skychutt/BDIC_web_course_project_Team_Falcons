@@ -245,6 +245,23 @@ def booking_detail(bid):
         return output(catalog.booking_detail(c, bid, g.actor))
 
 
+@api.get("/bookings/<int:bid>/ticket")
+@logged
+def electronic_ticket(bid):
+    from .ticket_cards import ticket_card
+    with db().connect() as c:
+        return output(ticket_card(c, bid, g.actor, request.url_root))
+
+
+@api.get("/tickets/<token>")
+@logged
+def lookup_ticket(token):
+    from .ticket_cards import booking_from_token, ticket_card
+    bid = booking_from_token(token)
+    with db().connect() as c:
+        return output(ticket_card(c, bid, g.actor, request.url_root))
+
+
 @api.get("/me/<resource>")
 @logged
 def personal(resource):
