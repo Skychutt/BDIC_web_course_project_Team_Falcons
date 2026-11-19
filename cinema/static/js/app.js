@@ -18,8 +18,8 @@ let assistantWidget;
 let bootstrap,
   user,
   cleanup,
+  updateCurrentLanguage,
   generation = 0;
-let started = false;
 const main = document.getElementById("main");
 document.querySelector(".skip-link").addEventListener("click", (event) => {
   event.preventDefault();
@@ -64,7 +64,8 @@ function pageTitle(path) {
 
 onLanguage(() => {
   applyChrome();
-  if (started) route();
+  updateHeaderLanguage();
+  updateCurrentLanguage?.();
 });
 
 function navigate(url) {
@@ -80,18 +81,31 @@ async function refresh() {
 function header() {
   const currentPath = (location.hash || "#/discover").split("?")[0];
   const routePath = currentPath.startsWith("#/reviews/") ? "#/reviews" : currentPath;
-  const nav = (url, label) =>
-    `<a href="${url}" class="${routePath === url ? "active" : ""}" ${routePath === url ? 'aria-current="page"' : ""}>${label}</a>`;
-  const language = getLanguage();
+  const nav = (url) =>
+    `<a href="${url}" class="${routePath === url ? "active" : ""}" ${routePath === url ? 'aria-current="page"' : ""}></a>`;
   const option = (code, label) =>
-    `<button type="button" class="lang-option ${language === code ? "is-active" : ""}" data-lang="${code}" aria-pressed="${language === code}">${label}</button>`;
-  document.getElementById("site-header").innerHTML =
-    `<div class="brand-wrap"><a class="wordmark" href="#/discover" aria-label="${tx("Falcons Cinema home", "Falcons Cinema 首页")}">falcons<span>.</span></a><a class="location" href="#/cinemas" title="${tx("View map and use my location", "查看地图并使用我的位置")}">${icon("pin")} ${tx("Beijing · Map", "北京 · 地图")}</a></div><nav class="main-nav" aria-label="${tx("Main navigation", "主导航")}">${nav("#/discover", tx("Movies & showtimes", "影片与场次"))}${nav("#/cinemas", tx("Cinemas", "影院"))}${nav("#/reviews", tx("Reviews", "影评"))}${user?.role === "CUSTOMER" ? nav("#/account", tx("My tickets", "我的影票")) : ""}${user && user.role !== "CUSTOMER" ? nav("#/operations", user.role === "STAFF" ? tx("Cinema workspace", "影院工作台") : tx("Platform console", "平台控制台")) : ""}</nav><div class="header-actions"><div class="lang-switch" role="group" aria-label="${tx("Language", "语言")}">${option("zh", "中文")}${option("en", "English")}</div>${user ? `<span class="user-label" title="${esc(user.display_name)}">${esc(user.display_name)}</span><button id="logout" class="button ghost">${tx("Sign out", "退出")}</button>` : `<a class="button secondary" href="#/login">${tx("Sign in", "登录")} ${icon("arrow")}</a>`}</div>`;
-  document.querySelectorAll(".lang-option").forEach((button) => {
+    `<button type="button" class="lang-option" data-lang="${code}">${label}</button>`;
+  const siteHeader = document.getElementById("site-header");
+  siteHeader.innerHTML = `
+    <div class="brand-wrap">
+      <a class="wordmark" href="#/discover">falcons<span>.</span></a>
+      <a class="location" href="#/cinemas">${icon("pin")} <span></span></a>
+    </div>
+    <nav class="main-nav">
+      ${nav("#/discover")}${nav("#/cinemas")}${nav("#/reviews")}
+      ${user?.role === "CUSTOMER" ? nav("#/account") : user ? nav("#/operations") : ""}
+    </nav>
+    <div class="header-actions">
+      <div class="lang-switch" role="group">${option("zh", "中文")}${option("en", "English")}</div>
+      ${user ? `<span class="user-label" title="${esc(user.display_name)}">${esc(user.display_name)}</span><button id="logout" class="button ghost"></button>`
+        : `<a class="button secondary" href="#/login"><span data-sign-in-label></span> ${icon("arrow")}</a>`}
+    </div>`;
+  updateHeaderLanguage();
+  siteHeader.querySelectorAll(".lang-option").forEach((button) => {
     button.addEventListener("click", () => setLanguage(button.dataset.lang));
   });
-  document.getElementById("logout")?.addEventListener("click", async (event) =>
-    busy(event.currentTarget, async () => {
+  siteHeader.querySelector("#logout")?.addEventListener("click", async (event) => {
+    await busy(event.currentTarget, async () => {
       try {
         await api.logout();
         await refresh();
@@ -100,8 +114,38 @@ function header() {
       } catch (e) {
         toast(e.userMessage || e.message, "error");
       }
-    }),
-  );
+    });
+    updateHeaderLanguage();
+  });
+}
+
+function updateHeaderLanguage() {
+  const siteHeader = document.getElementById("site-header");
+  const link = siteHeader.querySelector(".location");
+  if (!link) return;
+  siteHeader.querySelector(".wordmark").setAttribute("aria-label", tx("Falcons Cinema home", "Falcons Cinema 首页"));
+  link.title = tx("View map and use my location", "查看地图并使用我的位置");
+  link.querySelector("span").textContent = tx("Beijing · Map", "北京 · 地图");
+  const nav = siteHeader.querySelector(".main-nav");
+  nav.setAttribute("aria-label", tx("Main navigation", "主导航"));
+  const labels = {
+    "#/discover": pageTitle("/discover"),
+    "#/cinemas": pageTitle("/cinemas"),
+    "#/reviews": tx("Reviews", "影评"),
+    "#/account": pageTitle("/account"),
+    "#/operations": user?.role === "STAFF" ? tx("Cinema workspace", "影院工作台") : tx("Platform console", "平台控制台"),
+  };
+  nav.querySelectorAll("a").forEach((a) => { a.textContent = labels[a.getAttribute("href")]; });
+  siteHeader.querySelector(".lang-switch").setAttribute("aria-label", tx("Language", "语言"));
+  siteHeader.querySelectorAll(".lang-option").forEach((button) => {
+    const active = button.dataset.lang === getLanguage();
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  const signIn = siteHeader.querySelector("[data-sign-in-label]");
+  if (signIn) signIn.textContent = tx("Sign in", "登录");
+  const logout = siteHeader.querySelector("#logout");
+  if (logout && !logout.disabled) logout.textContent = tx("Sign out", "退出");
 }
 function safeNext(params) {
   const next = params.get("next");
@@ -114,32 +158,48 @@ function safeNext(params) {
 function renderAuth(ctx, register) {
   const { root, params } = ctx;
   const next = safeNext(params);
-  root.innerHTML = `<div class="auth-layout"><section class="auth-story"><a class="wordmark" href="#/discover">falcons<span>.</span></a><div><p class="eyebrow">${tx("YOUR SEAT IN THE STORY", "你的座位，你的故事")}</p><h2>${tx("A little escape.<br>A bigger screen.", "小小逃离。<br>更大的银幕。")}</h2><p>${tx("Find your film, bring your people, and make a night of it.", "找到影片，带上同伴，把这一晚过成电影之夜。")}</p></div><span class="fine-print" style="color:#c3d1c3">${tx("Beijing cinemas. One place to book.", "北京影院。一个地方订完。")}</span></section><section class="auth-form"><p class="eyebrow">${register ? tx("JOIN THE AUDIENCE", "加入观众") : tx("WELCOME BACK", "欢迎回来")}</p><h1>${register ? tx("Create your account", "创建账户") : tx("Sign in to Falcons", "登录 Falcons")}</h1><p class="muted">${register ? tx("Your next movie night starts here.", "下一场电影从这里开始。") : tx("Your seats, tickets and plans, all together.", "座位、影票和安排，都在这里。")}</p><form id="auth-form">${register ? `<label class="field"><span>${tx("Your name", "你的名字")}</span><input name="display_name" autocomplete="name" maxlength="80" required></label>` : ""}<label class="field"><span>${tx("Email address", "邮箱")}</span><input name="email" type="email" autocomplete="email" maxlength="254" required placeholder="you@example.com"></label><label class="field"><span>${tx("Password", "密码")}</span><input name="password" type="password" autocomplete="${register ? "new-password" : "current-password"}" minlength="10" maxlength="128" required>${register ? `<small>${tx("Use 10–128 characters.", "使用 10–128 个字符。")}</small>` : ""}</label><div class="form-error"></div><button class="button wide" type="submit">${register ? tx("Create account", "创建账户") : tx("Sign in", "登录")} ${icon("arrow")}</button></form>${register ? `<p class="fine-print">${tx("Your account receives a one-time ¥1,000 demo balance. This student project uses simulated payments only.", "账户会收到一次性 ¥1,000 演示余额。本学生项目只使用模拟支付。")}</p>` : ""}<p class="auth-switch">${register ? tx("Already have an account?", "已经有账户？") : tx("New to Falcons?", "第一次来 Falcons？")} <a href="#/${register ? "login" : "register"}?next=${encodeURIComponent(next)}">${register ? tx("Sign in", "登录") : tx("Create an account", "创建账户")}</a></p></section></div>`;
-  root.querySelector("form").onsubmit = async (event) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    await busy(
-      form.querySelector("[type=submit]"),
-      async () => {
-        const values = Object.fromEntries(new FormData(form));
-        try {
-          if (register) await api.action("register", "/auth/register", values);
-          await api.login(values.email, values.password);
-          form.reset();
-          await refresh();
-          navigate(next);
-          toast(
-            register
-              ? tx("Account created. Your demo balance is ready.", "账户已创建，演示余额已到账。")
-              : tx("Welcome back.", "欢迎回来。"),
-          );
-        } catch (e) {
-          showError(form.querySelector(".form-error"), e);
-        }
-      },
-      register ? tx("Creating account…", "正在创建账户…") : tx("Signing in…", "正在登录…"),
-    );
-  };
+  let renderedLanguage;
+  function render() {
+    const previous = root.querySelector("form");
+    // Let an already submitted login finish on its existing form.
+    if (previous?.querySelector('[aria-busy="true"]')) return;
+    const draft = previous ? new FormData(previous) : null;
+    renderedLanguage = getLanguage();
+    root.innerHTML = `<div class="auth-layout"><section class="auth-story"><a class="wordmark" href="#/discover">falcons<span>.</span></a><div><p class="eyebrow">${tx("YOUR SEAT IN THE STORY", "你的座位，你的故事")}</p><h2>${tx("A little escape.<br>A bigger screen.", "小小逃离。<br>更大的银幕。")}</h2><p>${tx("Find your film, bring your people, and make a night of it.", "找到影片，带上同伴，把这一晚过成电影之夜。")}</p></div><span class="fine-print" style="color:#c3d1c3">${tx("Beijing cinemas. One place to book.", "北京影院。一个地方订完。")}</span></section><section class="auth-form"><p class="eyebrow">${register ? tx("JOIN THE AUDIENCE", "加入观众") : tx("WELCOME BACK", "欢迎回来")}</p><h1>${register ? tx("Create your account", "创建账户") : tx("Sign in to Falcons", "登录 Falcons")}</h1><p class="muted">${register ? tx("Your next movie night starts here.", "下一场电影从这里开始。") : tx("Your seats, tickets and plans, all together.", "座位、影票和安排，都在这里。")}</p><form id="auth-form">${register ? `<label class="field"><span>${tx("Your name", "你的名字")}</span><input name="display_name" autocomplete="name" maxlength="80" required></label>` : ""}<label class="field"><span>${tx("Email address", "邮箱")}</span><input name="email" type="email" autocomplete="email" maxlength="254" required placeholder="you@example.com"></label><label class="field"><span>${tx("Password", "密码")}</span><input name="password" type="password" autocomplete="${register ? "new-password" : "current-password"}" minlength="10" maxlength="128" required>${register ? `<small>${tx("Use 10–128 characters.", "使用 10–128 个字符。")}</small>` : ""}</label><div class="form-error"></div><button class="button wide" type="submit">${register ? tx("Create account", "创建账户") : tx("Sign in", "登录")} ${icon("arrow")}</button></form>${register ? `<p class="fine-print">${tx("Your account receives a one-time ¥1,000 demo balance. This student project uses simulated payments only.", "账户会收到一次性 ¥1,000 演示余额。本学生项目只使用模拟支付。")}</p>` : ""}<p class="auth-switch">${register ? tx("Already have an account?", "已经有账户？") : tx("New to Falcons?", "第一次来 Falcons？")} <a href="#/${register ? "login" : "register"}?next=${encodeURIComponent(next)}">${register ? tx("Sign in", "登录") : tx("Create an account", "创建账户")}</a></p></section></div>`;
+    const form = root.querySelector("form");
+    if (draft) {
+      for (const [name, value] of draft.entries()) form.elements[name].value = value;
+      form.querySelector(".form-error").replaceChildren(...previous.querySelector(".form-error").childNodes);
+    }
+    form.onsubmit = async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      await busy(
+        form.querySelector("[type=submit]"),
+        async () => {
+          const values = Object.fromEntries(new FormData(form));
+          try {
+            if (register) await api.action("register", "/auth/register", values);
+            await api.login(values.email, values.password);
+            form.reset();
+            await refresh();
+            navigate(next);
+            toast(
+              register
+                ? tx("Account created. Your demo balance is ready.", "账户已创建，演示余额已到账。")
+                : tx("Welcome back.", "欢迎回来。"),
+            );
+          } catch (e) {
+            showError(form.querySelector(".form-error"), e);
+          }
+        },
+        register ? tx("Creating account…", "正在创建账户…") : tx("Signing in…", "正在登录…"),
+      );
+      if (root.isConnected && renderedLanguage !== getLanguage()) render();
+    };
+  }
+  ctx.updateLanguage = render;
+  render();
 }
 async function route() {
   // Bookmarks and sign-in return URLs from the former assistant page still work.
@@ -150,6 +210,7 @@ async function route() {
   const token = ++generation;
   cleanup?.();
   cleanup = null;
+  updateCurrentLanguage = null;
   const hash = (location.hash || "#/discover").slice(1);
   const [path, query = ""] = hash.split("?");
   const params = new URLSearchParams(query);
@@ -202,7 +263,13 @@ async function route() {
       );
     if (token === generation) {
       cleanup = dispose;
-      document.title = (ctx.title || pageTitle(path)) + " · Falcons Cinema";
+      const updateTitle = () => { document.title = (ctx.title || pageTitle(path)) + " · Falcons Cinema"; };
+      updateTitle();
+      updateCurrentLanguage = () => {
+        if (ctx.updateLanguage) ctx.updateLanguage();
+        else if (path === "/account" || path.startsWith("/ticket/")) { void route(); return; }
+        updateTitle();
+      };
     } else dispose?.();
   } catch (e) {
     if (token === generation) {
@@ -225,7 +292,6 @@ async function start() {
     await api.init();
     await refresh();
     assistantWidget ||= createAssistantWidget(api);
-    started = true;
     await route();
   } catch (e) {
     header();

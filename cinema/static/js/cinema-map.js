@@ -1,5 +1,5 @@
 import { esc, icon, options, empty } from "./ui.js";
-import { getLanguage, setLanguage } from "./locale.js";
+import { getLanguage } from "./locale.js";
 import { orderedCinemas } from "./geo.js";
 import { createMapFrame, locateDevice } from "./amap.js";
 
@@ -160,7 +160,7 @@ export async function renderCinemaMap(ctx) {
     };
     return line("driving", t("drive")) + line("walking", t("walk"));
   }
-  function draw() {
+  function draw(updateMap = true) {
     const values = orderedCinemas(bootstrap.cinemas, position, district, nearest);
     const missing = values.filter((c) => !c.position).length;
     el("count").textContent = `${values.length} ${t("count")}`;
@@ -203,7 +203,7 @@ export async function renderCinemaMap(ctx) {
         if (!disposed) draw();
       });
     });
-    if (!map) return;
+    if (!map || !updateMap) return;
     map.render(values.filter((c) => c.position).map((c) => ({ id:c.id, name:c.name, position:c.position })), position);
   }
   async function ensureMap() {
@@ -236,13 +236,28 @@ export async function renderCinemaMap(ctx) {
     finally { running = false; if (!disposed) message(); }
   }
   function mount() {
-    map?.destroy(); map = null;
-    root.innerHTML = `<div class="page-heading"><div><p class="eyebrow">FALCONS · BEIJING</p><h1>${t("title")}</h1><p class="muted">${t("intro")}</p></div><button class="button ghost" data-map="language">${language === "zh" ? "English" : "中文"}</button></div><section class="cinema-map-panel"><div class="map-controls"><button type="button" class="button secondary" data-map="load">${t("map")}</button><button type="button" class="button" data-map="locate">${icon("pin")} ${t("locate")}</button><button type="button" class="button ghost" data-map="clear" hidden>${t("clear")}</button></div><p class="fine-print">${t("privacy")}</p><p class="map-status" data-map="status" role="status" aria-live="polite"></p><p class="route-legend" data-map="legend" hidden><span><i class="route-swatch route-driving"></i>${t("drive")}</span><span><i class="route-swatch route-walking"></i>${t("walk")}</span></p><div class="cinema-map-canvas" data-map="canvas" role="region" aria-label="${t("mapLabel")}" hidden></div></section><div class="map-list-toolbar"><label class="field"><span>${t("district")}</span><select data-map="district">${options(bootstrap.districts, district, "name", t("all"))}</select></label><label class="map-nearest"><input type="checkbox" data-map="nearest"> ${t("nearest")}</label><span class="muted" data-map="count"></span></div><p class="fine-print" data-map="missing"></p><div class="cinema-grid" data-map="list"></div>`;
-    root.lang = language === "zh" ? "zh-CN" : "en";
-    el("language").onclick = () => {
-      if (running) return;
-      setLanguage(language === "en" ? "zh" : "en");
-    };
+    root.innerHTML = `<div class="page-heading"><div><p class="eyebrow">FALCONS · BEIJING</p><h1 data-map-copy="title"></h1><p class="muted" data-map-copy="intro"></p></div></div>
+      <section class="cinema-map-panel">
+        <div class="map-controls">
+          <button type="button" class="button secondary" data-map="load" data-map-copy="map"></button>
+          <button type="button" class="button" data-map="locate">${icon("pin")} <span data-map-copy="locate"></span></button>
+          <button type="button" class="button ghost" data-map="clear" data-map-copy="clear" hidden></button>
+        </div>
+        <p class="fine-print" data-map-copy="privacy"></p>
+        <p class="map-status" data-map="status" role="status" aria-live="polite"></p>
+        <p class="route-legend" data-map="legend" hidden>
+          <span><i class="route-swatch route-driving"></i><span data-map-copy="drive"></span></span>
+          <span><i class="route-swatch route-walking"></i><span data-map-copy="walk"></span></span>
+        </p>
+        <div class="cinema-map-canvas" data-map="canvas" role="region" hidden></div>
+      </section>
+      <div class="cinema-list-toolbar">
+        <label class="field"><span data-map-copy="district"></span><select data-map="district"></select></label>
+        <label class="map-nearest"><input type="checkbox" data-map="nearest"><span data-map-copy="nearest"></span></label>
+        <span class="muted" data-map="count"></span>
+      </div>
+      <p class="fine-print" data-map="missing"></p>
+      <div class="cinema-grid" data-map="list"></div>`;
     el("load").onclick = () => run(async () => { status = "loading"; message(); await ensureMap(); status = position ? "located" : readyStatus(); });
     el("locate").onclick = () => run(locate);
     locate = async function () {
@@ -267,8 +282,21 @@ export async function renderCinemaMap(ctx) {
     el("clear").onclick = () => clearLocation();
     el("district").onchange = () => { district = el("district").value; draw(); };
     el("nearest").onchange = () => { nearest = el("nearest").checked; draw(); };
-    draw(); message();
   }
+  function updateLanguage() {
+    language = getLanguage();
+    root.lang = language === "zh" ? "zh-CN" : "en";
+    root.querySelectorAll("[data-map-copy]").forEach((node) => {
+      node.textContent = t(node.dataset.mapCopy);
+    });
+    el("canvas").setAttribute("aria-label", t("mapLabel"));
+    el("district").innerHTML = options(bootstrap.districts, district, "name", t("all"));
+    // Keep the live map, location and any plotted routes across a language change.
+    draw(false);
+    message();
+  }
+  ctx.updateLanguage = updateLanguage;
   mount();
+  updateLanguage();
   return () => { disposed = true; ++requestVersion; clearTimeout(expireTimer); map?.destroy(); position = address = null; };
 }

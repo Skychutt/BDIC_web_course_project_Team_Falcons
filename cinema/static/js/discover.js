@@ -56,7 +56,7 @@ function peopleLabel(count) {
   return `${count} ${tx(Number(count) === 1 ? "person" : "people", "人")}`;
 }
 function comparisonFields(f) {
-  const budget = f.budget_minor === undefined ? "" : Number(f.budget_minor) / 100;
+  const budget = f.budget_yuan ?? (f.budget_minor === undefined ? "" : Number(f.budget_minor) / 100);
   return `<label class="field"><span>${tx("Ticket type", "票种")}</span><select name="fare_type">
       <option value="regular">${tx("Standard", "标准票")}</option><option value="student" ${f.fare_type === "student" ? "selected" : ""}>${tx("Student", "学生票")}</option>
     </select></label>
@@ -218,50 +218,64 @@ export async function renderDiscover(ctx) {
   ]
     .sort()
     .slice(0, 6);
-  const catalogue = !source && !params.toString() ? renderCatalogue(bootstrap, f) : "";
-  const headingTag = catalogue ? "h2" : "h1";
-  const pageCount = Math.ceil(data.total / data.page_size);
-  const resultCount = data.total
-    ? tx(
-        `${data.total}${source ? " alternative" : ""} screening${data.total === 1 ? "" : "s"}`,
-        `${data.total} 场${source ? "可选" : ""}`,
-      )
-    : tx("No matches", "没有匹配");
-  root.innerHTML = `${catalogue}<div class="page-heading showtimes-heading"><div><p class="eyebrow">${source ? tx("A CHANGE OF PLANS", "改签") : tx("ON THE BIG SCREEN · BEIJING", "大银幕 · 北京")}</p><${headingTag}>${source ? tx("Find your next screening.", "找到下一场。") : tx("Find your next screening", "找到下一场")}</${headingTag}><p class="muted">${source ? tx("Choose a new time. Your current tickets stay valid until the change is confirmed.", "选择新的时间。在改签确认之前，原来的票仍然有效。") : tx("The right film. Your favourite cinema. A seat for everyone.", "合适的影片。熟悉的影院。每个人都有座位。")}</p></div><span class="live-note"><span class="live-dot"></span>${tx("Live seat availability · Beijing time", "座位实时可售 · 北京时间")}</span></div>${source ? notice(tx(`Rescheduling ${source.film_title} at ${source.cinema_name} · ${source.tickets.length} ticket(s). Same film, cinema and fare mix; fees are confirmed before payment.`, `正在改签 ${source.cinema_name} 的《${source.film_title}》· ${source.tickets.length} 张票。影片、影院和票种保持不变，费用在付款前确认。`)) : ""}<form id="search-form" class="search-panel">${fields(bootstrap, f, source)}</form><div class="quick-dates" aria-label="${tx("Choose screening date", "选择放映日期")}">${dates.map((d) => `<button type="button" class="date-chip ${d === f.date ? "active" : ""}" data-date="${esc(d)}" aria-pressed="${d === f.date}">${dateLabel(d)}${dateLabel(d) !== shortDate(d) ? ` <span class="muted">${shortDate(d)}</span>` : ""}</button>`).join("")}</div><div class="results-heading"><h2>${source ? tx("Choose a new time", "选择新的场次") : tx("Find your screening", "查找场次")}</h2><p>${resultCount} · ${shortDate(f.date)} · ${peopleLabel(f.party_size)}</p></div><div class="browse-grid"><div class="screening-results">${items.length ? renderGroups(items, bootstrap, source, f.fare_type) : empty(tx("No screenings match these plans.", "没有符合这些条件的场次。"), tx("Try another date or adjust your filters. We keep your chosen film, cinema and group size exactly as requested.", "换个日期，或调整筛选。影片、影院和人数会按你的选择保留。"))}${
-    !items.length && bootstrap.available_dates.length
-      ? `<div class="notice">${tx("Upcoming screening dates:", "即将放映的日期：")} <div class="chips" style="margin-top:10px">${bootstrap.available_dates
-          .slice(0, 6)
-          .map(
-            (d) =>
-              `<button class="chip" data-date="${esc(d)}">${shortDate(d)}</button>`,
-          )
-          .join("")}</div></div>`
-      : ""
-  }${data.total > data.page_size ? `<nav class="pagination">${data.page > 1 ? `<button class="button ghost" data-page="${data.page - 1}">${tx("Previous", "上一页")}</button>` : ""}<span>${tx(`Page ${data.page} of ${pageCount}`, `第 ${data.page} / ${pageCount} 页`)}</span>${data.page * data.page_size < data.total ? `<button class="button ghost" data-page="${data.page + 1}">${tx("Next", "下一页")}</button>` : ""}</nav>` : ""}</div><aside class="browse-aside"><section class="aside-card"><p class="eyebrow">${icon("spark")} ${tx("A LITTLE HELP CHOOSING", "帮你挑一场")}</p><h3>${tx("Your kind of film.<br>Your kind of seat.", "你想看的电影。<br>你想坐的位置。")}</h3><p>${tx("Tell us the time, screen and seats you prefer. We'll find options that fit your plans.", "告诉我们时间、厅型和座位。我们按你的安排来找。")}</p><button type="button" data-open-assistant class="button secondary wide">${tx("Ask the assistant", "问问助手")} ${icon("spark")}</button><p class="fine-print" style="margin:12px 0 0">${tx("Live recommendations. You make the final choice.", "推荐是实时的。最后由你决定。")}</p></section><section class="aside-note"><h3>${tx("From browsing to the big screen", "从浏览到大银幕")}</h3><div class="number-step"><span>1</span>${tx("Choose your cinema and showtime.", "选择影院和场次。")}</div><div class="number-step"><span>2</span>${tx("Pick seats. We'll hold them for up to 5 minutes.", "选座。我们最多为你保留 5 分钟。")}</div><div class="number-step"><span>3</span>${tx("Review the price, then confirm your tickets.", "核对价格，然后确认出票。")}</div></section></aside></div>`;
-  const form = root.querySelector("#search-form");
-  bindCinemaFilter(form, bootstrap, source);
-  const go = (changes = {}) => {
-    if (!form.reportValidity()) return;
-    const next = { ...formFilters(form), ...changes };
-    if (f.page_size) next.page_size = f.page_size;
-    if (source) next.source_booking_id = source.id;
-    navigate("#/discover?" + new URLSearchParams(next));
-  };
-  form.onsubmit = (e) => {
-    e.preventDefault();
-    go();
-  };
-  root
-    .querySelectorAll("[data-date]")
-    .forEach((b) => (b.onclick = () => go({ date: b.dataset.date })));
-  root
-    .querySelectorAll("[data-page]")
-    .forEach((b) => (b.onclick = () => go({ page: b.dataset.page })));
-  return bindFeaturedCarousel(root);
+  let disposeCarousel;
+  function render() {
+    const previous = root.querySelector("#search-form");
+    const draft = previous ? Object.fromEntries(new FormData(previous)) : null;
+    const advancedOpen = previous?.querySelector(".search-advanced").open;
+    disposeCarousel?.();
+    const catalogue = !source && !params.toString() ? renderCatalogue(bootstrap, f) : "";
+    const headingTag = catalogue ? "h2" : "h1";
+    const pageCount = Math.ceil(data.total / data.page_size);
+    const resultCount = data.total
+      ? tx(
+          `${data.total}${source ? " alternative" : ""} screening${data.total === 1 ? "" : "s"}`,
+          `${data.total} 场${source ? "可选" : ""}`,
+        )
+      : tx("No matches", "没有匹配");
+    root.innerHTML = `${catalogue}<div class="page-heading showtimes-heading"><div><p class="eyebrow">${source ? tx("A CHANGE OF PLANS", "改签") : tx("ON THE BIG SCREEN · BEIJING", "大银幕 · 北京")}</p><${headingTag}>${source ? tx("Find your next screening.", "找到下一场。") : tx("Find your next screening", "找到下一场")}</${headingTag}><p class="muted">${source ? tx("Choose a new time. Your current tickets stay valid until the change is confirmed.", "选择新的时间。在改签确认之前，原来的票仍然有效。") : tx("The right film. Your favourite cinema. A seat for everyone.", "合适的影片。熟悉的影院。每个人都有座位。")}</p></div><span class="live-note"><span class="live-dot"></span>${tx("Live seat availability · Beijing time", "座位实时可售 · 北京时间")}</span></div>${source ? notice(tx(`Rescheduling ${source.film_title} at ${source.cinema_name} · ${source.tickets.length} ticket(s). Same film, cinema and fare mix; fees are confirmed before payment.`, `正在改签 ${source.cinema_name} 的《${source.film_title}》· ${source.tickets.length} 张票。影片、影院和票种保持不变，费用在付款前确认。`)) : ""}<form id="search-form" class="search-panel">${fields(bootstrap, draft ? { ...f, ...draft } : f, source)}</form><div class="quick-dates" aria-label="${tx("Choose screening date", "选择放映日期")}">${dates.map((d) => `<button type="button" class="date-chip ${d === f.date ? "active" : ""}" data-date="${esc(d)}" aria-pressed="${d === f.date}">${dateLabel(d)}${dateLabel(d) !== shortDate(d) ? ` <span class="muted">${shortDate(d)}</span>` : ""}</button>`).join("")}</div><div class="results-heading"><h2>${source ? tx("Choose a new time", "选择新的场次") : tx("Find your screening", "查找场次")}</h2><p>${resultCount} · ${shortDate(f.date)} · ${peopleLabel(f.party_size)}</p></div><div class="browse-grid"><div class="screening-results">${items.length ? renderGroups(items, bootstrap, source, f.fare_type) : empty(tx("No screenings match these plans.", "没有符合这些条件的场次。"), tx("Try another date or adjust your filters. We keep your chosen film, cinema and group size exactly as requested.", "换个日期，或调整筛选。影片、影院和人数会按你的选择保留。"))}${
+      !items.length && bootstrap.available_dates.length
+        ? `<div class="notice">${tx("Upcoming screening dates:", "即将放映的日期：")} <div class="chips" style="margin-top:10px">${bootstrap.available_dates
+            .slice(0, 6)
+            .map(
+              (d) =>
+                `<button class="chip" data-date="${esc(d)}">${shortDate(d)}</button>`,
+            )
+            .join("")}</div></div>`
+        : ""
+    }${data.total > data.page_size ? `<nav class="pagination">${data.page > 1 ? `<button class="button ghost" data-page="${data.page - 1}">${tx("Previous", "上一页")}</button>` : ""}<span>${tx(`Page ${data.page} of ${pageCount}`, `第 ${data.page} / ${pageCount} 页`)}</span>${data.page * data.page_size < data.total ? `<button class="button ghost" data-page="${data.page + 1}">${tx("Next", "下一页")}</button>` : ""}</nav>` : ""}</div><aside class="browse-aside"><section class="aside-card"><p class="eyebrow">${icon("spark")} ${tx("A LITTLE HELP CHOOSING", "帮你挑一场")}</p><h3>${tx("Your kind of film.<br>Your kind of seat.", "你想看的电影。<br>你想坐的位置。")}</h3><p>${tx("Tell us the time, screen and seats you prefer. We'll find options that fit your plans.", "告诉我们时间、厅型和座位。我们按你的安排来找。")}</p><button type="button" data-open-assistant class="button secondary wide">${tx("Ask the assistant", "问问助手")} ${icon("spark")}</button><p class="fine-print" style="margin:12px 0 0">${tx("Live recommendations. You make the final choice.", "推荐是实时的。最后由你决定。")}</p></section><section class="aside-note"><h3>${tx("From browsing to the big screen", "从浏览到大银幕")}</h3><div class="number-step"><span>1</span>${tx("Choose your cinema and showtime.", "选择影院和场次。")}</div><div class="number-step"><span>2</span>${tx("Pick seats. We'll hold them for up to 5 minutes.", "选座。我们最多为你保留 5 分钟。")}</div><div class="number-step"><span>3</span>${tx("Review the price, then confirm your tickets.", "核对价格，然后确认出票。")}</div></section></aside></div>`;
+    const form = root.querySelector("#search-form");
+    if (previous) form.querySelector(".search-advanced").open = advancedOpen;
+    bindCinemaFilter(form, bootstrap, source);
+    const go = (changes = {}) => {
+      if (!form.reportValidity()) return;
+      const next = { ...formFilters(form), ...changes };
+      if (f.page_size) next.page_size = f.page_size;
+      if (source) next.source_booking_id = source.id;
+      navigate("#/discover?" + new URLSearchParams(next));
+    };
+    form.onsubmit = (e) => {
+      e.preventDefault();
+      go();
+    };
+    root
+      .querySelectorAll("[data-date]")
+      .forEach((b) => (b.onclick = () => go({ date: b.dataset.date })));
+    root
+      .querySelectorAll("[data-page]")
+      .forEach((b) => (b.onclick = () => go({ page: b.dataset.page })));
+    disposeCarousel = bindFeaturedCarousel(root);
+  }
+  ctx.updateLanguage = render;
+  render();
+  return () => disposeCarousel?.();
 }
 export const renderCinemas = renderCinemaMap;
 export async function renderFilm(ctx, fid) {
   const { root, api } = ctx;
   const film = await api.request("/films/" + encodeURIComponent(fid));
-  root.innerHTML = `<div class="breadcrumb"><a href="#/discover">${tx("Movies & showtimes", "影片与场次")}</a>${icon("chevron")}<span>${tx("Film details", "影片详情")}</span></div><div class="film-detail">${poster(film)}<div class="film-detail-copy"><p class="eyebrow">${film.archived ? tx("FROM THE CATALOGUE", "片单中") : tx("NOW SHOWING", "正在热映")}</p><h1>${esc(film.title)}</h1><div class="film-meta"><span>${film.duration_minutes} ${tx("min", "分钟")}</span>${film.genres.map((g) => `<span class="meta-sep">·</span><span>${esc(g.name)}</span>`).join("")}<span class="meta-sep">·</span><a class="rating" href="#/reviews/film/${esc(fid)}">${filmRating(film)}</a></div><p class="synopsis">${esc(film.synopsis)}</p><div class="community-actions"><a class="button" href="#/discover?film_id=${esc(fid)}">${tx("Find showtimes", "查找场次")} ${icon("arrow")}</a><a class="button ghost" href="#/reviews/film/${esc(fid)}">${tx("Reviews & discussions", "影评与讨论")}</a></div><div class="film-community-entry"><p class="eyebrow">${tx("BEYOND THE CREDITS", "片尾之后")}</p><h3>${tx("What's your take?", "你怎么看？")}</h3><p>${tx("Give it a few stars, write a short review, or join the conversation. No booking required.", "打几颗星，写一条短评，或者加入讨论。不需要先订票。")}</p><a class="community-text-button" href="#/reviews/film/${esc(fid)}">${tx("Rate this film", "为这部影片评分")} ${icon("arrow")}</a></div></div></div>`;
+  ctx.updateLanguage = () => {
+    root.innerHTML = `<div class="breadcrumb"><a href="#/discover">${tx("Movies & showtimes", "影片与场次")}</a>${icon("chevron")}<span>${tx("Film details", "影片详情")}</span></div><div class="film-detail">${poster(film)}<div class="film-detail-copy"><p class="eyebrow">${film.archived ? tx("FROM THE CATALOGUE", "片单中") : tx("NOW SHOWING", "正在热映")}</p><h1>${esc(film.title)}</h1><div class="film-meta"><span>${film.duration_minutes} ${tx("min", "分钟")}</span>${film.genres.map((g) => `<span class="meta-sep">·</span><span>${esc(g.name)}</span>`).join("")}<span class="meta-sep">·</span><a class="rating" href="#/reviews/film/${esc(fid)}">${filmRating(film)}</a></div><p class="synopsis">${esc(film.synopsis)}</p><div class="community-actions"><a class="button" href="#/discover?film_id=${esc(fid)}">${tx("Find showtimes", "查找场次")} ${icon("arrow")}</a><a class="button ghost" href="#/reviews/film/${esc(fid)}">${tx("Reviews & discussions", "影评与讨论")}</a></div><div class="film-community-entry"><p class="eyebrow">${tx("BEYOND THE CREDITS", "片尾之后")}</p><h3>${tx("What's your take?", "你怎么看？")}</h3><p>${tx("Give it a few stars, write a short review, or join the conversation. No booking required.", "打几颗星，写一条短评，或者加入讨论。不需要先订票。")}</p><a class="community-text-button" href="#/reviews/film/${esc(fid)}">${tx("Rate this film", "为这部影片评分")} ${icon("arrow")}</a></div></div></div>`;
+  };
+  ctx.updateLanguage();
 }
