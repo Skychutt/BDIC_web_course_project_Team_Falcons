@@ -61,7 +61,7 @@ export function createAssistantWidget(api) {
     await mountConversation({
       api, root: panel, floating: true, controller: active,
       isOpen: () => opened,
-      onClose: () => close(), onLanguage: labels,
+      onClose: () => close(),
       onReply: () => { if (!opened) unread.hidden = false; },
       onRetry: () => { active.abort(); mount(); },
     }, panel, results);

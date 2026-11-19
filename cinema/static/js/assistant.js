@@ -1,5 +1,5 @@
 import { esc, money, icon, notice, empty } from "./ui.js";
-import { getLanguage, onLanguage, setLanguage } from "./locale.js";
+import { getLanguage, onLanguage } from "./locale.js";
 import { assistantDate, genreLabel, statusLabel, localizeResult, selectedFilmTitle, replyLanguage } from "./assistant-locale.js";
 
 const copy = {
@@ -89,10 +89,11 @@ export async function mountConversation(ctx, panel, results) {
     if (!alive || next === language) return;
     language = next;
     labels();
+    if (working && el("ai-transcript")) setWorking(true);
   });
   let session, filters, conditionState = {}, taskKind, working = false, alive = true, currentCards = [], currentResult = null;
   const controller = ctx.controller || new AbortController();
-  controller.signal.addEventListener("abort", () => { alive = false; }, { once: true });
+  controller.signal.addEventListener("abort", () => { alive = false; stopLanguage(); }, { once: true });
   const t = (key) => copy[language][key] || copy[language].failure;
   const request = (path, options = {}) => api.request(`${path}${path.includes("?") ? "&" : "?"}locale=${language}`, { ...options, signal: controller.signal });
   panel.innerHTML = `<div class="panel-header"><h2 data-ai="title"></h2></div>
@@ -200,7 +201,6 @@ export async function mountConversation(ctx, panel, results) {
     el("ai-mode").textContent = t(session?.provider === "deepseek" ? "live" : "stub");
     conditions();
     if (currentResult && results.dataset.source === "ai") businessResults(currentResult);
-    ctx.onLanguage?.(language);
   }
   function message(role, text) {
     const item = document.createElement("article");
@@ -240,7 +240,6 @@ export async function mountConversation(ctx, panel, results) {
   function setState(data) {
     if (data.locale && data.locale !== language) {
       language = data.locale === "zh" ? "zh" : "en";
-      setLanguage(language);
       labels();
     }
     filters = data.filters;
@@ -264,7 +263,6 @@ export async function mountConversation(ctx, panel, results) {
     text = text.trim();
     if (working || ctx.assistantBusy || !text || text.length > 2000 || !session) return;
     language = replyLanguage(text, language);
-    setLanguage(language);
     labels();
     if (floating) { el("ai-welcome").hidden = true; results.hidden = true; }
     setWorking(true); message("you", text); el("ai-message").value = ""; el("ai-count").textContent = "0 / 2000";
