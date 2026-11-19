@@ -1,4 +1,5 @@
 import { seatGeometry } from "./seat-map.js";
+import { openTicketCard } from "./ticket-card.js";
 import {
   esc,
   money,
@@ -38,7 +39,7 @@ export async function renderSeats(ctx, sid) {
   const { root, api, user, bootstrap, params, navigate, toast } = ctx;
   let alive = true,
     interval, saleTimer, renderedOnSale;
-  let saleCheck;
+  let saleCheck, closeTicket;
   let map = await api.request(
     "/screenings/" + encodeURIComponent(sid) + "/seats",
   );
@@ -694,7 +695,14 @@ export async function renderSeats(ctx, sid) {
       root.innerHTML = `<section class="panel"><h1>These tickets are no longer valid</h1><p>This booking has been cancelled or rescheduled. Check your account for the current tickets and any refund.</p><a class="button" href="#/account?tab=orders&booking=${esc(r.booking_id)}">View booking and refund</a></section>`;
       return;
     }
-    root.innerHTML = `<section class="panel success-panel"><div class="success-mark">${icon("check")}</div><p class="eyebrow">${state.source ? "NEW PLANS, CONFIRMED" : "YOU’RE GOING TO THE MOVIES"}</p><h1>${state.source ? "Your booking is changed." : "See you at the cinema."}</h1><p class="muted">${state.source ? "Your old seats have been released and your new tickets are ready." : "Your tickets are confirmed. Find the details in your account anytime."}</p><div class="success-ticket"><span class="badge">Confirmed</span><h2 style="margin-top:15px">${esc(film.title)}</h2><p class="muted" style="font-size:13px">${esc(cinema?.name || "Cinema")} · ${esc(s.screen_name || "Screen")} · ${dateTime(s.starts_at)}</p>${chosenTags()}<div class="summary-line"><span>${r.amount_due_minor < 0 ? "Returned to balance" : "Paid from balance"}</span><strong>${money(Math.abs(r.amount_due_minor))}</strong></div><div class="summary-line"><span>Remaining balance</span><strong>${money(r.balance_minor)}</strong></div><p class="fine-print" style="margin-bottom:0">Booking ${esc(r.booking_id)}</p></div><div class="actions"><a class="button" href="#/account?tab=orders&booking=${esc(r.booking_id)}">View my tickets ${icon("arrow")}</a><a class="button ghost" href="#/discover">Back to showtimes</a></div></section>`;
+    root.innerHTML = `<section class="panel success-panel"><div class="success-mark">${icon("check")}</div><p class="eyebrow">${state.source ? "NEW PLANS, CONFIRMED" : "YOU’RE GOING TO THE MOVIES"}</p><h1>${state.source ? "Your booking is changed." : "See you at the cinema."}</h1><p class="muted">${state.source ? "Your old seats have been released and your new tickets are ready." : "Your tickets are confirmed. Find the details in your account anytime."}</p><div class="success-ticket"><span class="badge">Confirmed</span><h2 style="margin-top:15px">${esc(film.title)}</h2><p class="muted" style="font-size:13px">${esc(cinema?.name || "Cinema")} · ${esc(s.screen_name || "Screen")} · ${dateTime(s.starts_at)}</p>${chosenTags()}<div class="summary-line"><span>${r.amount_due_minor < 0 ? "Returned to balance" : "Paid from balance"}</span><strong>${money(Math.abs(r.amount_due_minor))}</strong></div><div class="summary-line"><span>Remaining balance</span><strong>${money(r.balance_minor)}</strong></div><p class="fine-print" style="margin-bottom:0">Booking ${esc(r.booking_id)}</p></div><div class="actions">${customer ? `<button type="button" class="button" data-success-ticket>${icon("ticket")} View ticket</button>` : ""}<a class="button ${customer ? "secondary" : ""}" href="#/account?tab=orders&booking=${esc(r.booking_id)}">View my tickets ${icon("arrow")}</a><a class="button ghost" href="#/discover">Back to showtimes</a></div></section>`;
+    const ticket = root.querySelector("[data-success-ticket]");
+    if (ticket) {
+      ticket.onclick = () => {
+        closeTicket?.();
+        closeTicket = openTicketCard(api, r.booking_id, ticket);
+      };
+    }
   }
   function showBundle(container, data, label, description) {
     container.innerHTML = `${notice(description)}<label class="field"><span>${esc(label)}</span><textarea readonly spellcheck="false" aria-label="${esc(label)}">${esc(JSON.stringify(data))}</textarea></label><button class="button ghost small" type="button" style="margin-top:10px">Copy approval</button>`;
@@ -715,6 +723,7 @@ export async function renderSeats(ctx, sid) {
   document.addEventListener("visibilitychange", checkVisibleSale);
   return () => {
     alive = false;
+    closeTicket?.();
     clearInterval(salePoll);
     document.removeEventListener("visibilitychange", checkVisibleSale);
     document.removeEventListener("visibilitychange", tick);
