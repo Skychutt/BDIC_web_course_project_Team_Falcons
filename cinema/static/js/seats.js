@@ -1,5 +1,7 @@
 import { seatGeometry } from "./seat-map.js";
 import { openTicketCard } from "./ticket-card.js";
+import { tx } from "./locale.js";
+import { apiMessage } from "./api.js";
 import {
   esc,
   money,
@@ -21,8 +23,17 @@ function readDraft(key) {
   }
 }
 const counterSalesUrl = "#/operations?tab=counter";
-const seatLabel = (s) => `Row ${s.row_no} · Seat ${s.seat_no}`;
-const fareLabel = (f) => (f === "STUDENT" ? "Student" : "Standard");
+const seatLabel = (s) => tx(
+  `Row ${s.row_no} · Seat ${s.seat_no}`,
+  `${s.row_no} 排 ${s.seat_no} 座`,
+);
+const seatTag = (s) => tx(`R${s.row_no} · S${s.seat_no}`, `${s.row_no} 排 ${s.seat_no} 座`);
+const zoneLabel = (zone) => ({
+  FRONT: tx("front", "前排"),
+  MIDDLE: tx("middle", "中排"),
+  REAR: tx("rear", "后排"),
+})[zone] || zone;
+const fareLabel = (f) => f === "STUDENT" ? tx("Student", "学生票") : tx("Standard", "标准票");
 async function allRows(api, path) {
   const result = [];
   let page = 1;
@@ -40,6 +51,7 @@ export async function renderSeats(ctx, sid) {
   let alive = true,
     interval, saleTimer, renderedOnSale;
   let saleCheck, closeTicket;
+  let pendingLanguage = false;
   let map = await api.request(
     "/screenings/" + encodeURIComponent(sid) + "/seats",
   );
@@ -87,11 +99,11 @@ export async function renderSeats(ctx, sid) {
     const h = holds.find((h) => h.id === holdId);
     if (holdId && !h)
       throw new Error(
-        "This seat hold is unavailable for your account. Please choose seats again.",
+        tx("This seat hold is unavailable for your account. Please choose seats again.", "当前账号无法使用这次占座。请重新选座。"),
       );
     if (h && h.screening_id !== sid)
       throw new Error(
-        "This seat hold belongs to a different screening. Open the hold from My tickets to continue.",
+        tx("This seat hold belongs to a different screening. Open the hold from My tickets to continue.", "这次占座属于其他场次。请从「我的影票」打开对应的占座。"),
       );
     if (h) {
       state.hold = h;
@@ -141,7 +153,7 @@ export async function renderSeats(ctx, sid) {
       (q.source_booking_id || null) !== (state.source?.id || null)
     )
       throw new Error(
-        "This quote does not match the displayed screening and booking. Open your seat hold from My tickets.",
+        tx("This quote does not match the displayed screening and booking. Open your seat hold from My tickets.", "报价与当前场次或订单不一致。请在「我的影票」中打开你的占座。"),
       );
   }
   if (state.quote) validateQuote(state.quote);
@@ -158,7 +170,7 @@ export async function renderSeats(ctx, sid) {
   if (params.get("from") === "assistant" && state.phase === "choose") {
     const suggested = (params.get("seat_ids") || "").split(",").filter(Boolean);
     if (suggested.some((id) => !state.selected.has(id)))
-      state.error = "Some suggested seats are no longer available. Please review the latest map and complete your selection. No new seats have been held.";
+      state.error = () => tx("Some suggested seats are no longer available. Please review the latest map and complete your selection. No new seats have been held.", "部分推荐座位已不可选。请根据最新座位图完成选座，目前尚未占座。");
   }
   async function lockWhile(action) {
     if (state.working) return;
@@ -174,7 +186,8 @@ export async function renderSeats(ctx, sid) {
       controls.forEach(([el, disabled]) => {
         if (el.isConnected) el.disabled = disabled;
       });
-      tick();
+      if (pendingLanguage) updateLanguage();
+      else tick();
     }
   }
   const canSelect = (seat) => seat.state === "AVAILABLE" || seat.held_by_me;
@@ -185,10 +198,13 @@ export async function renderSeats(ctx, sid) {
   function seatConflictNotice() {
     if (!state.seatConflict || state.phase !== "choose") return "";
     const needed = state.target - state.selected.size;
-    const prefix = "Some seats were just taken.";
+    const prefix = tx("Some seats were just taken.", "部分座位刚被占用。");
     if (onSale() && map.seats.filter(canSelect).length >= state.target) {
       if (needed <= 0) return "";
-      return notice(`${prefix} Choose ${needed} more ${needed === 1 ? "seat" : "seats"} to continue.`, "warning");
+      return notice(tx(
+        `${prefix} Choose ${needed} more ${needed === 1 ? "seat" : "seats"} to continue.`,
+        `${prefix} 请再选 ${needed} 个座位。`,
+      ), "warning");
     }
     const search = new URLSearchParams({
       film_id: map.screening.film_id,
@@ -197,8 +213,11 @@ export async function renderSeats(ctx, sid) {
     });
     if (state.source) search.set("source_booking_id", state.source.id);
     else if (searchFare === "STUDENT") search.set("fare_type", "student");
-    return `${notice(`${prefix} This showtime no longer has enough seats for your party.`, "warning")}
-      <p><a class="button secondary small" href="#/discover?${esc(search.toString())}">Find other showtimes ${icon("arrow")}</a></p>`;
+    return `${notice(tx(
+      `${prefix} This showtime no longer has enough seats for your party.`,
+      `${prefix} 本场剩余座位不足。`,
+    ), "warning")}
+      <p><a class="button secondary small" href="#/discover?${esc(search.toString())}">${tx("Find other showtimes", "查看其他场次")} ${icon("arrow")}</a></p>`;
   }
   function selectedSeats() {
     return map.seats.filter((seat) => state.selected.has(seat.id));
@@ -263,40 +282,72 @@ export async function renderSeats(ctx, sid) {
     const canChoose = state.phase === "choose" && onSale();
     const kind = map.screening.screen_type || "STANDARD";
     const direction = map.layout.screen_direction.toLowerCase();
-    return `<div class="auditorium-meta"><strong>${map.layout.row_count} rows · ${seats.length} seats</strong><span>${kind === "DOLBY_CINEMA" ? "Recliner seating · extra legroom" : kind === "IMAX" ? "Wide auditorium · tiered seating" : "Classic auditorium · divided seating blocks"}</span></div><div class="seat-scroll auditorium-${kind.toLowerCase()}" tabindex="0" aria-label="Seat map, scroll horizontally to see all seats"><div class="auditorium"><div class="screen-line ${direction}">SCREEN · ${esc(screenName(kind))}</div><div class="seat-grid" role="group" aria-label="Seats, rows numbered nearest to furthest from the screen" style="--seat-columns:20px ${geometry.columnTracks} 20px;--seat-rows:${geometry.rowTracks || "none"}">${geometry.labels.map(({y, label}) => `<span class="row-label" aria-hidden="true" style="grid-column:1;grid-row:${y + 1}">${label}</span><span class="row-label" aria-hidden="true" style="grid-column:${geometry.columns + 2};grid-row:${y + 1}">${label}</span>`).join("")}${seats
+    return `<div class="auditorium-meta"><strong>${tx(`${map.layout.row_count} rows · ${seats.length} seats`, `${map.layout.row_count} 排 · ${seats.length} 座`)}</strong><span>${kind === "DOLBY_CINEMA" ? tx("Recliner seating · extra legroom", "躺椅座位 · 宽敞腿部空间") : kind === "IMAX" ? tx("Wide auditorium · tiered seating", "宽幅影厅 · 阶梯座位") : tx("Classic auditorium · divided seating blocks", "常规影厅 · 分区座位")}</span></div><div class="seat-scroll auditorium-${kind.toLowerCase()}" tabindex="0" aria-label="${tx("Seat map, scroll horizontally to see all seats", "座位图，可横向滚动查看全部座位")}"><div class="auditorium"><div class="screen-line ${direction}">${tx("SCREEN", "银幕")} · ${esc(screenName(kind))}</div><div class="seat-grid" role="group" aria-label="${tx("Seats, rows numbered nearest to furthest from the screen", "座位按距离银幕从近到远排列")}" style="--seat-columns:20px ${geometry.columnTracks} 20px;--seat-rows:${geometry.rowTracks || "none"}">${geometry.labels.map(({y, label}) => `<span class="row-label" aria-hidden="true" style="grid-column:1;grid-row:${y + 1}">${label}</span><span class="row-label" aria-hidden="true" style="grid-column:${geometry.columns + 2};grid-row:${y + 1}">${label}</span>`).join("")}${seats
       .map((seat) => {
         const selected = state.selected.has(seat.id);
         const selectable =
           canChoose && (seat.state === "AVAILABLE" || seat.held_by_me);
-        return `<button type="button" class="seat ${seat.state === "SOLD" ? "sold" : ""} ${seat.state === "HELD" && !selected ? "held" : ""}" style="grid-column:${seat.map_x + 2};grid-row:${seat.map_y + 1}" data-seat="${esc(seat.id)}" aria-label="${esc(seatLabel(seat))}, ${selected ? "selected" : seat.state === "AVAILABLE" ? "available" : seat.held_by_me ? "held by you" : seat.state.toLowerCase()}, ${seat.zone.toLowerCase()} zone" aria-pressed="${selected}" title="${esc(seatLabel(seat))} · ${seat.zone.toLowerCase()}" ${selectable ? "" : "disabled"}>${seat.seat_no}</button>`;
+        const stateLabel = selected
+          ? tx("selected", "已选")
+          : seat.held_by_me
+            ? tx("held by you", "你已占座")
+            : ({ AVAILABLE: tx("available", "可选"), HELD: tx("held", "已占座"), SOLD: tx("sold", "已售") })[seat.state];
+        return `<button type="button" class="seat ${seat.state === "SOLD" ? "sold" : ""} ${seat.state === "HELD" && !selected ? "held" : ""}" style="grid-column:${seat.map_x + 2};grid-row:${seat.map_y + 1}" data-seat="${esc(seat.id)}" aria-label="${esc(seatLabel(seat))}, ${stateLabel}, ${zoneLabel(seat.zone)}${tx(" zone", "")}" aria-pressed="${selected}" title="${esc(seatLabel(seat))} · ${zoneLabel(seat.zone)}" ${selectable ? "" : "disabled"}>${seat.seat_no}</button>`;
       })
       .join("")}</div></div></div>`;
   }
   function paymentSummary() {
     const q = state.quote;
     if (!q) return "";
-    return `<div class="summary-line"><span>Full ticket price</span><strong>${money(q.gross_ticket_minor)}</strong></div>${q.price_factor_bps === 5000 ? `<div class="summary-line"><span>50% ticket discount</span><strong>−${money(q.gross_ticket_minor - q.net_ticket_minor)}</strong></div>` : ""}<div class="summary-line"><span>Net ticket value</span><strong>${money(q.net_ticket_minor)}</strong></div>${state.source ? `<div class="summary-line"><span>Previous ticket value</span><strong>−${money(state.source.net_ticket_minor)}</strong></div><div class="summary-line"><span>Change fee (${q.fee_rate_bps / 100}%)</span><strong>${money(q.current_fee_minor)}</strong></div><div class="summary-line"><span>Fees across this booking chain</span><strong>${money(q.cumulative_fee_minor)}</strong></div>` : ""}<div class="summary-line summary-total"><span>${q.amount_due_minor < 0 ? "Returned to your balance" : q.amount_due_minor === 0 ? "No balance movement" : "Due now"}</span><strong>${money(Math.abs(q.amount_due_minor))}</strong></div>`;
+    return `<div class="summary-line"><span>${tx("Full ticket price", "原票价")}</span><strong>${money(q.gross_ticket_minor)}</strong></div>${q.price_factor_bps === 5000 ? `<div class="summary-line"><span>${tx("50% ticket discount", "五折优惠")}</span><strong>−${money(q.gross_ticket_minor - q.net_ticket_minor)}</strong></div>` : ""}<div class="summary-line"><span>${tx("Net ticket value", "优惠后票价")}</span><strong>${money(q.net_ticket_minor)}</strong></div>${state.source ? `<div class="summary-line"><span>${tx("Previous ticket value", "原订单票款")}</span><strong>−${money(state.source.net_ticket_minor)}</strong></div><div class="summary-line"><span>${tx(`Change fee (${q.fee_rate_bps / 100}%)`, `改签费（${q.fee_rate_bps / 100}%）`)}</span><strong>${money(q.current_fee_minor)}</strong></div><div class="summary-line"><span>${tx("Fees across this booking chain", "累计改签费")}</span><strong>${money(q.cumulative_fee_minor)}</strong></div>` : ""}<div class="summary-line summary-total"><span>${q.amount_due_minor < 0 ? tx("Returned to your balance", "退回钱包") : q.amount_due_minor === 0 ? tx("No balance movement", "无需支付") : tx("Due now", "本次应付")}</span><strong>${money(Math.abs(q.amount_due_minor))}</strong></div>`;
   }
   function chosenTags() {
     return `<div class="summary-seats">${
       selectedSeats()
         .map(
           (seat) =>
-            `<span class="seat-tag">R${seat.row_no} · S${seat.seat_no}</span>`,
+            `<span class="seat-tag">${seatTag(seat)}</span>`,
         )
         .join("") ||
-      '<span class="muted" style="font-size:12px">No seats selected yet</span>'
+      `<span class="muted" style="font-size:12px">${tx("No seats selected yet", "还未选座")}</span>`
     }</div>`;
   }
   function counterSelection() {
     return customer && onSale() && state.phase === "choose"
-      ? `<details class="consent-box"><summary>Booking at a cinema counter?</summary><p class="fine-print">You can approve a specific employee to hold these seats for you. This approval cannot charge your balance.</p><form id="hold-consent-form"><label class="field"><span>Staff ID provided at the counter</span><input name="staff_id" inputmode="numeric" pattern="[0-9]+" required></label><button type="submit" class="button ghost small" style="margin-top:12px" ${state.selected.size !== state.target ? "disabled" : ""}>Approve seat hold</button><div class="form-error"></div></form><div class="token-output" id="hold-consent-output"></div></details>`
+      ? `<details class="consent-box"><summary>${tx("Booking at a cinema counter?", "在影院柜台购票？")}</summary><p class="fine-print">${tx("You can approve a specific employee to hold these seats for you. This approval cannot charge your balance.", "你可以授权指定员工代为占座。此授权不会扣款。")}</p><form id="hold-consent-form"><label class="field"><span>${tx("Staff ID provided at the counter", "柜台提供的员工编号")}</span><input name="staff_id" inputmode="numeric" pattern="[0-9]+" required></label><button type="submit" class="button ghost small" style="margin-top:12px" ${state.selected.size !== state.target ? "disabled" : ""}>${tx("Approve seat hold", "授权占座")}</button><div class="form-error"></div></form><div class="token-output" id="hold-consent-output"></div></details>`
       : "";
   }
   function counterPayment() {
     return customer && state.phase === "quoted" && !payPending()
-      ? `<details class="consent-box"><summary>Let counter staff complete this purchase</summary><p class="fine-print">Only the named employee can use your approval, for this exact quote and seat hold.</p><form id="pay-consent-form"><label class="field"><span>Staff ID</span><input name="staff_id" inputmode="numeric" pattern="[0-9]+" required></label><button type="submit" class="button ghost small" style="margin-top:12px">Approve ${state.quote.amount_due_minor < 0 ? "refund difference" : "payment"} at counter</button><div class="form-error"></div></form><div class="token-output" id="pay-consent-output"></div></details>`
+      ? `<details class="consent-box"><summary>${tx("Let counter staff complete this purchase", "授权柜台员工完成购票")}</summary><p class="fine-print">${tx("Only the named employee can use your approval, for this exact quote and seat hold.", "只有指定员工可以按当前报价和占座使用此授权。")}</p><form id="pay-consent-form"><label class="field"><span>${tx("Staff ID", "员工编号")}</span><input name="staff_id" inputmode="numeric" pattern="[0-9]+" required></label><button type="submit" class="button ghost small" style="margin-top:12px">${state.quote.amount_due_minor < 0 ? tx("Approve refund difference at counter", "授权柜台退差价") : tx("Approve payment at counter", "授权柜台付款")}</button><div class="form-error"></div></form><div class="token-output" id="pay-consent-output"></div></details>`
       : "";
+  }
+  function updateLanguage() {
+    if (!alive) return;
+    if (state.working) {
+      pendingLanguage = true;
+      return;
+    }
+    pendingLanguage = false;
+
+    // The in-memory selection, quote, receipt and hold deadline survive the render.
+    const consentDrafts = ["hold-consent", "pay-consent"].map((id) => {
+      const form = root.querySelector(`#${id}-form`);
+      return {
+        id,
+        open: form?.closest("details").open,
+        staffId: form?.elements.staff_id.value,
+        approval: [...(root.querySelector(`#${id}-output`)?.childNodes || [])],
+      };
+    });
+    render();
+    for (const draft of consentDrafts) {
+      const form = root.querySelector(`#${draft.id}-form`);
+      if (!form || draft.staffId === undefined) continue;
+      form.closest("details").open = draft.open;
+      form.elements.staff_id.value = draft.staffId;
+      root.querySelector(`#${draft.id}-output`).append(...draft.approval);
+    }
   }
   function render() {
     if (!alive) return;
@@ -326,7 +377,10 @@ export async function renderSeats(ctx, sid) {
     const source = state.source;
     const previousMap = root.querySelector(".seat-scroll");
     const mapScroll = previousMap ? { left: previousMap.scrollLeft, top: previousMap.scrollTop } : null;
-    root.innerHTML = `<div class="breadcrumb"><a href="#/discover${source ? "?source_booking_id=" + esc(source.id) : ""}">Showtimes</a>${icon("chevron")}<span>${esc(film.title)}</span></div><div class="booking-progress"><span class="${state.phase === "choose" ? "active" : ""}"><b>1</b>Choose seats</span><i class="rule"></i><span class="${isHeld ? "active" : ""}"><b>2</b>Review & confirm</span><i class="rule"></i><span><b>3</b>Your tickets</span></div><div class="page-heading"><div><p class="eyebrow">${source ? "RESCHEDULE YOUR WHOLE BOOKING" : "A GOOD NIGHT STARTS WITH A GOOD SEAT"}</p><h1>${state.phase === "recover" ? "Let’s confirm your booking." : isHeld ? "Your seats are on hold." : "Choose your seats."}</h1></div><span class="live-note">${dateTime(s.starts_at)} · Beijing time</span></div>${source ? notice(`Changing ${source.tickets.length} ticket(s) from ${dateTime(source.starts_at)}. Your original booking stays valid until this change completes.`) : ""}<div id="seat-errors">${state.error ? notice(state.error, "error") : ""}${seatConflictNotice()}</div>${!onSale() ? notice("This screening is no longer on sale. Please choose another showtime.", "warning") : ""}<div class="seat-layout"><section class="seat-panel"><div class="panel-header"><div><h2>${esc(cinema?.name || "Cinema")} <span class="muted" style="font-size:13px;font-weight:400">· ${esc(s.screen_name || "Screen")} · ${esc(screenName(map.screening.screen_type || "STANDARD"))}</span></h2><p class="muted" style="font-size:12px;margin:7px 0 0">${esc(cinema?.address || "Beijing")} · ${dateTime(s.starts_at)}</p></div><button class="button ghost small" id="refresh-map" aria-label="Refresh seat availability">Refresh</button></div><div class="seat-legend"><span><i class="legend-box"></i>Available</span><span><i class="legend-box selected"></i>Your selection</span><span><i class="legend-box held"></i>On hold</span><span><i class="legend-box sold"></i>Sold</span></div>${grid()}<p class="seat-help">Rows count from the screen. Clear lanes are aisles; adjacent-seat suggestions never cross them. Scroll the map sideways if needed, or use Tab and Enter.</p>${isHeld ? notice("These seats are reserved until the countdown ends. Refreshing does not extend the hold.") : ""}</section><aside class="panel booking-summary"><div class="summary-film">${poster(film, true)}<div><h3>${esc(film.title)}</h3><p>${s.duration_minutes_snapshot ?? film.duration_minutes} min · ${esc(timeOnly(s.starts_at))}–${esc(timeOnly(s.ends_at))}</p></div></div><div class="summary-line"><span>Cinema</span><strong>${esc(cinema?.name || "Beijing")}</strong></div><div class="summary-line"><span>Date</span><strong>${dateTime(s.starts_at, { hour: undefined, minute: undefined })}</strong></div>${state.phase === "choose" ? `<label class="field" style="margin-top:16px"><span>Number of tickets</span><select id="party-size" ${source ? "disabled" : ""}>${Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}" ${i + 1 === state.target ? "selected" : ""}>${i + 1} ${i === 0 ? "ticket" : "tickets"}</option>`).join("")}</select></label>` : ""}${chosenTags()}${isHeld ? `<div class="hold-clock">${icon("clock")}<span>Seats held for</span><strong id="countdown">—</strong></div>` : ""}<div id="checkout-controls">${controls()}</div>${counterSelection()}${counterPayment()}</aside></div>`;
+    root.innerHTML = `<div class="breadcrumb"><a href="#/discover${source ? "?source_booking_id=" + esc(source.id) : ""}">${tx("Showtimes", "场次")}</a>${icon("chevron")}<span>${esc(film.title)}</span></div><div class="booking-progress"><span class="${state.phase === "choose" ? "active" : ""}"><b>1</b>${tx("Choose seats", "选座")}</span><i class="rule"></i><span class="${isHeld ? "active" : ""}"><b>2</b>${tx("Review & confirm", "核对并确认")}</span><i class="rule"></i><span><b>3</b>${tx("Your tickets", "电子影票")}</span></div><div class="page-heading"><div><p class="eyebrow">${source ? tx("RESCHEDULE YOUR WHOLE BOOKING", "整单改签") : tx("A GOOD NIGHT STARTS WITH A GOOD SEAT", "选择座位")}</p><h1>${state.phase === "recover" ? tx("Let’s confirm your booking.", "正在确认订单") : isHeld ? tx("Your seats are on hold.", "座位已为你保留") : tx("Choose your seats.", "请选择座位")}</h1></div><span class="live-note">${dateTime(s.starts_at)} · ${tx("Beijing time", "北京时间")}</span></div>${source ? notice(tx(
+      `Changing ${source.tickets.length} ticket(s) from ${dateTime(source.starts_at)}. Your original booking stays valid until this change completes.`,
+      `正在改签 ${dateTime(source.starts_at)} 的 ${source.tickets.length} 张票。改签完成前，原影票仍然有效。`,
+    )) : ""}<div id="seat-errors">${state.error ? notice(typeof state.error === "function" ? state.error() : apiMessage(state.error.code, state.error.message), "error") : ""}${seatConflictNotice()}</div>${!onSale() ? notice(tx("This screening is no longer on sale. Please choose another showtime.", "本场次已停止售票，请选择其他场次。"), "warning") : ""}<div class="seat-layout"><section class="seat-panel"><div class="panel-header"><div><h2>${esc(cinema?.name || tx("Cinema", "影院"))} <span class="muted" style="font-size:13px;font-weight:400">· ${esc(s.screen_name || tx("Screen", "影厅"))} · ${esc(screenName(map.screening.screen_type || "STANDARD"))}</span></h2><p class="muted" style="font-size:12px;margin:7px 0 0">${esc(cinema?.address || tx("Beijing", "北京"))} · ${dateTime(s.starts_at)}</p></div><button class="button ghost small" id="refresh-map" aria-label="${tx("Refresh seat availability", "刷新座位状态")}">${tx("Refresh", "刷新")}</button></div><div class="seat-legend"><span><i class="legend-box"></i>${tx("Available", "可选")}</span><span><i class="legend-box selected"></i>${tx("Your selection", "已选")}</span><span><i class="legend-box held"></i>${tx("On hold", "已占座")}</span><span><i class="legend-box sold"></i>${tx("Sold", "已售")}</span></div>${grid()}<p class="seat-help">${tx("Rows count from the screen. Clear lanes are aisles; adjacent-seat suggestions never cross them. Scroll the map sideways if needed, or use Tab and Enter.", "排号从银幕往后数，空白处是过道，连座推荐不会跨过道。可以横向滚动座位图，也可用 Tab 和 Enter 键选座。")}</p>${isHeld ? notice(tx("These seats are reserved until the countdown ends. Refreshing does not extend the hold.", "座位将保留到倒计时结束，刷新页面不会延长占座。")) : ""}</section><aside class="panel booking-summary"><div class="summary-film">${poster(film, true)}<div><h3>${esc(film.title)}</h3><p>${s.duration_minutes_snapshot ?? film.duration_minutes} ${tx("min", "分钟")} · ${esc(timeOnly(s.starts_at))}–${esc(timeOnly(s.ends_at))}</p></div></div><div class="summary-line"><span>${tx("Cinema", "影院")}</span><strong>${esc(cinema?.name || tx("Beijing", "北京"))}</strong></div><div class="summary-line"><span>${tx("Date", "日期")}</span><strong>${dateTime(s.starts_at, { hour: undefined, minute: undefined })}</strong></div>${state.phase === "choose" ? `<label class="field" style="margin-top:16px"><span>${tx("Number of tickets", "购票人数")}</span><select id="party-size" ${source ? "disabled" : ""}>${Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}" ${i + 1 === state.target ? "selected" : ""}>${tx(`${i + 1} ${i === 0 ? "ticket" : "tickets"}`, `${i + 1} 张`)}</option>`).join("")}</select></label>` : ""}${chosenTags()}${isHeld ? `<div class="hold-clock">${icon("clock")}<span>${tx("Seats held for", "剩余占座时间")}</span><strong id="countdown">—</strong></div>` : ""}<div id="checkout-controls">${controls()}</div>${counterSelection()}${counterPayment()}</aside></div>`;
     if (mapScroll) {
       const currentMap = root.querySelector(".seat-scroll");
       currentMap.scrollLeft = mapScroll.left;
@@ -341,7 +395,7 @@ export async function renderSeats(ctx, sid) {
             try {
               if (!(await checkSale())) return;
             } catch {
-              if (alive) toast("Could not verify ticket availability. Please try again.", "error");
+              if (alive) toast(tx("Could not verify ticket availability. Please try again.", "暂时无法确认售票状态，请重试。"), "error");
               return;
             }
             if (state.working || state.phase !== "choose" ||
@@ -351,7 +405,7 @@ export async function renderSeats(ctx, sid) {
           else if (state.selected.size < state.target) state.selected.add(id);
           else {
             toast(
-              `Choose up to ${state.target} seats, or change the ticket count.`,
+              tx(`Choose up to ${state.target} seats, or change the ticket count.`, `最多可选 ${state.target} 座，也可以修改购票人数。`),
               "error",
             );
             return;
@@ -387,12 +441,12 @@ export async function renderSeats(ctx, sid) {
             showError(root.querySelector("#seat-errors"), err);
           }
         },
-        "Refreshing…",
+        tx("Refreshing…", "正在刷新…"),
       );
     root
       .querySelector("#create-hold")
       ?.addEventListener("click", (e) =>
-        busy(e.currentTarget, () => lockWhile(createHold), "Holding seats…"),
+        busy(e.currentTarget, () => lockWhile(createHold), tx("Holding seats…", "正在占座…")),
       );
     root.querySelector("#quote-form")?.addEventListener("submit", (e) => {
       e.preventDefault();
@@ -400,7 +454,7 @@ export async function renderSeats(ctx, sid) {
       busy(
         form.querySelector("[type=submit]"),
         () => lockWhile(requestQuote),
-        "Getting price…",
+        tx("Getting price…", "正在计算价格…"),
       );
     });
     root.querySelectorAll("[data-fare]").forEach(
@@ -426,7 +480,7 @@ export async function renderSeats(ctx, sid) {
         busy(
           e.currentTarget,
           () => lockWhile(pay),
-          "Confirming…",
+          tx("Confirming…", "正在确认…"),
         ),
       );
     root.querySelector("#check-result")?.addEventListener("click", () =>
@@ -435,7 +489,7 @@ export async function renderSeats(ctx, sid) {
     root
       .querySelector("#change-seats")
       ?.addEventListener("click", (e) =>
-        busy(e.currentTarget, () => lockWhile(release), "Releasing…"),
+        busy(e.currentTarget, () => lockWhile(release), tx("Releasing…", "正在释放…")),
       );
     root.querySelector("#reselect")?.addEventListener("click", () => {
       sessionStorage.removeItem(draftKey);
@@ -466,8 +520,8 @@ export async function renderSeats(ctx, sid) {
                 hold_consent_token: data.hold_consent_token,
                 request_key: data.request_key,
               },
-              "Seat-hold approval",
-              "Give this approval to the employee. Your seats are not held until they submit it.",
+              tx("Seat-hold approval", "占座授权"),
+              tx("Give this approval to the employee. Your seats are not held until they submit it.", "请把授权交给员工，员工提交后才会占座。"),
             );
           } catch (err) {
             if (err.code === "SALE_CLOSED") {
@@ -501,8 +555,11 @@ export async function renderSeats(ctx, sid) {
                 quote_token: state.quote.quote_token,
                 consent_token: data.consent_token,
               },
-              "Payment approval",
-              `Only the named staff member can complete this ${state.quote.amount_due_minor < 0 ? "refund" : "payment"} of ${money(Math.abs(state.quote.amount_due_minor))}. The seat-hold deadline still applies.`,
+              tx("Payment approval", "付款授权"),
+              tx(
+                `Only the named staff member can complete this ${state.quote.amount_due_minor < 0 ? "refund" : "payment"} of ${money(Math.abs(state.quote.amount_due_minor))}. The seat-hold deadline still applies.`,
+                `仅指定员工可办理这笔 ${money(Math.abs(state.quote.amount_due_minor))} 的${state.quote.amount_due_minor < 0 ? "退款" : "付款"}。占座期限保持不变。`,
+              ),
             );
           } catch (err) {
             if (err.code === "SALE_CLOSED") {
@@ -515,13 +572,21 @@ export async function renderSeats(ctx, sid) {
       });
     tick();
   }
+  function payLabel() {
+    const amount = state.quote.amount_due_minor;
+    if (amount < 0) return tx(`Confirm change & refund ${money(-amount)}`, `确认改签并退回 ${money(-amount)}`);
+    if (!amount) return tx("Confirm change — no payment", "确认改签，无需支付");
+    return state.source
+      ? tx(`Pay ${money(amount)} & change`, `支付 ${money(amount)} 并改签`)
+      : tx(`Pay ${money(amount)} & book`, `支付 ${money(amount)} 并购票`);
+  }
   function controls() {
     if (state.phase === "recover")
-      return `${notice(state.allowPaymentRetry ? "No receipt yet. We’ll keep checking. You can also retry the same payment while the hold is active." : "Checking your payment. You can find confirmed tickets in your account.", "warning")}${paymentSummary()}<button class="button wide" id="check-result">Check payment result</button>${state.allowPaymentRetry && onSale() && remaining() > 0 ? '<button class="button ghost wide" id="pay-now">Retry the same payment</button>' : ""}<a class="button ghost wide" href="#/account">View my tickets</a>`;
+      return `${notice(state.allowPaymentRetry ? tx("No receipt yet. We’ll keep checking. You can also retry the same payment while the hold is active.", "暂未收到回执，系统会继续查询。占座有效期间，你也可以重试同一笔付款。") : tx("Checking your payment. You can find confirmed tickets in your account.", "正在查询付款结果，已确认的影票可在「我的影票」查看。"), "warning")}${paymentSummary()}<button class="button wide" id="check-result">${tx("Check payment result", "查询付款结果")}</button>${state.allowPaymentRetry && onSale() && remaining() > 0 ? `<button class="button ghost wide" id="pay-now">${tx("Retry the same payment", "重试同一笔付款")}</button>` : ""}<a class="button ghost wide" href="#/account">${tx("View my tickets", "查看我的影票")}</a>`;
     if (state.phase === "converted")
-      return `${notice("This hold has already been purchased. Your issued tickets are in your account.")}<a class="button wide" href="#/account">View my tickets ${icon("arrow")}</a>`;
+      return `${notice(tx("This hold has already been purchased. Your issued tickets are in your account.", "该占座已完成购买，影票可在「我的影票」查看。"))}<a class="button wide" href="#/account">${tx("View my tickets", "查看我的影票")} ${icon("arrow")}</a>`;
     if (state.phase === "expired")
-      return `${notice("This seat hold has ended. Your earlier confirmed tickets, if any, remain unchanged.", "warning")}<button class="button wide" id="reselect">Choose seats again</button>`;
+      return `${notice(tx("This seat hold has ended. Your earlier confirmed tickets, if any, remain unchanged.", "本次占座已结束。此前已确认的影票仍按原订单状态处理。"), "warning")}<button class="button wide" id="reselect">${tx("Choose seats again", "重新选座")}</button>`;
     if (state.phase === "choose") {
       const selected = state.selected.size;
       const ticketTotal = tickets().reduce(
@@ -531,16 +596,16 @@ export async function renderSeats(ctx, sid) {
             0),
         0,
       );
-      return `<div class="summary-line"><span>Selected</span><strong>${selected} / ${state.target} seats</strong></div><div class="summary-line summary-total"><span>Face price estimate</span><strong>${money(ticketTotal)}</strong></div><p class="fine-print">Choose ticket types and an eligible coupon at the next step. Any change fee is quoted before confirmation.</p>${!onSale() ? '<button class="button wide" id="create-hold" disabled>Booking closed</button>' : !user ? `<a class="button wide" href="#/login?next=${encodeURIComponent("#/seats/" + sid + "?" + new URLSearchParams({ party_size: String(state.target), seat_ids: [...state.selected].join(","), ...(state.source ? { source_booking_id: state.source.id } : {}), ...(searchFare === "STUDENT" ? { fare_type: "student" } : {}), ...(params.get("from") === "assistant" ? { from: "assistant" } : {}) }))}">Sign in to hold seats ${icon("arrow")}</a>` : !customer ? `<p class="notice">Customer accounts book here. For assisted sales, open the cinema workspace.</p><a class="button wide" href="${counterSalesUrl}">Open counter sales</a>` : `<button class="button wide" id="create-hold" ${selected !== state.target ? "disabled" : ""}>Hold ${selected || "your"} ${selected === 1 ? "seat" : "seats"} ${icon("arrow")}</button>`}<p class="fine-print">A hold lasts up to 5 minutes. Browsing and selecting do not reserve a seat.</p>`;
+      return `<div class="summary-line"><span>${tx("Selected", "已选")}</span><strong>${tx(`${selected} / ${state.target} seats`, `${selected} / ${state.target} 座`)}</strong></div><div class="summary-line summary-total"><span>${tx("Face price estimate", "预计票款")}</span><strong>${money(ticketTotal)}</strong></div><p class="fine-print">${tx("Choose ticket types and an eligible coupon at the next step. Any change fee is quoted before confirmation.", "下一步可以选择票种及可用优惠券。改签费会在确认前列明。")}</p>${!onSale() ? `<button class="button wide" id="create-hold" disabled>${tx("Booking closed", "已停止售票")}</button>` : !user ? `<a class="button wide" href="#/login?next=${encodeURIComponent("#/seats/" + sid + "?" + new URLSearchParams({ party_size: String(state.target), seat_ids: [...state.selected].join(","), ...(state.source ? { source_booking_id: state.source.id } : {}), ...(searchFare === "STUDENT" ? { fare_type: "student" } : {}), ...(params.get("from") === "assistant" ? { from: "assistant" } : {}) }))}">${tx("Sign in to hold seats", "登录并占座")} ${icon("arrow")}</a>` : !customer ? `<p class="notice">${tx("Customer accounts book here. For assisted sales, open the cinema workspace.", "顾客可在此购票，员工请进入影院工作台办理柜台售票。")}</p><a class="button wide" href="${counterSalesUrl}">${tx("Open counter sales", "进入柜台售票")}</a>` : `<button class="button wide" id="create-hold" ${selected !== state.target ? "disabled" : ""}>${tx(`Hold ${selected || "your"} ${selected === 1 ? "seat" : "seats"}`, selected ? `保留 ${selected} 个座位` : "保留座位")} ${icon("arrow")}</button>`}<p class="fine-print">${tx("A hold lasts up to 5 minutes. Browsing and selecting do not reserve a seat.", "座位最多保留 5 分钟。点击占座后才会保留座位。")}</p>`;
     }
     return `<form id="quote-form"><div class="fare-choices">${tickets()
       .map((t) => {
         const seat = map.seats.find((st) => st.id === t.seat_id);
-        return `<div class="fare-line"><label for="fare-${t.seat_id}">R${seat.row_no} · S${seat.seat_no}</label><select id="fare-${t.seat_id}" data-fare="${t.seat_id}" aria-label="Ticket type for ${esc(seatLabel(seat))}" ${state.source ? "disabled" : ""}>${map.fares.map((f) => `<option value="${f.fare_type}" ${t.fare_type === f.fare_type ? "selected" : ""}>${fareLabel(f.fare_type)} · ${money(f.price_minor)}</option>`).join("")}</select></div>`;
+        return `<div class="fare-line"><label for="fare-${t.seat_id}">${seatTag(seat)}</label><select id="fare-${t.seat_id}" data-fare="${t.seat_id}" aria-label="${esc(tx(`Ticket type for ${seatLabel(seat)}`, `${seatLabel(seat)}的票种`))}" ${state.source ? "disabled" : ""}>${map.fares.map((f) => `<option value="${f.fare_type}" ${t.fare_type === f.fare_type ? "selected" : ""}>${fareLabel(f.fare_type)} · ${money(f.price_minor)}</option>`).join("")}</select></div>`;
       })
       .join(
         "",
-      )}</div>${state.source ? '<p class="fine-print">Your original ticket mix and discount are carried forward.</p>' : `<label class="field" style="margin:18px 0"><span>Coupon</span><select id="coupon"><option value="">No coupon</option>${coupons.map((c) => `<option value="${esc(c.id)}" ${state.coupon_id === c.id ? "selected" : ""}>50% off · coupon ${esc(c.id.slice(-6))}</option>`).join("")}</select><small>Only unused coupons from this cinema apply.</small></label>`}<p class="fine-print">Student eligibility is checked at admission.</p>${state.phase === "quoted" ? `${paymentSummary()}<button class="button wide" type="button" id="pay-now">${state.quote.amount_due_minor < 0 ? "Confirm change & refund " + money(-state.quote.amount_due_minor) : state.quote.amount_due_minor === 0 ? "Confirm change — no payment" : "Pay " + money(state.quote.amount_due_minor) + (state.source ? " & change" : " & book")}${icon("arrow")}</button><p class="fine-print">${state.source ? "Only a successful change releases your old tickets." : "Payment uses your demo wallet balance."} The server verifies the current price and seat hold again.</p>` : `<button class="button wide" type="submit">Review final price ${icon("arrow")}</button>`}</form><button class="button ghost wide small" id="change-seats" style="margin-top:12px">Release hold & change seats</button>`;
+      )}</div>${state.source ? `<p class="fine-print">${tx("Your original ticket mix and discount are carried forward.", "改签沿用原票种和折扣。")}</p>` : `<label class="field" style="margin:18px 0"><span>${tx("Coupon", "优惠券")}</span><select id="coupon"><option value="">${tx("No coupon", "不使用优惠券")}</option>${coupons.map((c) => `<option value="${esc(c.id)}" ${state.coupon_id === c.id ? "selected" : ""}>${tx("50% off · coupon", "五折券 · 编号")} ${esc(c.id.slice(-6))}</option>`).join("")}</select><small>${tx("Only unused coupons from this cinema apply.", "仅可使用本影院的未使用优惠券。")}</small></label>`}<p class="fine-print">${tx("Student eligibility is checked at admission.", "入场时需出示有效学生证明。")}</p>${state.phase === "quoted" ? `${paymentSummary()}<button class="button wide" type="button" id="pay-now">${payLabel()}${icon("arrow")}</button><p class="fine-print">${state.source ? tx("Only a successful change releases your old tickets.", "改签成功后才会释放原座位。") : tx("Payment uses your demo wallet balance.", "本次使用演示钱包余额付款。")} ${tx("The server verifies the current price and seat hold again.", "确认时会再次核对票价和占座状态。")}</p>` : `<button class="button wide" type="submit">${tx("Review final price", "核对最终价格")} ${icon("arrow")}</button>`}</form><button class="button ghost wide small" id="change-seats" style="margin-top:12px">${tx("Release hold & change seats", "释放占座并重新选座")}</button>`;
   }
   function tick() {
     if (!alive || state.phase === "complete") return;
@@ -587,10 +652,10 @@ export async function renderSeats(ctx, sid) {
       map = await api.request("/screenings/" + sid + "/seats");
       if (!alive) return;
       render();
-      if (state.phase === "held") toast("Your seats are on hold. Review ticket types and price.");
+      if (state.phase === "held") toast(tx("Your seats are on hold. Review ticket types and price.", "座位已保留，请核对票种和价格。"));
     } catch (e) {
       if (!alive) return;
-      state.error = e.userMessage || e.message;
+      state.error = e;
       if (e.code === "SALE_CLOSED") map.saleable = false;
       if (e.code === "SEAT_UNAVAILABLE") {
         try {
@@ -623,7 +688,7 @@ export async function renderSeats(ctx, sid) {
       save();
       render();
     } catch (e) {
-      state.error = e.userMessage || e.message;
+      state.error = e;
       if (e.code === "SALE_CLOSED") map.saleable = false;
       if (["HOLD_EXPIRED", "TOKEN_EXPIRED"].includes(e.code))
         state.phase = "expired";
@@ -645,7 +710,7 @@ export async function renderSeats(ctx, sid) {
       map = await api.request("/screenings/" + sid + "/seats");
       render();
     } catch (e) {
-      state.error = e.userMessage || e.message;
+      state.error = e;
       render();
     }
   }
@@ -665,7 +730,7 @@ export async function renderSeats(ctx, sid) {
         state.phase = result.status === "CONFIRMED" ? "complete" : "expired";
       }
     } catch (e) {
-      state.error = e.userMessage || e.message;
+      state.error = e;
       state.allowPaymentRetry = false;
     } finally {
       nextResultCheck = Date.now() + checkDelay;
@@ -686,11 +751,11 @@ export async function renderSeats(ctx, sid) {
       render();
       toast(
         state.source
-          ? "Your booking has been changed."
-          : "Your tickets are confirmed.",
+          ? tx("Your booking has been changed.", "改签成功。")
+          : tx("Your tickets are confirmed.", "出票成功。"),
       );
     } catch (e) {
-      state.error = e.userMessage || e.message;
+      state.error = e;
       if (e.code === "SALE_CLOSED") map.saleable = false;
       if (api.pending("pay:" + state.hold.id)) {
         state.phase = "recover";
@@ -711,10 +776,10 @@ export async function renderSeats(ctx, sid) {
     const s = map.screening;
     const r = state.receipt;
     if (r.status && r.status !== "CONFIRMED") {
-      root.innerHTML = `<section class="panel"><h1>These tickets are no longer valid</h1><p>This booking has been cancelled or rescheduled. Check your account for the current tickets and any refund.</p><a class="button" href="#/account?tab=orders&booking=${esc(r.booking_id)}">View booking and refund</a></section>`;
+      root.innerHTML = `<section class="panel"><h1>${tx("These tickets are no longer valid", "影票已失效")}</h1><p>${tx("This booking has been cancelled or rescheduled. Check your account for the current tickets and any refund.", "此订单已取消或改签。请在「我的影票」查看有效影票及退款。")}</p><a class="button" href="#/account?tab=orders&booking=${esc(r.booking_id)}">${tx("View booking and refund", "查看订单和退款")}</a></section>`;
       return;
     }
-    root.innerHTML = `<section class="panel success-panel"><div class="success-mark">${icon("check")}</div><p class="eyebrow">${state.source ? "NEW PLANS, CONFIRMED" : "YOU’RE GOING TO THE MOVIES"}</p><h1>${state.source ? "Your booking is changed." : "See you at the cinema."}</h1><p class="muted">${state.source ? "Your old seats have been released and your new tickets are ready." : "Your tickets are confirmed. Find the details in your account anytime."}</p><div class="success-ticket"><span class="badge">Confirmed</span><h2 style="margin-top:15px">${esc(film.title)}</h2><p class="muted" style="font-size:13px">${esc(cinema?.name || "Cinema")} · ${esc(s.screen_name || "Screen")} · ${dateTime(s.starts_at)}</p>${chosenTags()}<div class="summary-line"><span>${r.amount_due_minor < 0 ? "Returned to balance" : "Paid from balance"}</span><strong>${money(Math.abs(r.amount_due_minor))}</strong></div><div class="summary-line"><span>Remaining balance</span><strong>${money(r.balance_minor)}</strong></div><p class="fine-print" style="margin-bottom:0">Booking ${esc(r.booking_id)}</p></div><div class="actions">${customer ? `<button type="button" class="button" data-success-ticket>${icon("ticket")} View ticket</button>` : ""}<a class="button ${customer ? "secondary" : ""}" href="#/account?tab=orders&booking=${esc(r.booking_id)}">View my tickets ${icon("arrow")}</a><a class="button ghost" href="#/discover">Back to showtimes</a></div></section>`;
+    root.innerHTML = `<section class="panel success-panel"><div class="success-mark">${icon("check")}</div><p class="eyebrow">${state.source ? tx("NEW PLANS, CONFIRMED", "改签成功") : tx("YOU’RE GOING TO THE MOVIES", "购票成功")}</p><h1>${state.source ? tx("Your booking is changed.", "改签已确认") : tx("See you at the cinema.", "出票成功")}</h1><p class="muted">${state.source ? tx("Your old seats have been released and your new tickets are ready.", "原座位已释放，新影票已生成。") : tx("Your tickets are confirmed. Find the details in your account anytime.", "影票已确认，可随时在「我的影票」查看。")}</p><div class="success-ticket"><span class="badge">${tx("Confirmed", "已出票")}</span><h2 style="margin-top:15px">${esc(film.title)}</h2><p class="muted" style="font-size:13px">${esc(cinema?.name || tx("Cinema", "影院"))} · ${esc(s.screen_name || tx("Screen", "影厅"))} · ${dateTime(s.starts_at)}</p>${chosenTags()}<div class="summary-line"><span>${r.amount_due_minor < 0 ? tx("Returned to balance", "已退回钱包") : tx("Paid from balance", "钱包已扣款")}</span><strong>${money(Math.abs(r.amount_due_minor))}</strong></div><div class="summary-line"><span>${tx("Remaining balance", "钱包余额")}</span><strong>${money(r.balance_minor)}</strong></div><p class="fine-print" style="margin-bottom:0">${tx("Booking", "订单")} ${esc(r.booking_id)}</p></div><div class="actions">${customer ? `<button type="button" class="button" data-success-ticket>${icon("ticket")} ${tx("View ticket", "查看电子票")}</button>` : ""}<a class="button ${customer ? "secondary" : ""}" href="#/account?tab=orders&booking=${esc(r.booking_id)}">${tx("View my tickets", "查看我的影票")} ${icon("arrow")}</a><a class="button ghost" href="#/discover">${tx("Back to showtimes", "返回场次列表")}</a></div></section>`;
     const ticket = root.querySelector("[data-success-ticket]");
     if (ticket) {
       ticket.onclick = () => {
@@ -724,17 +789,18 @@ export async function renderSeats(ctx, sid) {
     }
   }
   function showBundle(container, data, label, description) {
-    container.innerHTML = `${notice(description)}<label class="field"><span>${esc(label)}</span><textarea readonly spellcheck="false" aria-label="${esc(label)}">${esc(JSON.stringify(data))}</textarea></label><button class="button ghost small" type="button" style="margin-top:10px">Copy approval</button>`;
+    container.innerHTML = `${notice(description)}<label class="field"><span>${esc(label)}</span><textarea readonly spellcheck="false" aria-label="${esc(label)}">${esc(JSON.stringify(data))}</textarea></label><button class="button ghost small" type="button" style="margin-top:10px">${tx("Copy approval", "复制授权")}</button>`;
     container.querySelector("button").onclick = async () => {
       try {
         await navigator.clipboard.writeText(JSON.stringify(data));
-        toast("Approval copied.");
+        toast(tx("Approval copied.", "已复制授权。"));
       } catch {
         container.querySelector("textarea").select();
-        toast("Select and copy the approval text.");
+        toast(tx("Select and copy the approval text.", "请选择并复制授权文本。"));
       }
     };
   }
+  ctx.updateLanguage = updateLanguage;
   render();
   interval = setInterval(tick, 1000);
   const salePoll = setInterval(checkVisibleSale, 5000);
