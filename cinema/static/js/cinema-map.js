@@ -44,6 +44,14 @@ const words = {
   },
 };
 
+// District IDs belong to each installation. The administrative codes are shared.
+const districtNamesZh = {
+  "110101": "东城区", "110102": "西城区", "110105": "朝阳区", "110106": "丰台区",
+  "110107": "石景山区", "110108": "海淀区", "110109": "门头沟区", "110111": "房山区",
+  "110112": "通州区", "110113": "顺义区", "110114": "昌平区", "110115": "大兴区",
+  "110116": "怀柔区", "110117": "平谷区", "110118": "密云区", "110119": "延庆区",
+};
+
 const cinemaPhotos = {
   "万达影城(CBD万达广场店)": {
     "src": "/static/assets/cinemas/wanda-cbd.webp",
@@ -106,6 +114,9 @@ function cinemaCover(cinema) {
 }
 export async function renderCinemaMap(ctx) {
   const { root, api, bootstrap } = ctx;
+  const districts = bootstrap.districts.map((d) => ({
+    ...d, nameZh: districtNamesZh[d.admin_code] ?? d.name,
+  }));
   let config;
   try { config = await api.request("/maps/config"); } catch { config = { enabled: false }; }
   let language = getLanguage(), district = "", nearest = false, position = null, address = null, accuracy = null;
@@ -290,7 +301,7 @@ export async function renderCinemaMap(ctx) {
       node.textContent = t(node.dataset.mapCopy);
     });
     el("canvas").setAttribute("aria-label", t("mapLabel"));
-    el("district").innerHTML = options(bootstrap.districts, district, "name", t("all"));
+    el("district").innerHTML = options(districts, district, language === "zh" ? "nameZh" : "name", t("all"));
     // Keep the live map, location and any plotted routes across a language change.
     draw(false);
     message();
