@@ -1,6 +1,7 @@
 import { esc, money, dateTime, empty, notice, screenName } from "./ui.js";
 import { openTicketCard } from "./ticket-card.js";
 import { tx } from "./locale.js";
+import { filmTitle } from "./film-locale.js";
 
 const PAGE_SIZE = 8;
 const TABS = [
@@ -190,8 +191,8 @@ export async function renderAccount(ctx) {
   const getCinema = (id) =>
     asList(bootstrap?.cinemas).find((c) => String(c.id) === String(id))?.name ||
     tx("Cinema", "影院");
-  const getFilm = (id) =>
-    asList(bootstrap?.films).find((f) => String(f.id) === String(id))?.title ||
+  const getFilm = (id, title) =>
+    filmTitle(title || asList(bootstrap?.films).find((f) => String(f.id) === String(id))) ||
     tx("Film", "影片");
 
   if (!user || user.role !== "CUSTOMER") {
@@ -225,7 +226,7 @@ export async function renderAccount(ctx) {
     const open = String(selectedBooking || "") === String(b.id);
     const partySize = Number(b.ticket_count ?? b.tickets?.length ?? 0);
     return `<article class="panel" data-booking="${esc(b.id)}">
-      <div class="panel-header"><div><p class="eyebrow">${esc(b.cinema_name || getCinema(b.cinema_id))}</p><h2>${esc(b.film_title || getFilm(b.film_id))}</h2></div><div class="actions">${badge(b.status)}${ended ? `<span class="badge">${tx("Started", "已开场")}</span>` : ""}</div></div>
+      <div class="panel-header"><div><p class="eyebrow">${esc(b.cinema_name || getCinema(b.cinema_id))}</p><h2>${esc(getFilm(b.film_id, b.film_title))}</h2></div><div class="actions">${badge(b.status)}${ended ? `<span class="badge">${tx("Started", "已开场")}</span>` : ""}</div></div>
       <div class="form-grid account-booking-facts">
         ${datum(tx("Beijing time", "北京时间"), esc(b.starts_at ? dateTime(b.starts_at) : tx("See booking details", "请查看订单详情")))}
         ${datum(tx("Screen", "影厅"), esc([b.screen_name, screenName(b.screen_type)].filter(Boolean).join(" · ") || tx("Cinema screen", "影厅")))}
@@ -516,7 +517,7 @@ export async function renderAccount(ctx) {
         const feeRate = Number(preview.fee_rate_bps) / 100;
         const previousFees = money(preview.previous_fees_minor);
         d.querySelector("[data-refund-content]").outerHTML = `<div data-refund-content class="stack">
-          <p><strong>${esc(preview.film_title)}</strong><br>${esc(preview.cinema_name)} · ${esc(preview.screen_name)}<br>${esc(dateTime(preview.starts_at))}</p>
+          <p><strong>${esc(filmTitle(preview.film_title))}</strong><br>${esc(preview.cinema_name)} · ${esc(preview.screen_name)}<br>${esc(dateTime(preview.starts_at))}</p>
           <p class="muted">${preview.seats.map((seat) => esc(seatLabel(seat))).join(" / ")}</p>
           <div class="account-refund-amounts">
             <div class="toolbar"><span>${tx("Net ticket value", "折后票款")}</span><strong>${money(preview.ticket_value_minor)}</strong></div>

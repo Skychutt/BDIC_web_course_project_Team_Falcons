@@ -1,6 +1,7 @@
 import { esc, money, dateTime, timeOnly, screenName, notice } from "./ui.js";
 import { filmArtwork } from "./film-artwork.js";
 import { tx } from "./locale.js";
+import { filmTitle } from "./film-locale.js";
 
 // Original card copy; these are not quotations from the films.
 const LINES = {
@@ -116,6 +117,7 @@ export async function renderTicketCanvas(data) {
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
   const seats = data.seats;
+  const title = filmTitle(data.film_title);
   const hallLabel = `${data.screen_name} · ${tx("YOUR SEATS", "座位")}`;
   const state = stateFor(data);
   const tagline = Object.hasOwn(LINES, data.film_title) ? LINES[data.film_title] : DEFAULT_TAGLINE;
@@ -132,7 +134,7 @@ export async function renderTicketCanvas(data) {
   const footerY = 772 + detailHeight;
   canvas.width = 1080; canvas.height = footerY + 360;
   canvas.setAttribute("role", "img");
-  canvas.setAttribute("aria-label", [data.film_title, data.cinema_name, dateTime(data.starts_at), seatText(seats), state.badge].join(tx(". ", "。")));
+  canvas.setAttribute("aria-label", [title, data.cinema_name, dateTime(data.starts_at), seatText(seats), state.badge].join(tx(". ", "。")));
   ctx.textBaseline = "top";
   rounded(ctx, 0, 0, 1080, canvas.height, 36, "#fbf8f0");
   text(ctx, "falcons.", 64, 36, 52, "#ec255b", 900);
@@ -153,8 +155,8 @@ export async function renderTicketCanvas(data) {
   }
   text(ctx, tx("A FALCONS MOVIE NIGHT", "FALCONS 观影之夜"), 72, 174, 20, "#dcc5a0", 700);
   let titleSize = 68;
-  do { ctx.font = font(titleSize, 700, true); if (wrap(ctx, data.film_title, 542).length * titleSize * 1.12 <= 300) break; titleSize -= 2; } while (titleSize > 26);
-  paragraph(ctx, data.film_title, 70, 238, 542, titleSize, "#fffaf0", 700, titleSize * 1.12, true);
+  do { ctx.font = font(titleSize, 700, true); if (wrap(ctx, title, 542).length * titleSize * 1.12 <= 300) break; titleSize -= 2; } while (titleSize > 26);
+  paragraph(ctx, title, 70, 238, 542, titleSize, "#fffaf0", 700, titleSize * 1.12, true);
   paragraph(ctx, tx(...tagline), 72, 557, 510, 27, "#e0dcd3", 400, 38, true);
   text(ctx, `${screenName(data.screen_type)}   /   ${data.duration_minutes} ${tx("MIN", "分钟")}`, 72, 677, 22, "#dcc5a0", 700);
   ctx.restore();
@@ -212,7 +214,7 @@ function content(data) {
     <section class="ticket-card-info"><p class="eyebrow">${tx("YOUR DIGITAL TICKET", "电子影票")}</p><h2 id="ticket-card-title">${esc(state.heading)}</h2>
       <p class="ticket-card-message">${esc(state.summary)}</p>
       <dl class="ticket-card-facts">
-        <div><dt>${tx("Film", "影片")}</dt><dd>${esc(data.film_title)}</dd></div>
+        <div><dt>${tx("Film", "影片")}</dt><dd>${esc(filmTitle(data.film_title))}</dd></div>
         <div><dt>${tx("When", "场次时间")}</dt><dd>${esc(dateTime(data.starts_at))} · ${tx("Beijing", "北京时间")}</dd></div>
         <div><dt>${tx("Cinema", "影院")}</dt><dd>${esc(data.cinema_name)}<small>${esc(data.screen_name)} · ${esc(screenName(data.screen_type))}</small></dd></div>
         <div><dt>${tx("Seats", "座位")}</dt><dd>${esc(seatText(data.seats))}</dd></div>
