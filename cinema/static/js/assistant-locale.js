@@ -9,7 +9,7 @@ export function replyLanguage(message, previous = 'zh') {
 const genres = {
   'Science Fiction': '科幻', Comedy: '喜剧', Drama: '剧情', Adventure: '冒险', Romance: '爱情',
   Animation: '动画', Thriller: '惊悚', Mystery: '悬疑', Action: '动作', Horror: '恐怖',
-  Documentary: '纪录片', Biography: '传记', Crime: '犯罪', Fantasy: '奇幻', Family: '家庭',
+  Documentary: '纪录片', Biography: '传记', Crime: '犯罪', Fantasy: '奇幻', Family: '家庭', 'Sci-Fi': '科幻',
 };
 const statuses = {
   CONFIRMED: ['已确认', 'Confirmed'], RESCHEDULED: ['已改签', 'Rescheduled'],

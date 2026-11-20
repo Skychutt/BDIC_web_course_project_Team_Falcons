@@ -8,6 +8,7 @@ import re
 from importlib.resources import files
 
 TRANSLATIONS = json.loads(files("cinema_ai").joinpath("data/translations.json").read_text(encoding="utf-8"))
+TRANSLATIONS["films"] = json.loads(files("cinema").joinpath("static/assets/film-translations.json").read_text(encoding="utf-8"))
 
 
 def reply_locale(message, previous="zh"):
