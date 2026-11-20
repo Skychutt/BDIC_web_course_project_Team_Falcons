@@ -6,6 +6,7 @@ import { createMapFrame, locateDevice } from "./amap.js";
 const words = {
   en: {
     route_connection: "Cannot connect securely to AMap. Check your network or proxy and try again.",
+    city: "Beijing", coverLabel: "BEIJING · CINEMA",
     title: "A big screen, near you.", intro: "Explore our Beijing cinemas and find your next showtime.",
     map: "Show map", locate: "Use my location", clear: "Clear location", district: "District", all: "All Beijing",
     nearest: "Sort by distance", privacy: "Location is optional. When you choose to locate, your browser asks permission and AMap converts the position. It stays in this page's memory and is not sent to the AI assistant.",
@@ -25,6 +26,7 @@ const words = {
   },
   zh: {
     route_connection: "无法安全连接高德路线服务，请检查网络或代理后重试。",
+    city: "北京", coverLabel: "北京 · 影院",
     title: "找到附近的好影院", intro: "浏览北京影院，查看地址与可售场次。",
     map: "显示地图", locate: "定位我的位置", clear: "清除位置", district: "行政区", all: "北京全市",
     nearest: "按距离排序", privacy: "定位为可选功能。点击定位后，浏览器会请求授权，高德会进行坐标转换。位置仅保留在当前页面内存，不发送给 AI 助手。",
@@ -108,10 +110,6 @@ const cinemaPhotos = {
     "caption": "场馆入口"
   }
 };
-function cinemaCover(cinema) {
-  const photo = cinemaPhotos[cinema.name];
-  return `<div class="cinema-card-top cinema-photo-cover">${photo ? `<img src="${photo.src}" alt="${esc(photo.alt)}" loading="lazy" decoding="async" width="1200" height="800">` : ""}<span class="cinema-cover-label"><small>BEIJING · CINEMA</small><span>${esc(cinema.district_name || "Beijing")}</span></span>${photo ? `<a class="cinema-photo-credit" href="${photo.source}" target="_blank" rel="noopener noreferrer">${esc(photo.caption)} · 来源 ↗</a>` : ""}</div>`;
-}
 export async function renderCinemaMap(ctx) {
   const { root, api, bootstrap } = ctx;
   const districts = bootstrap.districts.map((d) => ({
@@ -170,6 +168,16 @@ export async function renderCinemaMap(ctx) {
       return `<p class="cinema-route-line"><i class="route-swatch route-${mode}"></i><span>${label} · ${detail}</span></p>`;
     };
     return line("driving", t("drive")) + line("walking", t("walk"));
+  }
+  function cinemaCover(cinema) {
+    const photo = cinemaPhotos[cinema.name];
+    const nameZh = language === "zh" && districts.find((d) => d.id === cinema.district_id)?.nameZh;
+    const districtName = nameZh || cinema.district_name || t("city");
+    return `<div class="cinema-card-top cinema-photo-cover">
+      ${photo ? `<img src="${photo.src}" alt="${esc(photo.alt)}" loading="lazy" decoding="async" width="1200" height="800">` : ""}
+      <span class="cinema-cover-label"><small>${t("coverLabel")}</small><span>${esc(districtName)}</span></span>
+      ${photo ? `<a class="cinema-photo-credit" href="${photo.source}" target="_blank" rel="noopener noreferrer">${esc(photo.caption)} · 来源 ↗</a>` : ""}
+    </div>`;
   }
   function draw(updateMap = true) {
     const values = orderedCinemas(bootstrap.cinemas, position, district, nearest);
