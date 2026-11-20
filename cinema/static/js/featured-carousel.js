@@ -8,7 +8,8 @@ export function bindFeaturedCarousel(root, {
   const slides = [...carousel.querySelectorAll('[data-featured-slide]')];
   if (slides.length < 2) return;
   const stage = carousel.querySelector('[data-featured-stage]');
-  let current = 0, timer, stopped = false, hovered = false, focused = false;
+  let current = Math.max(0, slides.indexOf(carousel.querySelector('[data-featured-slide].is-active')));
+  let timer, stopped = false, hovered = false, focused = false;
   let paused = motion.matches;
   function schedule() {
     cancel(timer);

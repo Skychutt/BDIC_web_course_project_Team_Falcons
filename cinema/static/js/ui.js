@@ -1,4 +1,5 @@
 import { filmArtwork } from './film-artwork.js';
+import { filmTitle } from './film-locale.js';
 import { getLanguage, tx } from "./locale.js";
 
 export const esc = (value = "") =>
@@ -155,7 +156,8 @@ export async function runForm(form, handler) {
 }
 export function poster(film, small = false) {
   const image = filmArtwork(film);
-  if (image) return `<div class="film-poster photographic-poster ${small ? 'poster-small' : ''}"><img src="${image}" alt="${esc(film.title)} poster" loading="lazy" decoding="async"></div>`;
+  const title = esc(filmTitle(film));
+  if (image) return `<div class="film-poster photographic-poster ${small ? 'poster-small' : ''}"><img src="${image}" alt="${title} ${tx("poster", "海报")}" loading="lazy" decoding="async"></div>`;
   const artwork = film.title === "Journey Beyond the City" ? "city-poster" : "";
-  return `<div class="film-poster ${artwork} ${small ? "poster-small" : ""}" aria-label="${esc(film.title)}"><span class="poster-imprint">A FALCONS SCREENING</span><div class="poster-orbit" aria-hidden="true"></div><div class="poster-type">${esc(film.title)}</div><span class="poster-caption">${esc(film.duration_minutes)} MINUTES · DEMO FILM</span></div>`;
+  return `<div class="film-poster ${artwork} ${small ? "poster-small" : ""}" aria-label="${title}"><span class="poster-imprint">${tx("A FALCONS SCREENING", "FALCONS 放映")}</span><div class="poster-orbit" aria-hidden="true"></div><div class="poster-type">${title}</div><span class="poster-caption">${esc(film.duration_minutes)} ${tx("MINUTES · DEMO FILM", "分钟 · 演示影片")}</span></div>`;
 }
