@@ -37,6 +37,14 @@ def test_screening_search_date_upper_bound(env):
     assert last_day.json["data"]["items"] == []
 
 
+def test_film_search_treats_like_wildcards_as_literal_text(env):
+    public = client(env)
+    assert public.get("/api/films", query_string={"q": "Journey"}).json["data"]["total"] == 1
+    assert public.get("/api/films", query_string={"q": "%"}).json["data"]["total"] == 0
+    assert public.get("/api/films", query_string={"q": "_"}).json["data"]["total"] == 0
+    assert public.get("/api/films", query_string={"q": "!"}).json["data"]["total"] == 0
+
+
 def key():
     return "frontend-test-" + secrets.token_hex(10)
 
