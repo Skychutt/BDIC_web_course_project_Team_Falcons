@@ -239,6 +239,22 @@ def test_migration_repeat_preserves_transactions(env):
     cancellations.initialize_cancellations(db())
     with db().connect() as c:
         assert before == {t: rows(c, f'SELECT * FROM {t} ORDER BY id') for t in tables}
+        clauses = ' '.join(
+            row['CHECK_CLAUSE']
+            for row in rows(
+                c,
+                """SELECT cc.CHECK_CLAUSE
+                   FROM information_schema.CHECK_CONSTRAINTS cc
+                   JOIN information_schema.TABLE_CONSTRAINTS tc
+                     ON tc.CONSTRAINT_SCHEMA=cc.CONSTRAINT_SCHEMA
+                    AND tc.CONSTRAINT_NAME=cc.CONSTRAINT_NAME
+                   WHERE cc.CONSTRAINT_SCHEMA=DATABASE()
+                     AND tc.TABLE_NAME IN ('bookings','operations','refunds')""",
+            )
+        )
+        assert 'CUSTOMER_CANCELLED' in clauses
+        assert 'CANCEL_BOOKING' in clauses
+        assert 'CUSTOMER_CANCELLATION' in clauses
 
 
 def test_customer_refund_invalidates_cinema_preview_without_double_refund(env):
