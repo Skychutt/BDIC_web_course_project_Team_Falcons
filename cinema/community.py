@@ -141,6 +141,8 @@ def threads(fid):
 def create_post(table, parent, parent_id, data, request_id):
     actor = g.actor
     role(actor, "CUSTOMER")
+    allowed = {"body", "title", "spoiler"} if table == "film_threads" else {"body"}
+    require(set(data) <= allowed, "VALIDATION", "Unexpected fields in community post")
     content = string(data.get("body"), "Message", 8000 if table == "film_threads" else 2000)
     values = dict(body=content)
     if table == "film_threads":
