@@ -64,14 +64,24 @@ test('reduced motion starts paused and a single film needs no timer', () => {
   assert.equal(fixture({size:1}).jobs.size,0);
 });
 
+test('pause and play controls stop and resume automatic rotation', () => {
+  const f=fixture();
+  assert.equal(f.jobs.size,1);
+  f.action('pause'); assert.equal(f.jobs.size,0);
+  f.action('play'); assert.equal(f.jobs.size,1);
+  f.cleanup();
+});
+
 test('unified scores use a single 10-point display and film-specific links', () => {
   const films = ['<First>', 'Second'].map((title,i)=>({id:String(i+1),title,synopsis:'Example',duration_minutes:86,
     genres:[],rating:{average:'6.0',count:53066,scale:10}}));
   const html=renderCatalogue({films,cinemas:[]},{date:'2026-10-25',party_size:2});
   assert.match(html,/film_id=1/); assert.match(html,/film_id=2/);
   assert.match(html,/&lt;First&gt;/); assert.doesNotMatch(html,/Beijing cinemas/);
-  assert.equal((html.match(/data-featured-action=/g) || []).length,2);
-  assert.doesNotMatch(html,/data-featured-index|data-featured-count|featured-toggle|Pause/);
+  assert.equal((html.match(/data-featured-action=/g) || []).length,3);
+  assert.match(html,/data-featured-action="pause"/);
+  assert.match(html,/>Pause</);
+  assert.doesNotMatch(html,/data-featured-index|data-featured-count|featured-toggle/);
   assert.match(filmRating(films[0]),/6\.0/); assert.match(filmRating(films[0]),/\/ 10/);
   assert.match(filmRating(films[0]),/53,066 ratings/);
   assert.doesNotMatch(filmRating(films[0]),/Douban|豆瓣|Site users|\/ 5/);
