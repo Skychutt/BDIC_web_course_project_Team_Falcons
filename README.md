@@ -132,6 +132,16 @@ python -m pip install --no-deps .
 
 连接队友提供的服务器：编辑 `.env` 为 `DATA_SOURCE=backend` 并设置 `DATABASE_URL`、`SECRET_KEY`。已有 v1 schema 可直接使用；仅在明确的**空数据库**上执行 `flask --app cinema init-db`。DDL 在 `cinema/sql/001_initial.sql`，非空库会拒绝初始化。不要对已有库重新 seed。已有库补齐影评、评分快照和新增样本时，使用上面的 Windows 第 3 步，不要重新初始化。
 
+Windows 上运行完整数据库测试时，使用有权创建和删除测试库的专用 MySQL 账号，不要把生产账号写进仓库：
+
+```powershell
+$env:TEST_DATABASE_URL = "mysql+pymysql://test_user:本机密码@127.0.0.1:3306/mysql"
+python -m pytest backend_tests -q
+Remove-Item Env:TEST_DATABASE_URL
+```
+
+测试只创建并删除随机命名的 `cinema_test_*` 数据库；未设置 `TEST_DATABASE_URL` 时相关测试会跳过。
+
 ## 验证
 
 业务 Agent 升级的最新验证与限制见 [business-agent.md](docs/business-agent.md)：完整隔离库回归 171 项 Python 测试、5 项 AI 前端链接测试通过；另有 7 组真实模型业务样例。下方 124 项为此前全栈合并阶段的历史记录。
