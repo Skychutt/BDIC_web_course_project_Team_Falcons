@@ -198,6 +198,37 @@ def test_coupon_refunds_net_value_without_restoring_or_issuing_coupon(env):
         assert count(c, 'coupons') == 1
 
 
+def test_cinema_cancellation_reports_missing_wallet_without_partial_changes(env):
+    purchase, hold = buy(env, index=0)
+    manager = actor(env, 'manager1')
+    preview = management.cancel_preview(
+        manager,
+        hold['screening_id'],
+        {'reason': 'test missing wallet'},
+    )
+    with db().begin() as c:
+        wallet = one(c, 'SELECT id FROM wallets WHERE customer_id=:u', u=actor(env)['id'])
+        c.exec_driver_sql('DELETE FROM settlement_entries')
+        c.exec_driver_sql('DELETE FROM wallet_entries WHERE wallet_id=%s', (wallet['id'],))
+        c.exec_driver_sql('DELETE FROM payments WHERE wallet_id=%s', (wallet['id'],))
+        c.exec_driver_sql('DELETE FROM wallets WHERE id=%s', (wallet['id'],))
+
+    with pytest.raises(Problem) as error:
+        management.cancel_confirm(
+            manager,
+            hold['screening_id'],
+            {'preview_token': preview['preview_token']},
+            key(),
+        )
+
+    assert error.value.code == 'WALLET_MISSING'
+    assert error.value.status == 409
+    with db().connect() as c:
+        assert get(c, 'screenings', hold['screening_id'])['status'] == 'PUBLISHED'
+        assert get(c, 'bookings', purchase['booking_id'])['status'] == 'CONFIRMED'
+        assert count(c, 'refunds') == 0
+
+
 def test_migration_repeat_preserves_transactions(env):
     purchase, _ = buy(env)
     refund(env, purchase['booking_id'])
@@ -208,6 +239,22 @@ def test_migration_repeat_preserves_transactions(env):
     cancellations.initialize_cancellations(db())
     with db().connect() as c:
         assert before == {t: rows(c, f'SELECT * FROM {t} ORDER BY id') for t in tables}
+        clauses = ' '.join(
+            row['CHECK_CLAUSE']
+            for row in rows(
+                c,
+                """SELECT cc.CHECK_CLAUSE
+                   FROM information_schema.CHECK_CONSTRAINTS cc
+                   JOIN information_schema.TABLE_CONSTRAINTS tc
+                     ON tc.CONSTRAINT_SCHEMA=cc.CONSTRAINT_SCHEMA
+                    AND tc.CONSTRAINT_NAME=cc.CONSTRAINT_NAME
+                   WHERE cc.CONSTRAINT_SCHEMA=DATABASE()
+                     AND tc.TABLE_NAME IN ('bookings','operations','refunds')""",
+            )
+        )
+        assert 'CUSTOMER_CANCELLED' in clauses
+        assert 'CANCEL_BOOKING' in clauses
+        assert 'CUSTOMER_CANCELLATION' in clauses
 
 
 def test_customer_refund_invalidates_cinema_preview_without_double_refund(env):

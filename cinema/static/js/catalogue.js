@@ -35,7 +35,7 @@ export function renderCatalogue(bootstrap, filters, activeFilmId) {
     </div>${featurePoster ? `<img class="hero-film-artwork" src="${featurePoster}" alt="${title} ${tx('poster', '海报')}" decoding="async" ${active ? 'fetchpriority="high"' : ''}>` : ''}
     </article>`;
     }).join('')}</div>
-    ${films.length > 1 ? `<div class="featured-controls"><button type="button" data-featured-action="prev" aria-label="${tx('Previous film', '上一部')}">‹</button><button type="button" data-featured-action="next" aria-label="${tx('Next film', '下一部')}">›</button></div>` : ''}
+    ${films.length > 1 ? `<div class="featured-controls"><button type="button" data-featured-action="prev" aria-label="${tx('Previous film', '上一部')}">‹</button><button type="button" data-featured-action="pause" aria-pressed="false" data-pause-label="${tx('Pause featured films', '暂停精选轮播')}" data-play-label="${tx('Play featured films', '播放精选轮播')}" data-pause-text="${tx('Pause', '暂停')}" data-play-text="${tx('Play', '播放')}" aria-label="${tx('Pause featured films', '暂停精选轮播')}">${tx('Pause', '暂停')}</button><button type="button" data-featured-action="next" aria-label="${tx('Next film', '下一部')}">›</button></div>` : ''}
   </section>
   <section class="catalogue-section" aria-labelledby="catalogue-title">
     <div class="catalogue-heading"><div><span class="section-marker"></span><h2 id="catalogue-title">${tx('Explore the films', '浏览影片')}</h2><span class="catalogue-count">${films.length} ${filmWord(films.length)}</span></div><a href="#/cinemas">${tx(`${cinemas.length} cinemas in Beijing`, `北京 ${cinemas.length} 家影院`)} ${icon('chevron')}</a></div>

@@ -37,6 +37,14 @@ def test_screening_search_date_upper_bound(env):
     assert last_day.json["data"]["items"] == []
 
 
+def test_film_search_treats_like_wildcards_as_literal_text(env):
+    public = client(env)
+    assert public.get("/api/films", query_string={"q": "Journey"}).json["data"]["total"] == 1
+    assert public.get("/api/films", query_string={"q": "%"}).json["data"]["total"] == 0
+    assert public.get("/api/films", query_string={"q": "_"}).json["data"]["total"] == 0
+    assert public.get("/api/films", query_string={"q": "!"}).json["data"]["total"] == 0
+
+
 def key():
     return "frontend-test-" + secrets.token_hex(10)
 
@@ -52,6 +60,30 @@ def prepare_quote(env, index=0, name="customer"):
 def purchase(env, index=0, name="customer"):
     _, quote = prepare_quote(env, index, name)
     return booking.checkout(actor(env, name), {"quote_token": quote["quote_token"]}, key())
+
+
+def test_checkout_reports_missing_customer_wallet_without_writing_payment(env):
+    customer = actor(env)
+    _, quote = prepare_quote(env)
+    with db().begin() as c:
+        wallet = one(c, "SELECT id FROM wallets WHERE customer_id=:u", u=customer["id"])
+        c.exec_driver_sql(
+            "DELETE FROM wallet_entries WHERE wallet_id=%s",
+            (wallet["id"],),
+        )
+        c.exec_driver_sql(
+            "DELETE FROM wallets WHERE id=%s",
+            (wallet["id"],),
+        )
+
+    with pytest.raises(Problem) as error:
+        booking.checkout(customer, {"quote_token": quote["quote_token"]}, key())
+
+    assert error.value.code == "WALLET_MISSING"
+    assert error.value.status == 409
+    with db().connect() as c:
+        assert one(c, "SELECT COUNT(*) AS n FROM payments")["n"] == 0
+        assert one(c, "SELECT COUNT(*) AS n FROM bookings")["n"] == 0
 
 
 def test_reschedule_search_excludes_original_before_count_and_pagination(env):

@@ -58,6 +58,16 @@ def create_app(config=None):
         "CONFIG",
         "Set SECRET_KEY to at least 32 random characters",
     )
+    try:
+        timeout = float(app.config["AI_TIMEOUT_SECONDS"])
+    except (TypeError, ValueError) as error:
+        raise ValueError("AI_TIMEOUT_SECONDS must be a number in (0, 60]") from error
+    require(
+        0 < timeout <= 60,
+        "CONFIG",
+        "AI_TIMEOUT_SECONDS must be in (0, 60]",
+    )
+    app.config["AI_TIMEOUT_SECONDS"] = timeout
     app.extensions["db"] = make_engine(app.config["DATABASE_URL"])
     app.extensions["dummy_password_hash"] = generate_password_hash(
         "dummy-password-never-used"

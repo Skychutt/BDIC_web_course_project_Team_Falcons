@@ -33,10 +33,10 @@ const select = (label, name, options, value = "", extra = "") =>
   `<label class="field"><span>${esc(label)}</span><select name="${esc(name)}" aria-label="${esc(label)}" ${extra}>${options.map(([id, title]) => `<option value="${esc(id)}" ${String(id) === String(value) ? "selected" : ""}>${esc(title)}</option>`).join("")}</select></label>`;
 const button = (text, action, id = "", kind = "secondary") =>
   `<button type="button" class="button ${kind}" data-act="${action}" data-id="${esc(id)}">${text}</button>`;
-const table = (head, rows, fallback = tx("No records yet", "暂无记录")) =>
+const table = (head, rows, fallback) =>
   rows.length
     ? `<div class="table-wrap"><table class="table"><thead><tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`
-    : `<div class="empty"><strong>${esc(fallback)}</strong><p class="muted">${tx("Records will appear here after the relevant activity.", "有相关业务后，记录会显示在这里。")}</p></div>`;
+    : `<div class="empty"><strong>${esc(fallback || tx("No records yet", "暂无记录"))}</strong><p class="muted">${tx("Records will appear here after the relevant activity.", "有相关操作后，记录会出现在这里。")}</p></div>`;
 const alertBox = (text) => `<div class="notice">${esc(text)}</div>`;
 const beijingNow = () =>
   new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 16);
@@ -130,7 +130,7 @@ export async function renderOperations(ctx) {
   const errorText = (err) =>
     err?.userMessage ||
     err?.message ||
-    tx("The action could not be completed. Please try again.", "操作未完成，请重试。");
+    tx("The action could not be completed. Please try again.", "操作未能完成，请重试。");
   function bindActions(container, handler) {
     container.onclick = (event) => {
       const target = event.target.closest("[data-act]");
@@ -172,18 +172,22 @@ export async function renderOperations(ctx) {
     });
   }
   function dialog(title, body) {
+    const trigger = document.activeElement;
+    const titleId = `operations-dialog-title-${dialogs.size + 1}`;
     const d = document.createElement("dialog");
     d.className = "modal-dialog operations-dialog";
-    d.setAttribute("aria-label", title);
-    d.innerHTML = `<div class="panel-header"><h2>${esc(title)}</h2><button type="button" class="button ghost" data-close aria-label="${tx("Close dialog", "关闭弹窗")}">${tx("Close ×", "关闭 ×")}</button></div><div class="stack">${body}</div>`;
+    d.setAttribute("aria-labelledby", titleId);
+    d.innerHTML = `<div class="panel-header"><h2 id="${titleId}">${esc(title)}</h2><button type="button" class="button ghost" data-close aria-label="${tx("Close dialog", "关闭对话框")}">${tx("Close ×", "关闭 ×")}</button></div><div class="stack">${body}</div>`;
     document.body.append(d);
     dialogs.add(d);
     d.querySelector("[data-close]").onclick = () => d.close();
     d.addEventListener("close", () => {
       dialogs.delete(d);
       d.remove();
+      if (trigger?.isConnected) trigger.focus({ preventScroll: true });
     });
     d.showModal();
+    d.querySelector("[data-close]")?.focus({ preventScroll: true });
     return d;
   }
   const formEnd = (label = tx("Save", "保存"), kind = "") =>

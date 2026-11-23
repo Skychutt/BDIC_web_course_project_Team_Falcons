@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS counter_email_sales (
+ id BIGINT NOT NULL PRIMARY KEY,
+ staff_id BIGINT NOT NULL,
+ owner_id BIGINT NOT NULL,
+ screening_id BIGINT NOT NULL,
+ source_booking_id BIGINT NULL,
+ coupon_id BIGINT NULL,
+ tickets JSON NOT NULL,
+ quote_hash CHAR(64) NOT NULL,
+ code_hash CHAR(64) NOT NULL,
+ attempts_left TINYINT NOT NULL,
+ created_at DATETIME(6) NOT NULL,
+ expires_at DATETIME(6) NOT NULL,
+ booking_id BIGINT NULL UNIQUE,
+ KEY counter_owner_time (owner_id, created_at),
+ KEY counter_staff_time (staff_id, created_at),
+ FOREIGN KEY (staff_id) REFERENCES users(id),
+ FOREIGN KEY (owner_id) REFERENCES users(id),
+ FOREIGN KEY (screening_id) REFERENCES screenings(id),
+ FOREIGN KEY (booking_id) REFERENCES bookings(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

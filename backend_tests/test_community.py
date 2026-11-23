@@ -138,3 +138,31 @@ def test_directory_count_and_review_author_isolation(env):
     directory = second.get("/api/community/films").json["data"]
     film = next(f for f in directory if f["id"] == str(fid))
     assert film["review_count"] == 1 and film["rating"]["count"] == 2
+
+def test_community_posts_reject_unknown_fields(env):
+    client, headers = client_for(env)
+    fid = env["ids"]["film_id"]
+    headers = {**headers, "Idempotency-Key": "community-unknown-1"}
+    bad_thread = client.post(
+        f"/api/community/films/{fid}/threads",
+        headers=headers,
+        json={"title": "Hello", "body": "World", "spoiler": False, "extra": 1},
+    )
+    assert bad_thread.status_code == 400
+    assert bad_thread.json["error"]["code"] == "VALIDATION"
+    headers["Idempotency-Key"] = "community-unknown-2"
+    good = client.post(
+        f"/api/community/films/{fid}/threads",
+        headers=headers,
+        json={"title": "Hello", "body": "World", "spoiler": False},
+    )
+    assert good.status_code == 201
+    tid = good.json["data"]["id"]
+    headers["Idempotency-Key"] = "community-unknown-3"
+    bad_reply = client.post(
+        f"/api/community/threads/{tid}/replies",
+        headers=headers,
+        json={"body": "A reply", "title": "not allowed"},
+    )
+    assert bad_reply.status_code == 400
+    assert bad_reply.json["error"]["code"] == "VALIDATION"

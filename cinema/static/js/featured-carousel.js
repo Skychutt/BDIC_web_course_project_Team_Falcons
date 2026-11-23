@@ -30,6 +30,15 @@ export function bindFeaturedCarousel(root, {
   }
   function syncPause() {
     stage.setAttribute('aria-live', paused || focused || hovered ? 'polite' : 'off');
+    const toggle = carousel.querySelector('[data-featured-action="pause"], [data-featured-action="play"]');
+    if (toggle) {
+      toggle.setAttribute('aria-pressed', String(paused));
+      toggle.dataset.featuredAction = paused ? 'play' : 'pause';
+      toggle.setAttribute('aria-label', paused ? toggle.dataset.playLabel || 'Play featured films' : toggle.dataset.pauseLabel || 'Pause featured films');
+      if (toggle.dataset.pauseText && toggle.dataset.playText) {
+        toggle.textContent = paused ? toggle.dataset.playText : toggle.dataset.pauseText;
+      }
+    }
     schedule();
   }
   function click(event) {
@@ -37,6 +46,8 @@ export function bindFeaturedCarousel(root, {
     if (!button || !carousel.contains(button)) return;
     if (button.dataset.featuredAction === 'prev') show(current - 1);
     else if (button.dataset.featuredAction === 'next') show(current + 1);
+    else if (button.dataset.featuredAction === 'pause') { paused = true; syncPause(); }
+    else if (button.dataset.featuredAction === 'play') { paused = false; syncPause(); }
   }
   const enter = () => { hovered = true; syncPause(); };
   const leave = () => { hovered = false; syncPause(); };

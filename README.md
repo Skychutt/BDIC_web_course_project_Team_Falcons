@@ -146,13 +146,24 @@ python -m pip install --no-deps .
 1. 复制 `.env.example` 为 `.env`，填写自己的 `DATABASE_URL` 和至少 32 个字符的 `SECRET_KEY`，保留 `DATA_SOURCE=backend`。
 2. 只对空库执行 `python -m flask --app cinema:create_app init-db`。然后按 `docs/film-programme.md` 和 `docs/cinema-directory.md` 导入原有片单和六家影院。
 3. 已有库不要重新初始化或 seed。在项目根目录依次执行：
+   `python -m flask --app cinema:create_app migrate-customer-refunds`
    `python -m flask --app cinema:create_app migrate-community`
    `python -m flask --app cinema:create_app import-rating-snapshots data/film-rating-snapshots-20261114.json`
    `python scripts/expand_demo_catalogue.py`
    确认预览后再执行 `python scripts/expand_demo_catalogue.py --apply --days 14`
-4. 运行 `python main.py`，打开 http://127.0.0.1:5001 。
+4. 运行 `python main.py`，打开 http://127.0.0.1:5001 。本地演示需要清理过期占座和影院取消退款时，另开终端运行 `python scripts/worker.py`（或按需执行 `python -m flask --app cinema:create_app expire-holds` / `process-refunds`）。
 
 连接队友提供的服务器：编辑 `.env` 为 `DATA_SOURCE=backend` 并设置 `DATABASE_URL`、`SECRET_KEY`。已有 v1 schema 可直接使用；仅在明确的**空数据库**上执行 `flask --app cinema init-db`。DDL 在 `cinema/sql/001_initial.sql`，非空库会拒绝初始化。不要对已有库重新 seed。已有库补齐影评、评分快照和新增样本时，使用上面的 Windows 第 3 步，不要重新初始化。
+
+Windows 上运行完整数据库测试时，使用有权创建和删除测试库的专用 MySQL 账号，不要把生产账号写进仓库：
+
+```powershell
+$env:TEST_DATABASE_URL = "mysql+pymysql://test_user:本机密码@127.0.0.1:3306/mysql"
+python -m pytest backend_tests -q
+Remove-Item Env:TEST_DATABASE_URL
+```
+
+测试只创建并删除随机命名的 `cinema_test_*` 数据库；未设置 `TEST_DATABASE_URL` 时相关测试会跳过。
 
 ## 验证
 

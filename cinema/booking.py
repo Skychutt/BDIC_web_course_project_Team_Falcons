@@ -196,7 +196,7 @@ def create_hold(actor, body, key):
         require(
             not occupied,
             "SEAT_UNAVAILABLE",
-            "One or more seats were taken; previous hold is unchanged",
+            "One or more seats were taken; any previous hold was restored",
             409,
             seat_ids=[x["seat_id"] for x in occupied],
         )
@@ -571,6 +571,12 @@ def settle_purchase(c, actor, key, payload, h, q):
     hid = h["id"]
     w = one(
         c, "SELECT * FROM wallets WHERE customer_id=:u FOR UPDATE", u=h["owner_id"]
+    )
+    require(
+        w is not None,
+        "WALLET_MISSING",
+        "Customer wallet is unavailable",
+        409,
     )
     require(
         w["balance_minor"] >= q["amount_due_minor"],

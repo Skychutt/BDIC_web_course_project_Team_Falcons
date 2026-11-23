@@ -401,9 +401,19 @@ def cancel_confirm(actor, sid, data, key):
         at = now()
         for b in value["bookings"]:
             upd(c, "bookings", b["id"], status="CINEMA_CANCELLED")
-            w = one(c, "SELECT id FROM wallets WHERE customer_id=:u", u=b["owner_id"])
             amount = b["net_ticket_minor"] + b["cumulative_fee_minor"]
             if amount:
+                w = one(
+                    c,
+                    "SELECT id FROM wallets WHERE customer_id=:u",
+                    u=b["owner_id"],
+                )
+                require(
+                    w is not None,
+                    "WALLET_MISSING",
+                    "Customer wallet is unavailable",
+                    409,
+                )
                 ins(
                     c,
                     "refunds",
@@ -511,15 +521,17 @@ def process_pending_refunds():
         try:
             process_refund(r["id"])
             done += 1
-        except Exception:
+        except Exception as error:
             current_app.logger.exception("Refund worker failed for %s", r["id"])
+            detail = f"{type(error).__name__}: Processing failed; inspect server logs"[:240]
 
             # No partial credit survives. Record failure separately only if still unsettled.
             def record(c):
                 execute(
                     c,
-                    "UPDATE refunds SET status='FAILED',attempt_count=attempt_count+1,last_error='Processing failed; inspect server logs' WHERE id=:id AND status<>'SUCCEEDED'",
+                    "UPDATE refunds SET status='FAILED',attempt_count=attempt_count+1,last_error=:error WHERE id=:id AND status<>'SUCCEEDED'",
                     id=r["id"],
+                    error=detail,
                 )
 
             transaction(record)

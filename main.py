@@ -14,4 +14,9 @@ if __name__ == "__main__":
     host = os.getenv("HOST", "127.0.0.1")
     port = int(os.getenv("PORT", "5001"))
     print(f"\nWebsite URL: http://{host}:{port}\n", flush=True)
-    app.run(host=host, port=port)
+    if os.getenv("CINEMA_DEV_SERVER", "").lower() in {"1", "true", "yes"}:
+        app.run(host=host, port=port)
+    else:
+        from waitress import serve
+
+        serve(app, host=host, port=port)

@@ -3,7 +3,8 @@
 
 Run with an explicit TEST_DATABASE_URL whose account can create/drop schemas.
 Ctrl-C or SIGTERM stops the server and drops only this process's random schema.
-SIGUSR1 preserves the schema for a subsequent --resume restart.
+Start with --preserve to keep the schema for a subsequent --resume restart.
+On platforms that provide SIGUSR1, that signal also stops and preserves it.
 The predictable fixture password is for this isolated localhost test server only.
 """
 
@@ -50,6 +51,7 @@ def stop(_signum, _frame):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--resume", action="store_true", help="Resume the stopped fixture schema recorded in metadata; do not seed it again")
+    parser.add_argument("--preserve", action="store_true", help="Keep the fixture schema when the server stops so it can be resumed")
     args = parser.parse_args()
     source_url = os.getenv("TEST_DATABASE_URL")
     if not source_url or not source_url.startswith("mysql+pymysql://"):
@@ -65,7 +67,7 @@ def main():
         except ProcessLookupError:
             pass
         else:
-            raise SystemExit("The recorded fixture process is still running; stop it with SIGUSR1 first.")
+            raise SystemExit("The recorded fixture process is still running; stop it before resuming.")
     else:
         schema = "cinema_browser_" + secrets.token_hex(8)
     admin = create_engine(source_url, isolation_level="AUTOCOMMIT", pool_pre_ping=True)
@@ -73,13 +75,15 @@ def main():
     server = None
     created = False
     metadata = None
-    preserve = False
+    preserve = args.preserve
     def preserve_stop(_signum, _frame):
         nonlocal preserve
         preserve = True
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, stop)
-    signal.signal(signal.SIGUSR1, preserve_stop)
+    preserve_signal = getattr(signal, "SIGUSR1", None)
+    if preserve_signal is not None:
+        signal.signal(preserve_signal, preserve_stop)
     try:
         with admin.connect() as connection:
             if args.resume:
