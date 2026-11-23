@@ -91,7 +91,8 @@ function header() {
       <a class="wordmark" href="#/discover">falcons<span>.</span></a>
       <a class="location" href="#/cinemas">${icon("pin")} <span></span></a>
     </div>
-    <nav class="main-nav">
+    <button type="button" class="mobile-menu-button" aria-expanded="false" aria-controls="main-nav" data-mobile-nav></button>
+    <nav class="main-nav" id="main-nav">
       ${nav("#/discover")}${nav("#/cinemas")}${nav("#/reviews")}
       ${user?.role === "CUSTOMER" ? nav("#/account") : user ? nav("#/operations") : ""}
     </nav>
@@ -101,6 +102,19 @@ function header() {
         : `<a class="button secondary" href="#/login"><span data-sign-in-label></span> ${icon("arrow")}</a>`}
     </div>`;
   updateHeaderLanguage();
+  const menuButton = siteHeader.querySelector("[data-mobile-nav]");
+  const mainNav = siteHeader.querySelector("#main-nav");
+  menuButton?.addEventListener("click", () => {
+    const open = menuButton.getAttribute("aria-expanded") !== "true";
+    menuButton.setAttribute("aria-expanded", String(open));
+    mainNav.classList.toggle("is-open", open);
+  });
+  mainNav?.querySelectorAll("a").forEach((link) => {
+    link.addEventListener("click", () => {
+      menuButton?.setAttribute("aria-expanded", "false");
+      mainNav.classList.remove("is-open");
+    });
+  });
   siteHeader.querySelectorAll(".lang-option").forEach((button) => {
     button.addEventListener("click", () => setLanguage(button.dataset.lang));
   });
@@ -137,6 +151,11 @@ function updateHeaderLanguage() {
   };
   nav.querySelectorAll("a").forEach((a) => { a.textContent = labels[a.getAttribute("href")]; });
   siteHeader.querySelector(".lang-switch").setAttribute("aria-label", tx("Language", "语言"));
+  const menuButton = siteHeader.querySelector("[data-mobile-nav]");
+  if (menuButton) {
+    menuButton.setAttribute("aria-label", tx("Open menu", "打开菜单"));
+    menuButton.textContent = tx("Menu", "菜单");
+  }
   siteHeader.querySelectorAll(".lang-option").forEach((button) => {
     const active = button.dataset.lang === getLanguage();
     button.classList.toggle("is-active", active);

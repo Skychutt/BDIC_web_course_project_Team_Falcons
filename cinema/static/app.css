@@ -1719,6 +1719,26 @@ dialog::backdrop {
 }
 .mobile-menu-button {
   display: none;
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: var(--ink);
+  border-radius: 999px;
+  min-height: 36px;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 @media (max-width: 1100px) {
   .site-header {
@@ -1761,13 +1781,25 @@ dialog::backdrop {
     gap: 10px 16px;
     padding: 17px 20px 0;
   }
+  .mobile-menu-button {
+    display: inline-flex;
+    align-items: center;
+    margin-left: auto;
+  }
   .main-nav {
+    display: none;
     order: 3;
     width: 100%;
     justify-content: flex-start;
     gap: 25px;
-    height: 48px;
+    height: auto;
+    min-height: 48px;
     overflow-x: auto;
+    padding-bottom: 12px;
+  }
+  .main-nav.is-open {
+    display: flex;
+    flex-wrap: wrap;
   }
   .header-actions {
     margin-left: auto;
@@ -2157,7 +2189,7 @@ dialog::backdrop {
 .auditorium-imax .screen-line.top { border-top-width:4px; }
 .seat-scroll:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 @media (max-width:800px) {
-  .seat-scroll, .seat-scroll.auditorium-imax, .seat-scroll.auditorium-dolby_cinema { --seat-size:44px; --seat-height:40px; --seat-gap:8px; }
+  .seat-scroll, .seat-scroll.auditorium-imax, .seat-scroll.auditorium-dolby_cinema { --seat-size:44px; --seat-height:44px; --seat-gap:8px; }
   .auditorium-meta { font-size:10px; }
 }
 
