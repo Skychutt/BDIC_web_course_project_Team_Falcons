@@ -114,18 +114,19 @@ def films():
     limit = integer(request.args.get("page_size", 20), "page_size", 1, 100)
     title = request.args.get("q", "")
     require(len(title) <= 200, "VALIDATION", "Search text too long")
+    pattern = "%" + title.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%"
     with db().connect() as c:
         fs = rows(
             c,
-            "SELECT id,title,duration_minutes FROM films WHERE archived=0 AND title LIKE :q ORDER BY title,id LIMIT :n OFFSET :o",
-            q="%" + title + "%",
+            "SELECT id,title,duration_minutes FROM films WHERE archived=0 AND title LIKE :q ESCAPE '!' ORDER BY title,id LIMIT :n OFFSET :o",
+            q=pattern,
             n=limit,
             o=(page - 1) * limit,
         )
         total = one(
             c,
-            "SELECT COUNT(*) AS n FROM films WHERE archived=0 AND title LIKE :q",
-            q="%" + title + "%",
+            "SELECT COUNT(*) AS n FROM films WHERE archived=0 AND title LIKE :q ESCAPE '!'",
+            q=pattern,
         )["n"]
         return output({"items": fs, "page": page, "page_size": limit, "total": total})
 
