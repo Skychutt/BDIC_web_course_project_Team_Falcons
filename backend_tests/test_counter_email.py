@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from cinema import counter
 from cinema.core import db, execute, get, one, rows
+from test_customer_refunds import refund
 from test_frontend_api import actor, client, purchase
 
 
@@ -62,6 +63,14 @@ def test_branch_scope_and_concurrent_email_sale(env, monkeypatch):
         assert one(c, "SELECT balance_minor FROM wallets WHERE customer_id=:u", u=booking["owner_id"])["balance_minor"] == 95000
         assert len(rows(c, "SELECT id FROM payments")) == len(rows(c, "SELECT id FROM tickets")) == 1
 
+    refunded = refund(env, int(first))
+    retried = post(staff, path, {"code": code})
+    assert retried.status_code == 200
+    assert retried.json["data"] == {"booking_id": first, "status": "CUSTOMER_CANCELLED"}
+    with db().connect() as c:
+        assert one(c, "SELECT COUNT(*) n FROM payments")["n"] == 1
+        assert one(c, "SELECT balance_minor FROM wallets WHERE customer_id=:u", u=booking["owner_id"])["balance_minor"] == refunded["balance_minor"]
+
 
 def test_resend_attempt_limit_expiry_and_price_change(env, monkeypatch):
     staff, old, first_code, _ = issue(env, monkeypatch)
@@ -105,10 +114,27 @@ def test_counter_change_refund_and_failed_email(env, monkeypatch):
     receipt = purchase(env, index=1)
     request = sale_request(env, index=2)
     request["tickets"][0]["fare_type"] = "STANDARD"
-    staff, path, code, quote = issue(env, monkeypatch, **request, source_booking_id=receipt["booking_id"])
+    request["source_booking_id"] = receipt["booking_id"]
+    messages = []
+    monkeypatch.setattr(counter, "send_email", lambda to, message: messages.append(message))
+    staff = client(env, "staff1")
+    response = post(staff, "codes", request)
+    assert response.status_code == 201
+    sale_id = response.json["data"]["sale_id"]
+    env["clock"][0] += timedelta(seconds=61)
+    resent = post(staff, f"sales/{sale_id}/resend", {})
+    assert resent.status_code == 201
+    quote = resent.json["data"]
+    assert len(messages) == 2
+    for message in messages:
+        assert f'Original booking: {receipt["booking_id"]}' in message
+        assert "Original screening:" in message and "New screening:" in message
+        assert "CNY -20.00" in message and "Change fee: ¥5.00" in message
+        assert "Wallet credit: ¥15.00" in message and "原票失效" in message
+    code = re.search(r'Code: ([0-9]{6})', messages[-1])[1]
     # An 8-hour lead incurs a ¥5 change fee on the ¥20 fare reduction.
     assert quote["amount_due_minor"] == -1500
-    assert post(staff, path, {"code": code}).status_code == 200
+    assert post(staff, f'sales/{quote["sale_id"]}/confirm', {"code": code}).status_code == 200
     with db().connect() as c:
         assert get(c, "bookings", receipt["booking_id"])["status"] == "RESCHEDULED"
         assert one(c, "SELECT COUNT(*) n FROM payments")["n"] == 1

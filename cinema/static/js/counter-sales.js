@@ -4,7 +4,7 @@ import { auditoriumName } from "./venue-locale.js";
 import { esc, money, dateTime, showError } from "./ui.js";
 import { seatGrid, seatLabel } from "./seat-grid.js";
 
-export async function createCounterSales(api, user, openBooking) {
+export async function createCounterSales(api, user, openBooking, statusText) {
   const key = `falcons.counter.${user.id}.${user.staff_cinema_id}`;
   let pending = JSON.parse(sessionStorage.getItem(key) || "null");
   let receipt, map, current, root, view, loading = false;
@@ -19,7 +19,8 @@ export async function createCounterSales(api, user, openBooking) {
   function html() {
     let body;
     if (receipt) {
-      body = `<p role="status">${tx("Tickets issued", "已出票")} · ${tx("Booking", "订单")} ${esc(receipt.booking_id)}</p>
+      const label = receipt.status === "CONFIRMED" ? tx("Tickets issued", "已出票") : statusText(receipt.status);
+      body = `<p role="status">${esc(label)} · ${tx("Booking", "订单")} ${esc(receipt.booking_id)}</p>
         <div class="actions"><button class="button" data-next>${tx("Next customer", "办理下一单")}</button>
         <button class="button secondary" data-booking>${tx("View booking", "查看订单")}</button></div>`;
     } else if (pending) {

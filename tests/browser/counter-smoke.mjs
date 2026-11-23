@@ -63,14 +63,31 @@ try {
   assert.ok(message.body.includes((quote.amount_due_minor / 100).toFixed(2)));
   assert.equal(await wallet(), initial);
   await staff.reload();
+  await staff.locator("[data-confirm]").waitFor();
+  // A second cashier tab retains the pending sale if it missed the first receipt.
+  const duplicate = staff.waitForEvent("popup");
+  await staff.evaluate(() => { window.open(location.href); });
+  const retryTab = await duplicate;
+  await retryTab.locator("[data-confirm]").waitFor();
   await staff.locator("[name=code]").fill(code);
+  const confirmation = staff.waitForResponse(r => r.url().endsWith("/confirm") && r.request().method() === "POST");
   await staff.locator("[data-confirm] button[type=submit]").click();
   await staff.getByText(/Tickets issued/).waitFor();
+  const bookingId = (await (await confirmation).json()).data.booking_id;
   assert.equal(await wallet(), initial - quote.amount_due_minor);
   await staff.locator("[data-booking]").click();
   await staff.getByRole("dialog").waitFor();
+  await customer.goto(fixture.base_url + "/#/account?tab=orders&booking=" + bookingId);
+  await customer.locator(`[data-action="refund-booking"][data-id="${bookingId}"]`).click();
+  await customer.getByRole("button", { name: /Confirm refund ·/ }).click();
+  await customer.getByRole("heading", { name: "Tickets cancelled · seats released" }).waitFor();
+  const refundedBalance = await wallet();
+  await retryTab.locator("[name=code]").fill(code);
+  await retryTab.locator("[data-confirm] button[type=submit]").click();
+  await retryTab.getByRole("status").filter({ hasText: "Customer refunded" }).waitFor();
+  assert.equal(await wallet(), refundedBalance);
   assert.deepEqual(errors, []);
-  console.log("PASS branch landing, customer mailbox, refresh, counter ticket and wallet debit");
+  console.log("PASS branch landing, counter ticket and wallet debit, refunded status on receipt retry");
 } finally {
   await browser?.close();
   inbox.close();

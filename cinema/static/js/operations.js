@@ -91,6 +91,7 @@ export async function renderOperations(ctx) {
         ["films", tx("Films & genres", "影片与类型")],
         ["staff", tx("Staff & managers", "员工与经理")],
         ["turnover", tx("Turnover", "营业额")],
+        ["community", tx("Community moderation", "社区管理")],
       ]
     : [
         ["programme", tx("Screenings & fares", "排片与票价")],
@@ -252,7 +253,7 @@ export async function renderOperations(ctx) {
       if (tab === "programme") render = await programme(page);
       else if (tab === "layouts") render = await layouts();
       else if (tab === "counter") {
-        counterView = await createCounterSales(api, user, bookingDialog);
+        counterView = await createCounterSales(api, user, bookingDialog, statusText);
         render = counterView.html;
       }
       else if (tab === "bookings") render = await bookings(page);
@@ -260,6 +261,7 @@ export async function renderOperations(ctx) {
       else if (tab === "cinemas") render = await cinemaPanel();
       else if (tab === "films") render = await filmPanel(page);
       else if (tab === "staff") render = await staffPanel();
+      else if (tab === "community") render = await moderationPanel(page);
       else if (tab === "turnover") {
         if (admin) await fetchAdmin();
         render = turnoverPanel;
@@ -1004,6 +1006,24 @@ export async function renderOperations(ctx) {
     });
   }
 
+  async function moderationPanel(page) {
+    const result = await request(`/community/moderation/posts?page=${page}`);
+    return () => panel(tx("Discussions & replies", "讨论与回复"), table(
+      [tx("Film / discussion", "影片 / 讨论"), tx("Author", "作者"), tx("Content", "内容"), tx("Actions", "操作")],
+      result.items.map(post => {
+        const thread = post.kind === "thread";
+        return [
+          `<strong>${esc(filmTitle(post.film_title))}</strong><div>${esc(post.thread_title)}</div>`,
+          `${esc(post.display_name)}<div class="muted">${dateTime(post.created_at)}</div>`,
+          `<details><summary>${thread ? tx("Read discussion", "查看讨论") : tx("Read reply", "查看回复")}</summary><p class="community-text">${esc(post.body)}</p></details>`,
+          button(thread ? tx("Remove discussion", "删除讨论") : tx("Remove reply", "删除回复"),
+            thread ? "remove-thread" : "remove-reply", post.id, "ghost danger"),
+        ];
+      }),
+      tx("No discussions or replies", "暂无讨论或回复"),
+    ) + pager(page, result.has_next));
+  }
+
   function turnoverPanel() {
     const now = beijingNow();
     const start = now.slice(0, 7) + "-01T00:00";
@@ -1080,6 +1100,19 @@ export async function renderOperations(ctx) {
         else if (action === "edit-genre") genreDialog(id);
         else if (action === "create-staff") staffDialog();
         else if (action === "transfer") transferDialog(id);
+        else if (action === "remove-thread" || action === "remove-reply") {
+          const thread = action === "remove-thread";
+          const prompt = thread
+            ? tx("Remove this discussion and hide all its replies?", "删除这条讨论并隐藏其全部回复？")
+            : tx("Remove this reply?", "删除这条回复？");
+          if (!window.confirm(prompt)) return;
+          const version = revision;
+          await request(`/community/${thread ? "threads" : "replies"}/${id}`, "DELETE");
+          if (alive && revision === version) {
+            toast(thread ? tx("Discussion removed.", "讨论已删除。") : tx("Reply removed.", "回复已删除。"));
+            await showTab(tab, page);
+          }
+        }
       } catch (err) {
         toast(errorText(err), "error");
       } finally {
