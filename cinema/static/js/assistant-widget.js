@@ -89,7 +89,7 @@ export function createAssistantWidget(api) {
   host.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && opened && !event.isComposing) { event.preventDefault(); close(); }
     if (event.key === "Tab" && opened && compact.matches) {
-      const targets = [...panel.querySelectorAll("button:not(:disabled), a[href], select:not(:disabled), textarea, summary")].filter((node) => node.getClientRects().length);
+      const targets = [...panel.querySelectorAll("button:not(:disabled), a[href], input:not([type='hidden']):not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex]:not([tabindex='-1'])")].filter((node) => node.getClientRects().length);
       const first = targets[0], last = targets.at(-1);
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
