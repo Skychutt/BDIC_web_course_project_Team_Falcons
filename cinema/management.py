@@ -528,6 +528,7 @@ def process_pending_refunds():
 
 
 def turnover(actor, cinema_id, data):
+    role(actor, "STAFF", "PLATFORM_ADMIN")
     def work(c):
         current = get(c, "users", actor["id"])
         cinema = get(c, "cinemas", cinema_id)

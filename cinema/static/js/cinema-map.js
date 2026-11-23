@@ -1,12 +1,13 @@
+import { venueName, venueAddress, venueBrand, districtLabel } from "./venue-locale.js";
 import { esc, icon, options, empty } from "./ui.js";
-import { getLanguage } from "./locale.js";
+import { getLanguage, tx } from "./locale.js";
 import { orderedCinemas } from "./geo.js";
 import { createMapFrame, locateDevice } from "./amap.js";
 
 const words = {
   en: {
     route_connection: "Cannot connect securely to AMap. Check your network or proxy and try again.",
-    city: "Beijing", coverLabel: "BEIJING · CINEMA",
+    kicker: "FALCONS · BEIJING", city: "Beijing", coverLabel: "BEIJING · CINEMA",
     title: "A big screen, near you.", intro: "Explore our Beijing cinemas and find your next showtime.",
     map: "Show map", locate: "Use my location", clear: "Clear location", district: "District", all: "All Beijing",
     nearest: "Sort by distance", privacy: "Location is optional. When you choose to locate, your browser asks permission and AMap converts the position. It stays in this page's memory and is not sent to the AI assistant.",
@@ -26,7 +27,7 @@ const words = {
   },
   zh: {
     route_connection: "无法安全连接高德路线服务，请检查网络或代理后重试。",
-    city: "北京", coverLabel: "北京 · 影院",
+    kicker: "FALCONS · 北京", city: "北京", coverLabel: "北京 · 影院",
     title: "找到附近的好影院", intro: "浏览北京影院，查看地址与可售场次。",
     map: "显示地图", locate: "定位我的位置", clear: "清除位置", district: "行政区", all: "北京全市",
     nearest: "按距离排序", privacy: "定位为可选功能。点击定位后，浏览器会请求授权，高德会进行坐标转换。位置仅保留在当前页面内存，不发送给 AI 助手。",
@@ -46,75 +47,65 @@ const words = {
   },
 };
 
-// District IDs belong to each installation. The administrative codes are shared.
-const districtNamesZh = {
-  "110101": "东城区", "110102": "西城区", "110105": "朝阳区", "110106": "丰台区",
-  "110107": "石景山区", "110108": "海淀区", "110109": "门头沟区", "110111": "房山区",
-  "110112": "通州区", "110113": "顺义区", "110114": "昌平区", "110115": "大兴区",
-  "110116": "怀柔区", "110117": "平谷区", "110118": "密云区", "110119": "延庆区",
-};
-
 const cinemaPhotos = {
   "万达影城(CBD万达广场店)": {
     "src": "/static/assets/cinemas/wanda-cbd.webp",
-    "alt": "北京CBD万达广场建筑外观",
+    "alt": ["Exterior of CBD Wanda Plaza", "北京CBD万达广场建筑外观"],
     "source": "https://www.wanda-cbd.cn/index.html",
-    "caption": "所在建筑"
+    "caption": ["Cinema building", "所在建筑"]
   },
   "万达影城(西铁营店)": {
     "src": "/static/assets/cinemas/wanda-xitieying.webp",
-    "alt": "北京西铁营万达广场夜间外观",
+    "alt": ["Xitieying Wanda Plaza at night", "北京西铁营万达广场夜间外观"],
     "source": "https://www.sohu.com/picture/772923275",
-    "caption": "所在建筑"
+    "caption": ["Cinema building", "所在建筑"]
   },
   "保利国际影城(凯德大峡谷店)": {
     "src": "/static/assets/cinemas/poly-canyon.webp",
-    "alt": "北京凯德大峡谷商场及保利电影院线外观",
+    "alt": ["Exterior of CapitaMall Grand Canyon and Poly Cinema", "北京凯德大峡谷商场及保利电影院线外观"],
     "source": "https://www.theedgesingapore.com/capital/results/capitaland-china-trusts-fy2023-dpu-falls-101-retail-improves-new-economy-struggles",
-    "caption": "所在建筑"
+    "caption": ["Cinema building", "所在建筑"]
   },
   "中华电影院": {
     "src": "/static/assets/cinemas/zhonghua.webp",
-    "alt": "北京中华电影院历史外观，非当前门面照片",
+    "alt": ["Historic facade of Zhonghua Cinema", "北京中华电影院历史外观，非当前门面照片"],
     "source": "https://www.sohu.com/a/333425910_120047053",
-    "caption": "历史外观"
+    "caption": ["Historic exterior", "历史外观"]
   },
   "北京站电影院": {
     "src": "/static/assets/cinemas/beijing-station.webp",
-    "alt": "影院周边的北京站建筑外观，非影院入口",
+    "alt": ["Beijing Railway Station near the cinema", "影院周边的北京站建筑外观，非影院入口"],
     "source": "https://www.sohu.com/a/786121631_121117452",
-    "caption": "周边地标"
+    "caption": ["Nearby landmark", "周边地标"]
   },
   "北京横店影城(王府井百货店)": {
     "src": "/static/assets/cinemas/hengdian-wangfujing.webp",
-    "alt": "横店影城所在的北京王府井百货大楼夜间外观",
+    "alt": ["Wangfujing Department Store at night", "横店影城所在的北京王府井百货大楼夜间外观"],
     "source": "https://4travel.jp/os_shisetsu/10408729",
-    "caption": "所在建筑"
+    "caption": ["Cinema building", "所在建筑"]
   },
   "首都电影院(西单店)": {
     "src": "/static/assets/cinemas/capital-xidan.webp",
-    "alt": "首都电影院西单大悦城店入口",
+    "alt": ["Entrance to Capital Cinema at Xidan Joy City", "首都电影院西单大悦城店入口"],
     "source": "https://www.zaobao.com.sg/news/china/story20260208-8384125",
-    "caption": "影院入口"
+    "caption": ["Cinema entrance", "影院入口"]
   },
   "英皇电影城(北京英皇中心店)": {
     "src": "/static/assets/cinemas/emperor-centre.jpg",
-    "alt": "影院所在的北京英皇集团中心建筑入口",
+    "alt": ["Entrance to the Emperor Group Centre", "影院所在的北京英皇集团中心建筑入口"],
     "source": "https://you.ctrip.com/travels/beijing1/4020412.html",
-    "caption": "所在建筑"
+    "caption": ["Cinema building", "所在建筑"]
   },
   "北京地质礼堂": {
     "src": "/static/assets/cinemas/geological-hall.png",
-    "alt": "北京地质礼堂与开心麻花剧场共用的场馆入口",
+    "alt": ["Shared entrance to Beijing Geological Hall and Mahua Theatre", "北京地质礼堂与开心麻花剧场共用的场馆入口"],
     "source": "https://xinwen.bjd.com.cn/content/s60ee3face4b003a0f669be16.html",
-    "caption": "场馆入口"
+    "caption": ["Venue entrance", "场馆入口"]
   }
 };
 export async function renderCinemaMap(ctx) {
   const { root, api, bootstrap } = ctx;
-  const districts = bootstrap.districts.map((d) => ({
-    ...d, nameZh: districtNamesZh[d.admin_code] ?? d.name,
-  }));
+  const districts = bootstrap.districts;
   let config;
   try { config = await api.request("/maps/config"); } catch { config = { enabled: false }; }
   let language = getLanguage(), district = "", nearest = false, position = null, address = null, accuracy = null;
@@ -171,20 +162,20 @@ export async function renderCinemaMap(ctx) {
   }
   function cinemaCover(cinema) {
     const photo = cinemaPhotos[cinema.name];
-    const nameZh = language === "zh" && districts.find((d) => d.id === cinema.district_id)?.nameZh;
-    const districtName = nameZh || cinema.district_name || t("city");
+    const label = districtLabel(districts.find((d) => d.id === cinema.district_id));
+    const districtName = label || cinema.district_name || t("city");
     return `<div class="cinema-card-top cinema-photo-cover">
-      ${photo ? `<img src="${photo.src}" alt="${esc(photo.alt)}" loading="lazy" decoding="async" width="1200" height="800">` : ""}
+      ${photo ? `<img src="${photo.src}" alt="${esc(tx(...photo.alt))}" loading="lazy" decoding="async" width="1200" height="800">` : ""}
       <span class="cinema-cover-label"><small>${t("coverLabel")}</small><span>${esc(districtName)}</span></span>
-      ${photo ? `<a class="cinema-photo-credit" href="${photo.source}" target="_blank" rel="noopener noreferrer">${esc(photo.caption)} · 来源 ↗</a>` : ""}
+      ${photo ? `<a class="cinema-photo-credit" href="${photo.source}" target="_blank" rel="noopener noreferrer">${esc(tx(...photo.caption))} · ${tx("Source", "来源")} ↗</a>` : ""}
     </div>`;
   }
-  function draw(updateMap = true) {
+  function draw() {
     const values = orderedCinemas(bootstrap.cinemas, position, district, nearest);
     const missing = values.filter((c) => !c.position).length;
     el("count").textContent = `${values.length} ${t("count")}`;
     el("missing").textContent = missing ? `${missing} ${t("missing")}` : "";
-    el("list").innerHTML = values.map((c) => `<article class="cinema-card${String(activeCinemaId) === String(c.id) ? " is-selected" : ""}" data-cinema="${esc(c.id)}">${cinemaCover(c)}<div class="cinema-card-body"><p class="eyebrow">${esc(c.brand)}</p><h2>${esc(c.name)}</h2><p>${icon("pin")} ${esc(c.address)}</p><p class="cinema-distance">${c.distance != null ? `${t("distance")} · ${(c.distance / 1000).toFixed(1)} km` : c.position ? "" : t("unlocated")}</p>${routeSummary(c)}<div class="map-card-actions"><a class="button ghost wide" href="#/discover?${new URLSearchParams({ cinema_id: c.id, district_id: c.district_id })}">${t("showtimes")} ${icon("arrow")}</a>${c.position ? `<button type="button" class="button secondary wide" data-pin="${esc(c.id)}">${t("onMap")}</button><button type="button" class="button wide" data-route="${esc(c.id)}">${t("routes")}</button>` : ""}</div></div></article>`).join("") || empty(t("nomatch"));
+    el("list").innerHTML = values.map((c) => `<article class="cinema-card${String(activeCinemaId) === String(c.id) ? " is-selected" : ""}" data-cinema="${esc(c.id)}">${cinemaCover(c)}<div class="cinema-card-body"><p class="eyebrow">${esc(venueBrand(c.brand))}</p><h2>${esc(venueName(c.name))}</h2><p>${icon("pin")} ${esc(venueAddress(c.name, c.address))}</p><p class="cinema-distance">${c.distance != null ? `${t("distance")} · ${(c.distance / 1000).toFixed(1)} km` : c.position ? "" : t("unlocated")}</p>${routeSummary(c)}<div class="map-card-actions"><a class="button ghost wide" href="#/discover?${new URLSearchParams({ cinema_id: c.id, district_id: c.district_id })}">${t("showtimes")} ${icon("arrow")}</a>${c.position ? `<button type="button" class="button secondary wide" data-pin="${esc(c.id)}">${t("onMap")}</button><button type="button" class="button wide" data-route="${esc(c.id)}">${t("routes")}</button>` : ""}</div></div></article>`).join("") || empty(t("nomatch"));
     el("list").querySelectorAll("[data-pin]").forEach((button) => {
       button.onclick = () => run(async () => {
         await ensureMap();
@@ -222,8 +213,8 @@ export async function renderCinemaMap(ctx) {
         if (!disposed) draw();
       });
     });
-    if (!map || !updateMap) return;
-    map.render(values.filter((c) => c.position).map((c) => ({ id:c.id, name:c.name, position:c.position })), position);
+    if (!map) return;
+    map.render(values.filter((c) => c.position).map((c) => ({ id:c.id, name:venueName(c.name), position:c.position })), position);
   }
   async function ensureMap() {
     if (map) { await map.ready; return; }
@@ -255,7 +246,7 @@ export async function renderCinemaMap(ctx) {
     finally { running = false; if (!disposed) message(); }
   }
   function mount() {
-    root.innerHTML = `<div class="page-heading"><div><p class="eyebrow">FALCONS · BEIJING</p><h1 data-map-copy="title"></h1><p class="muted" data-map-copy="intro"></p></div></div>
+    root.innerHTML = `<div class="page-heading"><div><p class="eyebrow" data-map-copy="kicker"></p><h1 data-map-copy="title"></h1><p class="muted" data-map-copy="intro"></p></div></div>
       <section class="cinema-map-panel">
         <div class="map-controls">
           <button type="button" class="button secondary" data-map="load" data-map-copy="map"></button>
@@ -309,9 +300,9 @@ export async function renderCinemaMap(ctx) {
       node.textContent = t(node.dataset.mapCopy);
     });
     el("canvas").setAttribute("aria-label", t("mapLabel"));
-    el("district").innerHTML = options(districts, district, language === "zh" ? "nameZh" : "name", t("all"));
+    el("district").innerHTML = options(districts.map(d => ({ id: d.id, name: districtLabel(d) })), district, "name", t("all"));
     // Keep the live map, location and any plotted routes across a language change.
-    draw(false);
+    draw();
     message();
   }
   ctx.updateLanguage = updateLanguage;

@@ -89,7 +89,7 @@ export const icon = (name) => {
   };
   return `<svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name] || paths.arrow}"/></svg>`;
 };
-export const options = (items, selected, label = "name", placeholder = "All") =>
+export const options = (items, selected, label = "name", placeholder = tx("All", "全部")) =>
   `${placeholder !== null ? `<option value="">${esc(placeholder)}</option>` : ""}${items.map((i) => `<option value="${esc(i.id)}" ${String(i.id) === String(selected) ? "selected" : ""}>${esc(i[label])}</option>`).join("")}`;
 export function toast(message, kind = "success") {
   const region = document.getElementById("toast-region");
@@ -112,16 +112,26 @@ export async function busy(button, fn, label = tx("Working…", "处理中…"))
       button.disabled = false;
       button.innerHTML = before;
       button.removeAttribute("aria-busy");
+      button.dispatchEvent(new Event("action-finished"));
     }
   }
 }
-export function showError(container, error) {
-  container.innerHTML = notice(
-    error.userMessage ||
-      error.message ||
-      "Something went wrong. Please try again.",
-    "error",
-  );
+export class LocalizedError extends Error {
+  constructor(en, zh) {
+    super(en);
+    this.chinese = zh;
+  }
+  get userMessage() { return tx(this.message, this.chinese); }
+}
+
+const displayedErrors = new WeakMap();
+export function showError(container, error, inline = false) {
+  const message = error.userMessage || error.message || tx("Something went wrong. Please try again.", "操作失败，请重试。");
+  displayedErrors.set(container, { error, inline });
+  if (inline) {
+    container.hidden = false;
+    container.textContent = message;
+  } else container.innerHTML = notice(message, "error");
 }
 export function field(label, content, hint = "") {
   return `<label class="field"><span>${esc(label)}</span>${content}${hint ? `<small>${esc(hint)}</small>` : ""}</label>`;
@@ -131,7 +141,7 @@ export function selectField(
   name,
   items,
   selected,
-  placeholder = "Choose…",
+  placeholder = tx("Choose…", "请选择…"),
 ) {
   return field(
     label,
@@ -160,4 +170,29 @@ export function poster(film, small = false) {
   if (image) return `<div class="film-poster photographic-poster ${small ? 'poster-small' : ''}"><img src="${image}" alt="${title} ${tx("poster", "海报")}" loading="lazy" decoding="async"></div>`;
   const artwork = film.title === "Journey Beyond the City" ? "city-poster" : "";
   return `<div class="film-poster ${artwork} ${small ? "poster-small" : ""}" aria-label="${title}"><span class="poster-imprint">${tx("A FALCONS SCREENING", "FALCONS 放映")}</span><div class="poster-orbit" aria-hidden="true"></div><div class="poster-type">${title}</div><span class="poster-caption">${esc(film.duration_minutes)} ${tx("MINUTES · DEMO FILM", "分钟 · 演示影片")}</span></div>`;
+}
+
+// Redraw the same view from its loaded data, keeping unsent inputs and expanded details.
+// Bind after restoring the values so dependent controls (filters, star captions) see the draft.
+export function redrawLocalized(root, render, bind) {
+  const controls = "input[name], select[name], textarea[name]";
+  const previous = [...root.querySelectorAll(controls)];
+  const expanded = [...root.querySelectorAll("details")].map(el => el.open);
+  const errorFields = ".form-error, [data-error]";
+  const errors = [...root.querySelectorAll(errorFields)].map(el =>
+    el.textContent && !el.hidden ? displayedErrors.get(el) : null);
+  render();
+  root.querySelectorAll(errorFields).forEach((el, i) => {
+    if (errors[i]) showError(el, errors[i].error, errors[i].inline);
+  });
+  root.querySelectorAll(controls).forEach((el, i) => {
+    const old = previous[i];
+    if (!old || old.name !== el.name || old.type !== el.type) return;
+    if (el.type === "checkbox" || el.type === "radio") el.checked = old.checked;
+    else el.value = old.value;
+  });
+  root.querySelectorAll("details").forEach((el, i) => {
+    if (i < expanded.length) el.open = expanded[i];
+  });
+  bind();
 }

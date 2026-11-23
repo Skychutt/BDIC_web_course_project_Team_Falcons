@@ -1,4 +1,26 @@
 /* Branch and platform workspaces, including their native dialogs. */
+#main .operations-view .page-heading h1,
+.operations-view :is(h2, h3, .tab, .eyebrow),
+.operations-dialog :is(h2, h3) {
+  font-weight: 700;
+}
+.operations-view .branch-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  align-items: center;
+}
+.branch-heading h1 {
+  margin-bottom: 0;
+}
+.branch-heading-details {
+  display: grid;
+  gap: 2px;
+  text-align: end;
+  overflow-wrap: anywhere;
+}
+.branch-heading-details .muted {
+  font-size: 13px;
+}
 .operations-view .operations-body {
   min-width: 0;
 }
@@ -30,6 +52,41 @@
 }
 .operations-view .toolbar > button[type="submit"] {
   align-self: end;
+}
+.staff-roster {
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+.staff-roster + .staff-roster {
+  margin-top: 24px;
+}
+.staff-roster > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.staff-roster h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 16px;
+}
+.staff-roster > header .muted {
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.operations-view .staff-roster .table {
+  min-width: 0;
+}
+.operations-view .staff-roster .table :is(th, td):last-child {
+  min-width: 0;
+  width: 1%;
+  text-align: end;
+  white-space: nowrap;
+}
+.staff-roster .table :is(th, td):nth-child(2) {
+  width: 20%;
 }
 .operations-view .error,
 .operations-dialog .error {
@@ -150,10 +207,17 @@
 }
 .operations-view .tab[aria-pressed="true"] {
   color: var(--ink);
-  font-weight: 600;
+  font-weight: 700;
   border-bottom-color: var(--accent);
 }
 @media (max-width: 650px) {
+  .operations-view .branch-heading {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .branch-heading-details {
+    text-align: start;
+  }
   .operations-view .panel-header {
     align-items: flex-start;
     gap: 12px;

@@ -49,7 +49,7 @@
 .venv/bin/python main.py
 ```
 
-打开 <http://127.0.0.1:5001> 进入完整网站，点击右下角 **AI 悬浮球**，即可在当前页面展开聊天。切换影片、影院和选座页时会保留对话与输入草稿；点击推荐卡片会收起面板并进入对应页面。旧链接 <http://127.0.0.1:5001/#/assistant> 会在首页打开悬浮助手。原来的双语演示页保留在 `/assistant`，其中预览也可进入正式选座。网站其余界面沿用队友的英文设计。MySQL 仅监听项目内 Unix socket。默认使用 5001，避免与 macOS Control Center 占用的 5000 冲突；运行网站的终端需保持开启。
+打开 <http://127.0.0.1:5001>，使用顾客账号登录后，点击右下角 **AI 悬浮球** 即可聊天。切换影片、影院和选座页时会保留对话与输入草稿；点击推荐卡片会收起面板并进入对应页面。顾客打开旧链接 <http://127.0.0.1:5001/#/assistant> 会在首页展开助手。原来的双语演示页保留在 `/assistant`，其中预览也可进入正式选座。网站其余界面沿用队友的英文设计。MySQL 仅监听项目内 Unix socket。默认使用 5001，避免与 macOS Control Center 占用的 5000 冲突；运行网站的终端需保持开启。
 
 可以依次输入：
 
@@ -70,6 +70,26 @@
 .venv/bin/python scripts/local_mysql.py stop
 ```
 
+## 新顾客邮箱注册
+
+新顾客在注册页填写邮箱、获取六位验证码，并提交姓名、密码和验证码。验证成功后网站自动登录并一次性发放 ¥1,000 演示余额。后续登录及已有账号继续使用邮箱和密码。
+
+注册与柜台售票共用下方的 SMTP 配置。每个注册验证码有效 5 分钟，最多可输错 5 次；重发后上一封失效。每个邮箱至少间隔 60 秒，每滚动小时最多发送 5 次，同一来源 IP 最多发送 20 次。
+
+已有数据库先用具备建表权限的账号运行 `flask --app cinema:create_app migrate-registration-email`，然后重启网站。全新数据库初始化时会自动建表。
+
+前端先向 `POST /api/auth/register/code` 提交 `email`，取得 `challenge_id`。再向 `POST /api/auth/register` 提交 `email`、`display_name`、`password`、`challenge_id` 和六位字符串 `code`。两次请求均携带当前 CSRF 令牌，完成注册还需 `Idempotency-Key`。成功响应包含用户、演示余额和登录后的新 CSRF 令牌。
+
+## 门店工作台与柜台售票
+
+店长和店员登录后直接进入本店排片。办理柜台售票时，员工选择本店场次、座位和票种，填写顾客的注册邮箱。邮件写明场次、座位和本次余额变动金额。顾客同意后出示六位验证码，员工输入后出票。验证码最长有效五分钟，座位与价格在出票时复核。柜台也支持本店优惠券和原订单改签。
+
+已有数据库用具备建表权限的账号执行 `flask --app cinema:create_app migrate-counter-email`。项目的私有 MySQL 也可以在根目录运行 `mysql --no-defaults --socket="$PWD/instance/mysql/mysql.sock" -uroot cinema_demo < cinema/sql/007_counter_email.sql`。新建数据库会自动包含验证码表。
+
+每位队友首次运行时，通过团队的私密渠道获取只包含 `SMTP_*` 配置的 `.env.smtp`，放在项目根目录（与 `main.py` 同级），然后重启 Flask。这份文件已被 Git 忽略，之后拉取更新可继续使用。系统环境变量或原有 `.env` 已设置非空 `SMTP_HOST` 时，网站沿用那一套发件配置。
+
+自行配置时，所需字段见 `.env.example` 的 SMTP 部分。QQ 邮箱使用 `smtp.qq.com`、端口 `465`、`SMTP_SECURITY=ssl`，发件地址和用户名都填完整 QQ 邮箱，密码字段填 SMTP 授权码。顾客需使用可以收信的注册邮箱获取验证码。
+
 ## 配置 DeepSeek
 
 **编辑现有 `.env`，不要用示例文件覆盖已经生成的数据库连接和 SECRET_KEY。** 修改：
@@ -84,15 +104,17 @@ AI_TIMEOUT_SECONDS=30
 
 重启应用。请求仅从后端发往 `https://api.deepseek.com`，使用 OpenAI 兼容 SDK 与原生 Tool Calls，关闭思考模式、流式输出和自动重试。每轮最多 4 次模型请求、6 次只读工具调用，默认共用 30 秒预算，`AI_TIMEOUT_SECONDS` 可调整但不能超过 60 秒；重复调用提前停止。接口依据 [DeepSeek Tool Calls 文档](https://api-docs.deepseek.com/guides/tool_calls/)。密钥不会发送到浏览器。
 
-当前是“通用对话＋受控业务查询工具”：知识问答、写作、翻译、学习和闲聊由 DeepSeek 结合近期对话回答，不强制转成选片问题。完整、明确的“我的订单／我的优惠券”直接查询本人数据并使用固定说明，即使模型不可用也能查询；复杂的业务问题仍由模型选择只读工具。选片无需人数，场次推荐再检查整组座位；还支持类型、本站评分、预算、候选序号及改签资格/费用预览。Python 校验参数、身份与硬条件，卡片和金额由后端生成。个人明细保留在后端和浏览器，模型只获得查询状态及候选序号。解释超时或事实校验失败时使用已验证结果的模板。`AI_PROVIDER=stub` 只支持有限的离线固定表达；仅填写密钥不会自动启用 DeepSeek。完整说明与限制见 [业务 Agent 集成说明](docs/business-agent.md)。
+观影助手仅限登录的顾客使用，支持影片讨论、选片与购票服务。游客点击悬浮球会看到顾客登录提示。员工、店长和平台管理员登录后，悬浮球和首页助手卡片均隐藏，访问助手书签会进入工作台。完整、明确的“我的订单／我的优惠券”直接查询本人数据并使用固定说明，即使模型不可用也能查询；复杂的业务问题仍由模型选择只读工具。选片无需人数，场次推荐再检查整组座位；还支持类型、本站评分、预算、候选序号及改签资格/费用预览。Python 校验参数、身份与硬条件，卡片和金额由后端生成。个人明细保留在后端和浏览器，模型只获得查询状态及候选序号。解释超时或事实校验失败时使用已验证结果的模板。`AI_PROVIDER=stub` 只支持有限的离线固定表达；仅填写密钥不会自动启用 DeepSeek。完整说明与限制见 [业务 Agent 集成说明](docs/business-agent.md)。
 
 | 配置 | 说明 |
 | --- | --- |
 | `DATA_SOURCE=backend` | 通过 `cinema.create_app` 启动完整后端和 AI；必须配置 MySQL 与稳定随机 SECRET_KEY |
-| `DATA_SOURCE=mock` | 无 MySQL 的独立演示，只注册 AI 和模拟目录 |
+| `DATA_SOURCE=mock` | 独立演示可浏览模拟目录；聊天需要提供登录身份的宿主应用 |
 | `AI_PROVIDER` | `stub` / `deepseek`，独立于数据来源 |
 | `DEEPSEEK_MODEL` | 默认 `deepseek-flash` |
 | `AI_TIMEOUT_SECONDS` | 大于 0、至多 60 秒；默认 30 秒 |
+| `AI_MESSAGES_PER_MINUTE` / `AI_MESSAGES_PER_DAY` | 每个账号默认 6 条/滚动分钟、50 条/北京时间自然日 |
+| `AI_IP_ALERT_PER_MINUTE` | 同一来源一分钟内默认 60 条已接收消息时记录告警，共享网络用户各自计数 |
 | `DATABASE_URL` | SQLAlchemy `mysql+pymysql` URL，仅 backend 模式需要 |
 | `SECRET_KEY` | 后端要求至少 32 个随机字符；私有初始化脚本自动生成 |
 | `COOKIE_SECURE` | 完整后端默认 false；HTTPS 部署设 true |

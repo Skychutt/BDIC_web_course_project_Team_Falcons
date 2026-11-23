@@ -561,64 +561,76 @@ def checkout(actor, body, key):
             "Price, fee or selection changed; request and confirm a new quote",
             409,
         )
-        w = one(
-            c, "SELECT * FROM wallets WHERE customer_id=:u FOR UPDATE", u=h["owner_id"]
-        )
+        return settle_purchase(c, actor, key, payload, h, q)
+
+    return transaction(work)
+
+
+def settle_purchase(c, actor, key, payload, h, q):
+    """Post a validated purchase under the caller's screening and customer locks."""
+    hid = h["id"]
+    w = one(
+        c, "SELECT * FROM wallets WHERE customer_id=:u FOR UPDATE", u=h["owner_id"]
+    )
+    require(
+        w["balance_minor"] >= q["amount_due_minor"],
+        "INSUFFICIENT_BALANCE",
+        "Wallet balance is insufficient",
+        409,
+    )
+    bid = new_id()
+    source = (
+        get(c, "bookings", h["source_booking_id"])
+        if h["source_booking_id"]
+        else None
+    )
+    # A wallet lock may have waited: recheck time-dependent conditions at settlement.
+    salable(c, get(c, "screenings", h["screening_id"]))
+    if source:
         require(
-            w["balance_minor"] >= q["amount_due_minor"],
-            "INSUFFICIENT_BALANCE",
-            "Wallet balance is insufficient",
+            source_ok(c, h, source) == q["fee_rate_bps"],
+            "QUOTE_CHANGED",
+            "Fee band changed; confirm a fresh quote",
             409,
         )
-        bid = new_id()
-        source = (
-            get(c, "bookings", h["source_booking_id"])
-            if h["source_booking_id"]
-            else None
-        )
-        # A wallet lock may have waited: recheck time-dependent conditions at settlement.
-        salable(c, get(c, "screenings", h["screening_id"]))
-        if source:
-            require(
-                source_ok(c, h, source) == q["fee_rate_bps"],
-                "QUOTE_CHANGED",
-                "Fee band changed; confirm a fresh quote",
-                409,
-            )
-        at = now()
-        require(at < h["expires_at"], "HOLD_EXPIRED", "Hold expired before settlement", 409)
-        ins(
+    at = now()
+    require(at < h["expires_at"], "HOLD_EXPIRED" if hid else "CODE_EXPIRED", "Confirmation expired before settlement", 409)
+    ins(
+        c,
+        "bookings",
+        id=bid,
+        owner_id=h["owner_id"],
+        creator_id=actor["id"],
+        cinema_id=h["cinema_id"],
+        film_id=h["film_id"],
+        screening_id=h["screening_id"],
+        layout_id=h["layout_id"],
+        channel="COUNTER" if actor["role"] == "STAFF" else "ONLINE",
+        status="CONFIRMED",
+        gross_ticket_minor=q["gross_ticket_minor"],
+        price_factor_bps=q["price_factor_bps"],
+        net_ticket_minor=q["net_ticket_minor"],
+        current_fee_minor=q["current_fee_minor"],
+        cumulative_fee_minor=q["cumulative_fee_minor"],
+        original_coupon_id=q["original_coupon_id"],
+        root_booking_id=source["root_booking_id"] if source else bid,
+        predecessor_id=source["id"] if source else None,
+        change_no=source["change_no"] + 1 if source else 0,
+        created_at=at,
+    )
+    for t in q["tickets"]:
+        tid = ins(
             c,
-            "bookings",
-            id=bid,
-            owner_id=h["owner_id"],
-            creator_id=actor["id"],
-            cinema_id=h["cinema_id"],
-            film_id=h["film_id"],
+            "tickets",
+            booking_id=bid,
             screening_id=h["screening_id"],
             layout_id=h["layout_id"],
-            channel="COUNTER" if actor["role"] == "STAFF" else "ONLINE",
-            status="CONFIRMED",
-            gross_ticket_minor=q["gross_ticket_minor"],
-            price_factor_bps=q["price_factor_bps"],
-            net_ticket_minor=q["net_ticket_minor"],
-            current_fee_minor=q["current_fee_minor"],
-            cumulative_fee_minor=q["cumulative_fee_minor"],
-            original_coupon_id=q["original_coupon_id"],
-            root_booking_id=source["root_booking_id"] if source else bid,
-            predecessor_id=source["id"] if source else None,
-            change_no=source["change_no"] + 1 if source else 0,
-            created_at=at,
+            **t,
         )
-        for t in q["tickets"]:
-            tid = ins(
-                c,
-                "tickets",
-                booking_id=bid,
-                screening_id=h["screening_id"],
-                layout_id=h["layout_id"],
-                **t,
-            )
+        if hid is None:
+            ins(c, "seat_allocations", screening_id=h["screening_id"], layout_id=h["layout_id"],
+                seat_id=t["seat_id"], state="SOLD", ticket_id=tid)
+        else:
             sold = execute(
                 c,
                 "UPDATE seat_allocations SET state='SOLD', hold_id=NULL, ticket_id=:t WHERE hold_id=:h AND seat_id=:s",
@@ -627,88 +639,88 @@ def checkout(actor, body, key):
                 s=t["seat_id"],
             )
             require(sold.rowcount == 1, "SEAT_UNAVAILABLE", "The held seat is unavailable", 409)
+    if hid is not None:
         upd(c, "seat_holds", hid, status="CONVERTED")
-        if source:
-            upd(c, "bookings", source["id"], status="RESCHEDULED")
-            execute(
-                c,
-                "DELETE FROM seat_allocations WHERE ticket_id IN (SELECT id FROM tickets WHERE booking_id=:b)",
-                b=source["id"],
-            )
-        elif cp:
-            upd(
-                c, "coupons", cp, status="USED", redeemed_booking_id=bid, redeemed_at=at
-            )
-        amount = q["amount_due_minor"]
-        result = dict(
+    if source:
+        upd(c, "bookings", source["id"], status="RESCHEDULED")
+        execute(
+            c,
+            "DELETE FROM seat_allocations WHERE ticket_id IN (SELECT id FROM tickets WHERE booking_id=:b)",
+            b=source["id"],
+        )
+    elif q["original_coupon_id"]:
+        upd(
+            c, "coupons", q["original_coupon_id"], status="USED", redeemed_booking_id=bid, redeemed_at=at
+        )
+    amount = q["amount_due_minor"]
+    result = dict(
+        booking_id=bid,
+        status="CONFIRMED",
+        amount_due_minor=amount,
+        net_ticket_minor=q["net_ticket_minor"],
+        current_fee_minor=q["current_fee_minor"],
+        cumulative_fee_minor=q["cumulative_fee_minor"],
+        balance_minor=w["balance_minor"] - amount,
+    )
+    opid = operation(
+        c,
+        actor,
+        key,
+        payload,
+        "RESCHEDULE" if source else "PURCHASE",
+        result,
+        source_booking_id=source["id"] if source else None,
+        result_booking_id=bid,
+        result_hold_id=hid,
+    )
+    booking = get(c, "bookings", bid)
+    cash_id = None
+    kind = "ZERO"
+    if amount > 0:
+        cash_id = ins(
+            c,
+            "payments",
             booking_id=bid,
-            status="CONFIRMED",
-            amount_due_minor=amount,
-            net_ticket_minor=q["net_ticket_minor"],
-            current_fee_minor=q["current_fee_minor"],
-            cumulative_fee_minor=q["cumulative_fee_minor"],
-            balance_minor=w["balance_minor"] - amount,
+            operation_id=opid,
+            owner_id=h["owner_id"],
+            cinema_id=h["cinema_id"],
+            wallet_id=w["id"],
+            amount_minor=amount,
+            status="SUCCEEDED",
+            settled_at=at,
         )
-        opid = operation(
+        wallet_post(c, w, booking, opid, -amount, "PAYMENT", cash_id, at)
+        kind = "PAYMENT"
+    elif amount < 0:
+        cash_id = ins(
             c,
-            actor,
-            key,
-            payload,
-            "RESCHEDULE" if source else "PURCHASE",
-            result,
-            source_booking_id=source["id"] if source else None,
-            result_booking_id=bid,
-            result_hold_id=hid,
+            "refunds",
+            booking_id=bid,
+            operation_id=opid,
+            owner_id=h["owner_id"],
+            cinema_id=h["cinema_id"],
+            wallet_id=w["id"],
+            reason="RESCHEDULE_DIFFERENCE",
+            amount_minor=-amount,
+            status="SUCCEEDED",
+            attempt_count=1,
+            created_at=at,
+            settled_at=at,
         )
-        booking = get(c, "bookings", bid)
-        cash_id = None
-        kind = "ZERO"
-        if amount > 0:
-            cash_id = ins(
-                c,
-                "payments",
-                booking_id=bid,
-                operation_id=opid,
-                owner_id=h["owner_id"],
-                cinema_id=h["cinema_id"],
-                wallet_id=w["id"],
-                amount_minor=amount,
-                status="SUCCEEDED",
-                settled_at=at,
-            )
-            wallet_post(c, w, booking, opid, -amount, "PAYMENT", cash_id, at)
-            kind = "PAYMENT"
-        elif amount < 0:
-            cash_id = ins(
-                c,
-                "refunds",
-                booking_id=bid,
-                operation_id=opid,
-                owner_id=h["owner_id"],
-                cinema_id=h["cinema_id"],
-                wallet_id=w["id"],
-                reason="RESCHEDULE_DIFFERENCE",
-                amount_minor=-amount,
-                status="SUCCEEDED",
-                attempt_count=1,
-                created_at=at,
-                settled_at=at,
-            )
-            wallet_post(c, w, booking, opid, -amount, "REFUND", cash_id, at)
-            kind = "REFUND"
-        settlement(
-            c,
-            booking,
-            opid,
-            q["ticket_delta_minor"],
-            q["current_fee_minor"],
-            kind,
-            cash_id,
-            at,
-        )
-        return result
+        wallet_post(c, w, booking, opid, -amount, "REFUND", cash_id, at)
+        kind = "REFUND"
+    settlement(
+        c,
+        booking,
+        opid,
+        q["ticket_delta_minor"],
+        q["current_fee_minor"],
+        kind,
+        cash_id,
+        at,
+    )
+    return result
 
-    return transaction(work)
 
 
 def expire_holds():

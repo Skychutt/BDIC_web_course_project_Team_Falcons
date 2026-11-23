@@ -1,24 +1,29 @@
-import { esc, money, dateTime } from "./ui.js";
+import { createCounterSales } from "./counter-sales.js";
+import { getLanguage, tx } from "./locale.js";
+import { filmTitle, genreName } from "./film-locale.js";
+import { venueName, venueAddress, venueBrand, districtLabel, auditoriumName } from "./venue-locale.js";
+import { esc, money, dateTime, showError, redrawLocalized, LocalizedError } from "./ui.js";
 
 const statuses = {
-  PUBLISHED: "Published",
-  CANCELLED: "Cancelled",
-  CONFIRMED: "Confirmed",
-  RESCHEDULED: "Rescheduled",
-  CINEMA_CANCELLED: "Cinema cancellation",
-  CUSTOMER_CANCELLED: "Customer refunded",
-  PENDING: "Pending refund",
-  FAILED: "Needs retry",
-  SUCCEEDED: "Completed",
-  STANDARD: "Standard",
-  STUDENT: "Student",
-  IMAX: "IMAX",
-  DOLBY_CINEMA: "Dolby Cinema",
-  ONLINE: "Online",
-  COUNTER: "Counter",
+  PUBLISHED: ["Published", "已发布"],
+  CANCELLED: ["Cancelled", "已取消"],
+  CONFIRMED: ["Confirmed", "已出票"],
+  RESCHEDULED: ["Rescheduled", "已改签"],
+  CINEMA_CANCELLED: ["Cinema cancellation", "影院取消"],
+  CUSTOMER_CANCELLED: ["Customer refunded", "顾客已退票"],
+  PENDING: ["Pending refund", "待退款"],
+  FAILED: ["Needs retry", "待重试"],
+  SUCCEEDED: ["Completed", "已完成"],
+  STANDARD: ["Standard", "标准"],
+  STUDENT: ["Student", "学生"],
+  IMAX: ["IMAX", "IMAX"],
+  DOLBY_CINEMA: ["Dolby Cinema", "杜比影院"],
+  ONLINE: ["Online", "线上"],
+  COUNTER: ["Counter", "柜台"],
 };
+const statusText = value => Object.hasOwn(statuses, value) ? tx(...statuses[value]) : value;
 const status = (value) =>
-  `<span class="badge status ${esc(value)}">${esc(statuses[value] || value)}</span>`;
+  `<span class="badge status ${esc(value)}">${esc(statusText(value))}</span>`;
 const rowsOf = (value) => (Array.isArray(value) ? value : value?.items || []);
 const input = (label, name, value = "", type = "text", extra = "") =>
   `<label class="field"><span>${esc(label)}</span><input name="${esc(name)}" type="${type}" value="${esc(value ?? "")}" ${extra}></label>`;
@@ -28,26 +33,26 @@ const select = (label, name, options, value = "", extra = "") =>
   `<label class="field"><span>${esc(label)}</span><select name="${esc(name)}" aria-label="${esc(label)}" ${extra}>${options.map(([id, title]) => `<option value="${esc(id)}" ${String(id) === String(value) ? "selected" : ""}>${esc(title)}</option>`).join("")}</select></label>`;
 const button = (text, action, id = "", kind = "secondary") =>
   `<button type="button" class="button ${kind}" data-act="${action}" data-id="${esc(id)}">${text}</button>`;
-const table = (head, rows, fallback = "No records yet") =>
+const table = (head, rows, fallback = tx("No records yet", "暂无记录")) =>
   rows.length
     ? `<div class="table-wrap"><table class="table"><thead><tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`
-    : `<div class="empty"><strong>${esc(fallback)}</strong><p class="muted">Records will appear here after the relevant activity.</p></div>`;
+    : `<div class="empty"><strong>${esc(fallback)}</strong><p class="muted">${tx("Records will appear here after the relevant activity.", "有相关业务后，记录会显示在这里。")}</p></div>`;
 const alertBox = (text) => `<div class="notice">${esc(text)}</div>`;
 const beijingNow = () =>
   new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 16);
 const zoned = (value) => {
   if (!/^\d{4}-\d\d-\d\dT\d\d:\d\d$/.test(value))
-    throw new Error("Choose a valid date and time in Beijing time.");
+    throw new LocalizedError("Choose a valid date and time in Beijing time.", "请选择有效的北京时间。");
   return `${value}:00+08:00`;
 };
 const fen = (value) => {
   const match = /^(\d{1,7})(?:\.(\d{1,2}))?$/.exec(String(value).trim());
   if (!match)
-    throw new Error("Enter a positive fare with at most two decimal places.");
+    throw new LocalizedError("Enter a positive fare with at most two decimal places.", "请输入大于零的票价，最多保留两位小数。");
   const amount =
     Number(match[1]) * 100 + Number((match[2] || "").padEnd(2, "0"));
   if (amount <= 0 || amount > 10000000)
-    throw new Error("Fares must be between ¥0.01 and ¥100,000.00.");
+    throw new LocalizedError("Fares must be between ¥0.01 and ¥100,000.00.", "票价须在 0.01 元至 100,000 元之间。");
   return amount;
 };
 const yuan = (value) => (value == null ? "" : (Number(value) / 100).toFixed(2));
@@ -58,16 +63,20 @@ export async function renderOperations(ctx) {
   const { root, api, user, bootstrap, toast } = ctx;
   const admin = user.role === "PLATFORM_ADMIN";
   if (!admin && user.role !== "STAFF") {
-    root.innerHTML = alertBox(
-      "Sign in with a cinema staff or platform administrator account to use this workspace.",
-    );
+    ctx.updateLanguage = () => {
+      root.innerHTML = alertBox(
+        tx("Sign in with a cinema staff or platform administrator account to use this workspace.", "请使用影院员工或平台管理员账号登录工作台。"),
+      );
+    };
+    ctx.updateLanguage();
     return;
   }
   root.classList.add("operations-view");
   let alive = true,
     revision = 0,
     currentTab = admin ? "cinemas" : "programme",
-    bookingQuery = "";
+    bookingQuery = "",
+    staffCinemaFilter = "";
   const refundRecords = new Map();
   let cinemas = rowsOf(bootstrap.cinemas),
     districts = rowsOf(bootstrap.districts),
@@ -76,37 +85,52 @@ export async function renderOperations(ctx) {
     screens = [],
     staff = [];
   const dialogs = new Set();
-  const tabs = admin
+  const tabs = () => admin
     ? [
-        ["cinemas", "Cinemas"],
-        ["films", "Films & genres"],
-        ["staff", "Staff & managers"],
-        ["turnover", "Turnover"],
+        ["cinemas", tx("Cinemas", "影院")],
+        ["films", tx("Films & genres", "影片与类型")],
+        ["staff", tx("Staff & managers", "员工与经理")],
+        ["turnover", tx("Turnover", "营业额")],
       ]
     : [
-        ["programme", "Screenings & fares"],
-        ["layouts", "Auditoriums & seats"],
-        ["counter", "Counter sales"],
-        ["bookings", "Branch bookings"],
-        ["refunds", "Refunds"],
-        ...(user.is_manager ? [["turnover", "Turnover"]] : []),
+        ["programme", tx("Screenings & fares", "排片与票价")],
+        ["layouts", tx("Auditoriums & seats", "影厅与座位")],
+        ["counter", tx("Counter sales", "柜台售票")],
+        ["bookings", tx("Branch bookings", "本店订单")],
+        ["refunds", tx("Refunds", "退款")],
+        ...(user.is_manager ? [["turnover", tx("Turnover", "营业额")]] : []),
       ];
   const cinemaName = (id) =>
-    cinemas.find((c) => String(c.id) === String(id))?.name || "Your cinema";
+    venueName(cinemas.find((c) => String(c.id) === String(id))?.name) || tx("Your cinema", "所属影院");
   const filmName = (id) =>
-    films.find((f) => String(f.id) === String(id))?.title ||
-    `Film ${short(id)}`;
+    filmTitle(films.find((f) => String(f.id) === String(id))) ||
+    tx(`Film ${short(id)}`, `影片 ${short(id)}`);
   const screenName = (id) =>
-    screens.find((s) => String(s.id) === String(id))?.name ||
-    `Auditorium ${short(id)}`;
+    auditoriumName(screens.find((s) => String(s.id) === String(id))?.name) ||
+    tx(`Auditorium ${short(id)}`, `影厅 ${short(id)}`);
   const districtName = (id) =>
-    districts.find((d) => String(d.id) === String(id))?.name || "Not set";
-  root.innerHTML = `<div class="page-heading"><div><p class="eyebrow">${admin ? "PLATFORM CONSOLE" : "CINEMA WORKSPACE"}</p><h1>${admin ? "Platform management" : "Cinema workspace"}</h1><p class="muted">${admin ? "Manage the shared catalogue, cinemas and staff, and review branch settlements." : `${esc(cinemaName(user.staff_cinema_id))} · ${user.is_manager ? "Manager" : "Staff"} · All times are Beijing time`}</p></div></div><nav class="tabs" aria-label="Operations navigation">${tabs.map(([id, label]) => `<button class="tab ${id === currentTab ? "active" : ""}" data-tab="${id}" type="button">${label}</button>`).join("")}</nav><div class="operations-body stack" aria-live="polite"></div>`;
+    districtLabel(districts.find((d) => String(d.id) === String(id))) || tx("Not set", "未设置");
+  const heading = () => `
+    <div class="page-heading${admin ? "" : " branch-heading"}">
+      <div>
+        <p class="eyebrow">${admin ? tx("PLATFORM CONSOLE", "平台控制台") : tx("CINEMA WORKSPACE", "影院运营")}</p>
+        <h1>${admin ? tx("Platform management", "平台管理") : tx("Cinema workspace", "影院工作台")}</h1>
+        ${admin ? `<p class="muted">${tx("Manage the shared catalogue, cinemas and staff, and review branch settlements.", "管理全平台的片库、影院和员工，查看各门店结算情况。")}</p>` : ""}
+      </div>
+      ${admin ? "" : `<div class="branch-heading-details">
+        <p><strong>${esc(cinemaName(user.staff_cinema_id))} · ${user.is_manager ? tx("Manager", "经理") : tx("Staff", "员工")}</strong></p>
+        <p class="muted">${tx("All times are Beijing time", "所有时间均为北京时间")}</p>
+      </div>`}
+    </div>
+    <nav class="tabs" data-operations-nav aria-label="${tx("Operations navigation", "工作台导航")}">
+      ${tabs().map(([id, label]) => `<button class="tab ${id === currentTab ? "active" : ""}" data-tab="${id}" aria-pressed="${id === currentTab}" type="button">${label}</button>`).join("")}
+    </nav>`;
+  root.innerHTML = `<div data-workspace-heading>${heading()}</div><div class="operations-body stack" aria-live="polite"></div>`;
   const content = root.querySelector(".operations-body");
   const errorText = (err) =>
     err?.userMessage ||
     err?.message ||
-    "The action could not be completed. Please try again.";
+    tx("The action could not be completed. Please try again.", "操作未完成，请重试。");
   function bindActions(container, handler) {
     container.onclick = (event) => {
       const target = event.target.closest("[data-act]");
@@ -128,14 +152,13 @@ export async function renderOperations(ctx) {
       form.dataset.busy = "1";
       if (submit) {
         submit.disabled = true;
-        submit.textContent = "Working…";
+        submit.textContent = tx("Working…", "处理中…");
       }
       try {
         await callback(new FormData(form), form);
       } catch (err) {
         if (error) {
-          error.hidden = false;
-          error.textContent = errorText(err);
+          showError(error, err, true);
           error.focus();
         } else toast(errorText(err), "error");
       } finally {
@@ -144,6 +167,7 @@ export async function renderOperations(ctx) {
           submit.disabled = false;
           submit.textContent = old;
         }
+        if (content.contains(form) && pendingLanguage) ctx.updateLanguage();
       }
     });
   }
@@ -151,7 +175,7 @@ export async function renderOperations(ctx) {
     const d = document.createElement("dialog");
     d.className = "modal-dialog operations-dialog";
     d.setAttribute("aria-label", title);
-    d.innerHTML = `<div class="panel-header"><h2>${esc(title)}</h2><button type="button" class="button ghost" data-close aria-label="Close dialog">Close ×</button></div><div class="stack">${body}</div>`;
+    d.innerHTML = `<div class="panel-header"><h2>${esc(title)}</h2><button type="button" class="button ghost" data-close aria-label="${tx("Close dialog", "关闭弹窗")}">${tx("Close ×", "关闭 ×")}</button></div><div class="stack">${body}</div>`;
     document.body.append(d);
     dialogs.add(d);
     d.querySelector("[data-close]").onclick = () => d.close();
@@ -162,7 +186,7 @@ export async function renderOperations(ctx) {
     d.showModal();
     return d;
   }
-  const formEnd = (label = "Save", kind = "") =>
+  const formEnd = (label = tx("Save", "保存"), kind = "") =>
     `<p class="error" role="alert" tabindex="-1" data-error hidden></p><div class="actions"><button type="submit" class="button ${kind}">${label}</button></div>`;
   const panel = (title, body, action = "") =>
     `<section class="panel"><div class="panel-header"><h2>${title}</h2>${action}</div>${body}</section>`;
@@ -188,7 +212,26 @@ export async function renderOperations(ctx) {
     cinemas = rowsOf(values[0]);
     staff = rowsOf(values[1]);
   }
+  let renderPanel, bindPanel, pendingLanguage = false;
+  const results = new Map();
+  const loading = () => `<div class="panel"><p class="muted">${tx("Loading…", "加载中…")}</p></div>`;
+  function showResult(selector, render) {
+    if (!content.querySelector(selector)) return;
+    results.set(selector, render);
+    content.querySelector(selector).innerHTML = render();
+  }
+  ctx.updateLanguage = () => {
+    root.querySelector("[data-workspace-heading]").innerHTML = heading();
+    if (!renderPanel) { content.innerHTML = loading(); return; }
+    pendingLanguage = Boolean(content.querySelector("form[data-busy]"));
+    if (pendingLanguage) return;
+    redrawLocalized(content, () => { content.innerHTML = renderPanel(); }, bindPanel);
+    for (const [selector, render] of results) showResult(selector, render);
+  };
   async function showTab(tab, page = 1) {
+    pendingLanguage = false;
+    results.clear();
+    renderPanel = null;
     currentTab = tab;
     const token = ++revision;
     root.querySelectorAll("[data-tab]").forEach((el) => {
@@ -199,55 +242,61 @@ export async function renderOperations(ctx) {
     const route = new URL(location.href);
     route.hash = "/operations?" + new URLSearchParams({ tab });
     history.replaceState(null, "", route);
-    content.innerHTML =
-      '<div class="panel"><p class="muted">Loading…</p></div>';
+    content.innerHTML = loading();
     try {
-      let markup;
-      if (tab === "programme") markup = await programme(page);
-      else if (tab === "layouts") markup = await layouts();
-      else if (tab === "counter") markup = counter();
-      else if (tab === "bookings") markup = await bookings(page);
-      else if (tab === "refunds") markup = await refunds(page);
-      else if (tab === "cinemas") markup = await cinemaPanel();
-      else if (tab === "films") markup = await filmPanel(page);
-      else if (tab === "staff") markup = await staffPanel();
+      let render, counterView;
+      if (tab === "programme") render = await programme(page);
+      else if (tab === "layouts") render = await layouts();
+      else if (tab === "counter") {
+        counterView = await createCounterSales(api, user, bookingDialog);
+        render = counterView.html;
+      }
+      else if (tab === "bookings") render = await bookings(page);
+      else if (tab === "refunds") render = await refunds(page);
+      else if (tab === "cinemas") render = await cinemaPanel();
+      else if (tab === "films") render = await filmPanel(page);
+      else if (tab === "staff") render = await staffPanel();
       else if (tab === "turnover") {
         if (admin) await fetchAdmin();
-        markup = turnoverPanel();
+        render = turnoverPanel;
       }
       if (!alive || token !== revision) return;
-      content.innerHTML = markup;
-      bindCurrent(tab, page);
+      renderPanel = render;
+      bindPanel = counterView ? () => counterView.bind(content) : () => bindCurrent(tab, page);
+      content.innerHTML = renderPanel();
+      bindPanel();
     } catch (err) {
       if (alive && token === revision) {
-        content.innerHTML = `<div class="panel"><p class="error" role="alert">${esc(errorText(err))}</p>${button("Reload", "reload")}</div>`;
-        bindActions(content, () => reload());
+        renderPanel = () => `<div class="panel"><p class="error" role="alert">${esc(errorText(err))}</p>${button(tx("Reload", "重新加载"), "reload")}</div>`;
+        bindPanel = () => bindActions(content, () => reload());
+        content.innerHTML = renderPanel();
+        bindPanel();
       }
     }
   }
   root
-    .querySelector('[aria-label="Operations navigation"]')
+    .querySelector("[data-workspace-heading]")
     .addEventListener("click", (event) => {
       const b = event.target.closest("[data-tab]");
       if (b) showTab(b.dataset.tab);
     });
   const pager = (page, hasNext) =>
-    `<div class="actions">${page > 1 ? button("Previous", "previous") : ""}<span class="muted">Page ${page}</span>${hasNext ? button("Next", "next") : ""}</div>`;
+    `<div class="actions">${page > 1 ? button(tx("Previous", "上一页"), "previous") : ""}<span class="muted">${tx(`Page ${page}`, `第 ${page} 页`)}</span>${hasNext ? button(tx("Next", "下一页"), "next") : ""}</div>`;
   const layoutOptions = () =>
     screens.flatMap((s) =>
       (s.layouts || []).map((l) => [
         l.id,
-        `${s.name} · Layout v${l.version_no} · ${l.row_count} rows`,
+        `${auditoriumName(s.name)} · ${tx(`Layout v${l.version_no} · ${l.row_count} rows`, `布局 v${l.version_no} · ${l.row_count} 排`)}`,
       ]),
     );
   function programmeFields(s = {}) {
     return `<div class="form-grid">${select(
-      "Film",
+      tx("Film", "影片"),
       "film_id",
-      films.filter((f) => !f.archived).map((f) => [f.id, f.title]),
+      films.filter((f) => !f.archived).map((f) => [f.id, filmTitle(f)]),
       s.film_id,
       "required",
-    )}${select("Auditorium / layout version", "layout_id", layoutOptions(), s.layout_id, "required")}${input("Starts at (Beijing time)", "starts_at", s.starts_at?.slice(0, 16) || "", "datetime-local", "required")}${input("Standard fare (CNY)", "STANDARD", s.STANDARD || "65.00", "number", 'min="0.01" max="100000" step="0.01" required')}${input("Student fare (CNY)", "STUDENT", s.STUDENT || "40.00", "number", 'min="0.01" max="100000" step="0.01" required')}</div>`;
+    )}${select(tx("Auditorium / layout version", "影厅及座位布局版本"), "layout_id", layoutOptions(), s.layout_id, "required")}${input(tx("Starts at (Beijing time)", "开场时间（北京时间）"), "starts_at", s.starts_at?.slice(0, 16) || "", "datetime-local", "required")}${input(tx("Standard fare (CNY)", "标准票价（元）"), "STANDARD", s.STANDARD || "65.00", "number", 'min="0.01" max="100000" step="0.01" required')}${input(tx("Student fare (CNY)", "学生票价（元）"), "STUDENT", s.STUDENT || "40.00", "number", 'min="0.01" max="100000" step="0.01" required')}</div>`;
   }
   const programmeBody = (fd) => ({
     film_id: fd.get("film_id"),
@@ -273,41 +322,41 @@ export async function renderOperations(ctx) {
     details.forEach((result) => {
       if (result.status === "fulfilled") films.push(result.value);
     });
-    return panel(
-      "Screenings",
+    return () => panel(
+      tx("Screenings", "放映场次"),
       alertBox(
-        "Allow 15 minutes between screenings for turnaround. To change a published screening’s time, film or auditorium, use Cancel / replace.",
+        tx("Allow 15 minutes between screenings for turnaround. To change a published screening’s time, film or auditorium, use Cancel / replace.", "请在两场放映之间预留 15 分钟清场。要更改已发布场次的时间、影片或影厅，请选择“取消或替换”。"),
       ) +
         table(
-          ["Film / auditorium", "Start / end", "Status", "Version", "Actions"],
+          [tx("Film / auditorium", "影片 / 影厅"), tx("Start / end", "开场 / 散场"), tx("Status", "状态"), tx("Version", "版本"), tx("Actions", "操作")],
           result.items.map((s) => [
-            `<strong>${esc(s.film_title || filmName(s.film_id))}</strong><div class="muted">${esc(s.screen_name || screenName(s.screen_id))}</div>`,
-            `${dateTime(s.starts_at)}<div class="muted">until ${dateTime(s.ends_at)}</div>`,
+            `<strong>${esc(filmTitle(s.film_title) || filmName(s.film_id))}</strong><div class="muted">${esc(auditoriumName(s.screen_name) || screenName(s.screen_id))}</div>`,
+            `${dateTime(s.starts_at)}<div class="muted">${tx(`until ${dateTime(s.ends_at)}`, `至 ${dateTime(s.ends_at)}`)}</div>`,
             status(s.status),
             `v${esc(s.revision_no)}`,
             s.status === "PUBLISHED" && new Date(s.starts_at) > new Date()
-              ? `${button("Fares", "fares", s.id)} ${button("Cancel / replace", "cancel", s.id, "ghost")}`
-              : '<span class="muted">Closed</span>',
+              ? `${button(tx("Fares", "票价"), "fares", s.id)} ${button(tx("Cancel / replace", "取消或替换"), "cancel", s.id, "ghost")}`
+              : `<span class="muted">${tx("Closed", "已结束")}</span>`,
           ]),
-          "No screenings yet",
+          tx("No screenings yet", "暂无排片"),
         ) +
         pager(page, result.items.length === 100),
-      button("＋ Publish screening", "publish", "", ""),
+      button(tx("＋ Publish screening", "＋ 发布场次"), "publish", "", ""),
     );
   }
   async function publishDialog() {
     if (!layoutOptions().length) {
-      toast("Create an auditorium and a seating layout first.", "error");
+      toast(tx("Create an auditorium and a seating layout first.", "请先创建影厅并设置座位布局。"), "error");
       return;
     }
     const d = dialog(
-      "Publish a screening",
-      `<form class="stack">${programmeFields()}${alertBox("The auditorium is reserved for the film duration plus 15 minutes for turnaround. Fares apply to this screening only.")}${formEnd("Publish screening")}</form>`,
+      tx("Publish a screening", "发布放映场次"),
+      `<form class="stack">${programmeFields()}${alertBox(tx("The auditorium is reserved for the film duration plus 15 minutes for turnaround. Fares apply to this screening only.", "影厅占用时间包括影片时长和 15 分钟清场时间。此处设置的票价仅适用于本场。"))}${formEnd(tx("Publish screening", "发布场次"))}</form>`,
     );
     formAction(d.querySelector("form"), async (fd) => {
       await request("/staff/screenings", "POST", programmeBody(fd));
       d.close();
-      toast("Screening published.");
+      toast(tx("Screening published.", "场次已发布。"));
       await reload();
     });
   }
@@ -317,8 +366,8 @@ export async function renderOperations(ctx) {
       data.fares.map((f) => [f.fare_type, f.price_minor]),
     );
     const d = dialog(
-      "Update screening fares",
-      `<form class="stack"><p>${esc(filmName(data.screening.film_id))} · ${dateTime(data.screening.starts_at)}</p><div class="form-grid">${input("Standard fare (CNY)", "STANDARD", yuan(fares.STANDARD), "number", 'min="0.01" max="100000" step="0.01" required')}${input("Student fare (CNY)", "STUDENT", yuan(fares.STUDENT), "number", 'min="0.01" max="100000" step="0.01" required')}</div>${alertBox("Unpaid reservations will need a fresh quote. Prices on issued tickets remain unchanged.")}${formEnd("Save fares")}</form>`,
+      tx("Update screening fares", "修改场次票价"),
+      `<form class="stack"><p>${esc(filmName(data.screening.film_id))} · ${dateTime(data.screening.starts_at)}</p><div class="form-grid">${input(tx("Standard fare (CNY)", "标准票价（元）"), "STANDARD", yuan(fares.STANDARD), "number", 'min="0.01" max="100000" step="0.01" required')}${input(tx("Student fare (CNY)", "学生票价（元）"), "STUDENT", yuan(fares.STUDENT), "number", 'min="0.01" max="100000" step="0.01" required')}</div>${alertBox(tx("Unpaid reservations will need a fresh quote. Prices on issued tickets remain unchanged.", "未付款的订单需重新核价。已出票的订单保留原票价。"))}${formEnd(tx("Save fares", "保存票价"))}</form>`,
     );
     formAction(d.querySelector("form"), async (fd) => {
       await request(`/staff/screenings/${id}/fares`, "PUT", {
@@ -329,7 +378,7 @@ export async function renderOperations(ctx) {
         },
       });
       d.close();
-      toast("Fares updated.");
+      toast(tx("Fares updated.", "票价已更新。"));
       await reload();
     });
   }
@@ -340,8 +389,8 @@ export async function renderOperations(ctx) {
       data.fares.map((f) => [f.fare_type, yuan(f.price_minor)]),
     );
     const d = dialog(
-      "Cancel / replace screening",
-      `<form class="stack"><p><strong>${esc(filmName(s.film_id))}</strong> · ${dateTime(s.starts_at)}</p>${textarea("Reason shown to customers", "reason", "", 'required maxlength="500"')}<label class="field"><span><input type="checkbox" name="with_replacement"> Publish a replacement screening</span></label><fieldset data-replacement hidden disabled><legend>Replacement screening</legend>${programmeFields({ ...s, ...fareValues })}</fieldset>${alertBox("Active bookings will be cancelled. Refunds cover current net tickets and all accumulated change fees, with one same-cinema 50% coupon per booking. Customers are not automatically moved to the replacement.")}${formEnd("Preview impact")}</form>`,
+      tx("Cancel / replace screening", "取消或替换场次"),
+      `<form class="stack"><p><strong>${esc(filmName(s.film_id))}</strong> · ${dateTime(s.starts_at)}</p>${textarea(tx("Reason shown to customers", "向顾客展示的取消原因"), "reason", "", 'required maxlength="500"')}<label class="field"><span><input type="checkbox" name="with_replacement"> ${tx("Publish a replacement screening", "发布替代场次")}</span></label><fieldset data-replacement hidden disabled><legend>${tx("Replacement screening", "替代场次")}</legend>${programmeFields({ ...s, ...fareValues })}</fieldset>${alertBox(tx("Active bookings will be cancelled. Refunds cover current net tickets and all accumulated change fees, with one same-cinema 50% coupon per booking. Customers are not automatically moved to the replacement.", "取消后将退还有效订单的实付票款及累计改签费，每笔订单另获一张本店五折券。顾客需自行预订替代场次。"))}${formEnd(tx("Preview impact", "预览取消影响"))}</form>`,
     );
     const form = d.querySelector("form");
     form.elements.with_replacement.onchange = () => {
@@ -363,16 +412,16 @@ export async function renderOperations(ctx) {
   }
   function cancelConfirmation(id, p, s) {
     const d = dialog(
-      "Confirm cancellation",
-      `<form class="stack"><p><strong>${esc(filmName(s.film_id))}</strong><br>${esc(screenName(s.screen_id))} · ${dateTime(s.starts_at)}</p><p>${esc(p.reason)}</p><div class="metric-grid"><div class="metric"><span>Confirmed bookings</span><strong>${esc(p.booking_count)}</strong></div><div class="metric"><span>Refund total</span><strong>${money(p.refund_total_minor)}</strong></div><div class="metric"><span>Compensation coupons</span><strong>${esc(p.coupon_count)}</strong></div></div>${p.replacement ? alertBox(`Replacement: ${filmName(p.replacement.film_id)}, ${dateTime(p.replacement.starts_at)}.`) : ""}${table(
-        ["Affected bookings", "Ticket value", "Cumulative fees"],
+      tx("Confirm cancellation", "确认取消"),
+      `<form class="stack"><p><strong>${esc(filmName(s.film_id))}</strong><br>${esc(screenName(s.screen_id))} · ${dateTime(s.starts_at)}</p><p>${esc(p.reason)}</p><div class="metric-grid"><div class="metric"><span>${tx("Confirmed bookings", "已确认订单")}</span><strong>${esc(p.booking_count)}</strong></div><div class="metric"><span>${tx("Refund total", "退款总额")}</span><strong>${money(p.refund_total_minor)}</strong></div><div class="metric"><span>${tx("Compensation coupons", "补偿券")}</span><strong>${esc(p.coupon_count)}</strong></div></div>${p.replacement ? alertBox(tx(`Replacement: ${filmName(p.replacement.film_id)}, ${dateTime(p.replacement.starts_at)}.`, `替代场次：${filmName(p.replacement.film_id)}，${dateTime(p.replacement.starts_at)}。`)) : ""}${table(
+        [tx("Affected bookings", "受影响的订单"), tx("Ticket value", "票款"), tx("Cumulative fees", "累计改签费")],
         (p.bookings || []).map((b) => [
           `…${esc(short(b.id))}`,
           money(b.net_ticket_minor),
           money(b.cumulative_fee_minor),
         ]),
-        "No paid bookings",
-      )}${alertBox("Cancellation takes effect immediately. Refunds and coupons are tracked separately; check Refunds for settlement status. A changed preview requires another review.")}${formEnd("Confirm cancellation & refunds", "danger")}</form>`,
+        tx("No paid bookings", "暂无已付款订单"),
+      )}${alertBox(tx("Cancellation takes effect immediately. Refunds and coupons are tracked separately; check Refunds for settlement status. A changed preview requires another review.", "取消将立即生效。退款和优惠券分别记录，可在“退款”中查看到账情况。预览内容如有变动，需重新确认。"))}${formEnd(tx("Confirm cancellation & refunds", "确认取消并退款"), "danger")}</form>`,
     );
     formAction(d.querySelector("form"), async () => {
       const result = await api.action(
@@ -382,7 +431,7 @@ export async function renderOperations(ctx) {
       );
       d.close();
       toast(
-        `Screening cancelled; ${result.coupon_count} compensation coupons issued.`,
+        tx(`Screening cancelled; ${result.coupon_count} compensation coupons issued.`, `场次已取消，已发放 ${result.coupon_count} 张补偿券。`),
       );
       await reload();
     });
@@ -390,46 +439,46 @@ export async function renderOperations(ctx) {
 
   async function layouts() {
     await fetchScreens();
-    return panel(
-      "Auditoriums & layouts",
+    return () => panel(
+      tx("Auditoriums & layouts", "影厅与座位布局"),
       alertBox(
-        "Seat changes create a new layout version. Existing screenings keep their original layout. Scheduling checks use the physical auditorium across all versions.",
+        tx("Seat changes create a new layout version. Existing screenings keep their original layout. Scheduling checks use the physical auditorium across all versions.", "修改座位将创建新版布局，已排场次沿用原布局。同一影厅的各版本共用排期，放映时间不可冲突。"),
       ) +
         table(
-          ["Auditorium", "Type", "Layout version", "Actions"],
+          [tx("Auditorium", "影厅"), tx("Type", "类型"), tx("Layout version", "布局版本"), tx("Actions", "操作")],
           screens.map((s) => [
-            `<strong>${esc(s.name)}</strong>`,
+            `<strong>${esc(auditoriumName(s.name))}</strong>`,
             status(s.screen_type),
             (s.layouts || [])
               .map(
                 (l) =>
-                  `<button type="button" class="button ghost" data-act="view-layout" data-id="${esc(l.id)}">v${esc(l.version_no)} · ${esc(l.row_count)} rows</button>`,
+                  `<button type="button" class="button ghost" data-act="view-layout" data-id="${esc(l.id)}">v${esc(l.version_no)} · ${tx(`${esc(l.row_count)} rows`, `${esc(l.row_count)} 排`)}</button>`,
               )
-              .join(" ") || '<span class="muted">Not created</span>',
-            button("Create layout version", "create-layout", s.id),
+              .join(" ") || `<span class="muted">${tx("Not created", "尚未创建")}</span>`,
+            button(tx("Create layout version", "新建布局版本"), "create-layout", s.id),
           ]),
-          "No auditoriums yet",
+          tx("No auditoriums yet", "暂无影厅"),
         ),
-      button("＋ Add auditorium", "create-screen", "", ""),
+      button(tx("＋ Add auditorium", "＋ 添加影厅"), "create-screen", "", ""),
     );
   }
   function screenDialog() {
     const d = dialog(
-      "Add auditorium",
-      `<form class="stack">${input("Auditorium name", "name", "", "text", 'required maxlength="80"')}${select(
-        "Screen type",
+      tx("Add auditorium", "添加影厅"),
+      `<form class="stack">${input(tx("Auditorium name", "影厅名称"), "name", "", "text", 'required maxlength="80"')}${select(
+        tx("Screen type", "影厅类型"),
         "screen_type",
         [
-          ["STANDARD", "Standard auditorium"],
+          ["STANDARD", tx("Standard auditorium", "标准厅")],
           ["IMAX", "IMAX"],
-          ["DOLBY_CINEMA", "Dolby Cinema"],
+          ["DOLBY_CINEMA", tx("Dolby Cinema", "杜比影院")],
         ],
-      )}${formEnd("Add auditorium")}</form>`,
+      )}${formEnd(tx("Add auditorium", "添加影厅"))}</form>`,
     );
     formAction(d.querySelector("form"), async (fd) => {
       await request("/staff/screens", "POST", Object.fromEntries(fd));
       d.close();
-      toast("Auditorium added. Create its seating layout next.");
+      toast(tx("Auditorium added. Create its seating layout next.", "影厅已添加，请设置座位布局。"));
       await reload();
     });
   }
@@ -447,12 +496,10 @@ export async function renderOperations(ctx) {
       segments.length > 8 ||
       segments.some((n) => !Number.isInteger(n) || n < 1 || n > 100)
     )
-      throw new Error(
-        "Use 1–100 rows and 1–100 seats per segment, with at most 8 segments.",
-      );
+      throw new LocalizedError("Use 1–100 rows and 1–100 seats per segment, with at most 8 segments.", "请设置 1–100 排，每个座区每排 1–100 座，最多可设 8 个座区。");
     const width = segments.reduce((a, b) => a + b, 0) + segments.length - 1;
     if (rowCount * segments.reduce((a, b) => a + b, 0) > 5000)
-      throw new Error("A layout can contain at most 5,000 seats.");
+      throw new LocalizedError("A layout can contain at most 5,000 seats.", "每个布局最多可设置 5,000 个座位。");
     const seats = [];
     for (let row = 1; row <= rowCount; row++) {
       let no = 1,
@@ -488,22 +535,22 @@ export async function renderOperations(ctx) {
     return { row_count: rowCount, screen_direction: direction, seats, width };
   }
   function layoutMap(layout) {
-    return `<div class="notice">Screen position: ${{ TOP: "Top", BOTTOM: "Bottom", LEFT: "Left", RIGHT: "Right" }[layout.screen_direction]}. Row 1 is nearest the screen. ${layout.seats.length} seats.</div><div style="overflow:auto;padding:12px 0;max-height:340px"><div style="display:grid;grid-auto-columns:32px;grid-auto-rows:28px;gap:5px;width:max-content;margin:auto">${layout.seats.map((s) => `<span class="badge" title="Row ${s.row_no}, seat ${s.seat_no} · segment ${s.aisle_segment}" style="grid-column:${s.map_x + 1};grid-row:${s.map_y + 1};padding:3px;text-align:center;font-size:10px">${s.row_no}-${s.seat_no}</span>`).join("")}</div></div>`;
+    return `<div class="notice">${tx("Screen position:", "银幕位置：")} ${{ TOP: tx("Top", "上方"), BOTTOM: tx("Bottom", "下方"), LEFT: tx("Left", "左侧"), RIGHT: tx("Right", "右侧") }[layout.screen_direction]}${tx(`. Row 1 is nearest the screen. ${layout.seats.length} seats.`, `。第 1 排最靠近银幕，共 ${layout.seats.length} 个座位。`)}</div><div style="overflow:auto;padding:12px 0;max-height:340px"><div style="display:grid;grid-auto-columns:32px;grid-auto-rows:28px;gap:5px;width:max-content;margin:auto">${layout.seats.map((s) => `<span class="badge" title="${tx(`Row ${s.row_no}, seat ${s.seat_no} · segment ${s.aisle_segment}`, `第 ${s.row_no} 排 ${s.seat_no} 座 · 第 ${s.aisle_segment} 座区`)}" style="grid-column:${s.map_x + 1};grid-row:${s.map_y + 1};padding:3px;text-align:center;font-size:10px">${s.row_no}-${s.seat_no}</span>`).join("")}</div></div>`;
   }
   async function layoutDialog(screenId) {
     const recommended = await request(`/staff/screens/${screenId}/layout-template`);
     const d = dialog(
-      `${screenName(screenId)} · Create layout version`,
-      `<form class="stack">${select("Seating plan", "layout_mode", [["recommended", "Recommended for this screen format"], ["custom", "Custom layout"]], "recommended")}<div class="form-grid" data-custom-layout hidden>${input("Number of rows", "rows", "12", "number", 'min="1" max="100" required')}${input("Seats per aisle segment", "segments", "3,3", "text", 'required placeholder="For example: 3,4,3"')}${select(
-        "Screen position",
+      tx(`${screenName(screenId)} · Create layout version`, `${screenName(screenId)} · 新建布局版本`),
+      `<form class="stack">${select(tx("Seating plan", "座位方案"), "layout_mode", [["recommended", tx("Recommended for this screen format", "此厅型的推荐布局")], ["custom", tx("Custom layout", "自定义布局")]], "recommended")}<div class="form-grid" data-custom-layout hidden>${input(tx("Number of rows", "排数"), "rows", "12", "number", 'min="1" max="100" required')}${input(tx("Seats per aisle segment", "各座区每排座位数"), "segments", "3,3", "text", `required placeholder="${tx("For example: 3,4,3", "例如：3,4,3")}"`)}${select(
+        tx("Screen position", "银幕位置"),
         "direction",
         [
-          ["TOP", "Top"],
-          ["BOTTOM", "Bottom"],
-          ["LEFT", "Left"],
-          ["RIGHT", "Right"],
+          ["TOP", tx("Top", "上方")],
+          ["BOTTOM", tx("Bottom", "下方")],
+          ["LEFT", tx("Left", "左侧")],
+          ["RIGHT", tx("Right", "右侧")],
         ],
-      )}</div><p class="muted">The recommended plan includes tapered front rows and aisles suited to this screen format. For a custom plan, separate seat blocks with commas, for example 3,4,3.</p><div data-layout-preview></div>${formEnd("Save new version")}</form>`,
+      )}</div><p class="muted">${tx("The recommended plan includes tapered front rows and aisles suited to this screen format. For a custom plan, separate seat blocks with commas, for example 3,4,3.", "推荐布局的前排座位较少，过道按厅型设置。自定义时请用逗号分隔各座区的座位数，例如 3,4,3。")}</p><div data-layout-preview></div>${formEnd(tx("Save new version", "保存新版本"))}</form>`,
     );
     const form = d.querySelector("form");
     const plan = fd => fd.get("layout_mode") === "recommended" ? recommended : makeLayout(fd);
@@ -531,88 +578,14 @@ export async function renderOperations(ctx) {
       );
       d.close();
       toast(
-        `Layout v${result.version_no} created with ${result.seat_count} seats.`,
+        tx(`Layout v${result.version_no} created with ${result.seat_count} seats.`, `已创建布局 v${result.version_no}，共 ${result.seat_count} 个座位。`),
       );
       await reload();
     });
   }
   async function viewLayout(id) {
     const layout = await request(`/staff/layouts/${id}`);
-    dialog(`Layout v${layout.version_no} · Seat map`, layoutMap(layout));
-  }
-
-  function counter() {
-    return (
-      alertBox(
-        "Customers approve counter service in their own account. Seat reservation and payment use separate approvals; staff cannot debit a wallet without payment consent.",
-      ) +
-      panel(
-        "1 · Receive reservation approval",
-        `<p class="muted">Ask the customer to choose counter service on the seat page and enter your staff ID: <strong>${esc(user.id)}</strong>. Paste their shared reservation approval below.</p><form data-counter-hold class="stack">${textarea("Reservation approval", "bundle", "", 'required placeholder="Paste the customer’s reservation approval"')}<details><summary>Enter token and request ID separately</summary>${input("Request ID (leave blank if included above)", "request_key", "", "text", 'autocomplete="off"')}</details>${formEnd("Verify & reserve seats")}</form><div data-hold-result></div>`,
-      ) +
-      panel(
-        "2 · Receive payment approval",
-        `<p class="muted">The customer selects fares and any coupon, reviews the amount, and shares payment approval. Verify the current quote before completing the sale.</p><form data-counter-payment class="stack">${textarea("Payment approval", "bundle", "", 'placeholder="Paste the customer’s payment approval"')}<details><summary>Enter quote and consent tokens separately</summary>${textarea("Quote token (leave blank if included above)", "quote_token", "")}${textarea("Consent token (leave blank if included above)", "consent_token", "")}</details>${formEnd("Review quote")}</form><div data-payment-result></div>`,
-      )
-    );
-  }
-  function parseBundle(value) {
-    try {
-      const data = JSON.parse(value);
-      if (data && typeof data === "object") return data;
-    } catch {}
-    return {};
-  }
-  function bindCounter() {
-    formAction(content.querySelector("[data-counter-hold]"), async (fd) => {
-      const bundle = parseBundle(fd.get("bundle"));
-      const token =
-        bundle.hold_consent_token || String(fd.get("bundle")).trim();
-      const key = bundle.request_key || String(fd.get("request_key")).trim();
-      if (!key)
-        throw new Error(
-          "The reservation request ID is required. Paste the complete approval shared by the customer.",
-        );
-      const h = await api.request("/holds", {
-        method: "POST",
-        body: { hold_consent_token: token },
-        requestKey: key,
-      });
-      content.querySelector("[data-hold-result]").innerHTML =
-        `<div class="notice"><strong>Seats reserved</strong><p>Reservation ID: ${esc(h.hold_id)}<br>Valid until: ${dateTime(h.expires_at)}</p><p>Ask the customer to open their active reservation in My tickets, review the quote and approve payment. This reservation does not automatically renew.</p></div>`;
-      toast("Seats reserved. Waiting for the customer’s quote approval.");
-    });
-    formAction(content.querySelector("[data-counter-payment]"), async (fd) => {
-      const bundle = parseBundle(fd.get("bundle"));
-      const quote_token =
-        bundle.quote_token || String(fd.get("quote_token")).trim();
-      const consent_token =
-        bundle.consent_token || String(fd.get("consent_token")).trim();
-      if (!quote_token || !consent_token)
-        throw new Error(
-          "Paste the complete payment approval, including the quote and consent tokens.",
-        );
-      const body = { quote_token, consent_token };
-      const q = await request("/counter/preview", "POST", body);
-      const d = dialog(
-        "Review counter sale",
-        `<form class="stack"><p><strong>${esc(q.film_title)}</strong><br>${esc(q.cinema_name)} · ${esc(q.screen_name)}<br>${dateTime(q.starts_at)}</p><div class="metric-grid"><div class="metric"><span>Net ticket value</span><strong>${money(q.net_ticket_minor)}</strong></div><div class="metric"><span>Change fee</span><strong>${money(q.current_fee_minor)}</strong></div><div class="metric"><span>${q.amount_due_minor < 0 ? "Refund to customer" : "Amount due"}</span><strong>${money(Math.abs(q.amount_due_minor))}</strong></div></div>${table(
-          ["Seat", "Fare type", "Face value"],
-          (q.tickets || []).map((t) => [
-            esc(`Row ${t.row_no}, seat ${t.seat_no}`),
-            esc(statuses[t.fare_type] || t.fare_type),
-            money(t.face_price_minor),
-          ]),
-        )}<p>Seat count: ${q.tickets?.length || 0} · Valid until ${dateTime(q.expires_at)}</p>${q.source_booking_id ? `<p class="muted">Total change fees on this booking chain: ${money(q.cumulative_fee_minor)}</p>` : ""}${alertBox("The customer approved this quote. Confirm to complete the booking or change using their demo balance.")}${formEnd(q.source_booking_id ? "Confirm counter change" : "Confirm counter sale")}</form>`,
-      );
-      formAction(d.querySelector("form"), async () => {
-        const receipt = await api.action("counter-purchase", "/bookings", body);
-        d.close();
-        content.querySelector("[data-payment-result]").innerHTML =
-          `<div class="notice"><strong>Transaction completed</strong><p>Booking: ${esc(receipt.booking_id || receipt.result_booking_id)}</p>${button("View booking", "booking-detail", receipt.booking_id || receipt.result_booking_id)}</div>`;
-        toast("Counter transaction completed.");
-      });
-    });
+    dialog(tx(`Layout v${layout.version_no} · Seat map`, `布局 v${layout.version_no} · 座位图`), layoutMap(layout));
   }
 
   async function bookings(page) {
@@ -620,9 +593,9 @@ export async function renderOperations(ctx) {
       "/staff/bookings?" +
         new URLSearchParams({ page: String(page), q: bookingQuery }),
     );
-    return panel(
-      "Branch bookings",
-      `<form data-booking-search class="toolbar">${input("Search bookings", "q", bookingQuery, "search", 'placeholder="Full booking ID or film title"')}<button class="button secondary" type="submit">Search</button><p class="error" data-error hidden></p></form><div data-booking-table>${bookingTable(result.items)}</div>` +
+    return () => panel(
+      tx("Branch bookings", "本店订单"),
+      `<form data-booking-search class="toolbar">${input(tx("Search bookings", "搜索订单"), "q", bookingQuery, "search", `placeholder="${tx("Full booking ID or film title", "完整订单编号或片名")}"`)}<button class="button secondary" type="submit">${tx("Search", "搜索")}</button><p class="error" data-error hidden></p></form><div data-booking-table>${bookingTable(result.items)}</div>` +
         pager(
           page,
           (result.total ?? Infinity) > page * (result.page_size || 20),
@@ -632,84 +605,84 @@ export async function renderOperations(ctx) {
   function bookingTable(items) {
     return table(
       [
-        "Booking",
-        "Film / screening",
-        "Channel",
-        "Status",
-        "Net ticket value / Cumulative fees",
-        "Actions",
+        tx("Booking", "订单"),
+        tx("Film / screening", "影片 / 场次"),
+        tx("Channel", "购票渠道"),
+        tx("Status", "状态"),
+        tx("Net ticket value / Cumulative fees", "实付票款 / 累计改签费"),
+        tx("Actions", "操作"),
       ],
       items.map((b) => [
         `<strong>…${esc(short(b.id))}</strong>`,
-        `${esc(b.film_title || filmName(b.film_id))}<div class="muted">${dateTime(b.starts_at || b.screening_starts_at || b.created_at)}</div>`,
+        `${esc(filmTitle(b.film_title) || filmName(b.film_id))}<div class="muted">${dateTime(b.starts_at || b.screening_starts_at || b.created_at)}</div>`,
         status(b.channel),
         status(b.status),
-        `${money(b.net_ticket_minor)}<div class="muted">Fees ${money(b.cumulative_fee_minor)}</div>`,
-        button("Details", "booking-detail", b.id),
+        `${money(b.net_ticket_minor)}<div class="muted">${tx(`Fees ${money(b.cumulative_fee_minor)}`, `改签费 ${money(b.cumulative_fee_minor)}`)}</div>`,
+        button(tx("Details", "详情"), "booking-detail", b.id),
       ]),
-      "No branch bookings yet",
+      tx("No branch bookings yet", "本店暂无订单"),
     );
   }
   async function bookingDialog(id) {
     const data = await request(`/ui/bookings/${id}`);
     const b = data.booking || data;
     dialog(
-      "Booking details",
-      `<div class="stack"><p><strong>${esc(b.film_title || filmName(b.film_id))}</strong><br><span class="muted">Booking ${esc(b.id)} · ${statuses[b.channel] || ""}</span></p><p>${esc(b.cinema_name || cinemaName(b.cinema_id))} · ${esc(b.screen_name || "")}<br>${dateTime(b.starts_at)}</p><div>${status(b.status)}</div><div class="metric-grid"><div class="metric"><span>Net ticket value</span><strong>${money(b.net_ticket_minor)}</strong></div><div class="metric"><span>Change fee</span><strong>${money(b.current_fee_minor)}</strong></div><div class="metric"><span>Cumulative fees</span><strong>${money(b.cumulative_fee_minor)}</strong></div></div>${table(
-        ["Seat", "Fare type", "Face value"],
+      tx("Booking details", "订单详情"),
+      `<div class="stack"><p><strong>${esc(filmTitle(b.film_title) || filmName(b.film_id))}</strong><br><span class="muted">${tx(`Booking ${esc(b.id)}`, `订单 ${esc(b.id)}`)} · ${esc(statusText(b.channel))}</span></p><p>${esc(venueName(b.cinema_name) || cinemaName(b.cinema_id))} · ${esc(auditoriumName(b.screen_name) || "")}<br>${dateTime(b.starts_at)}</p><div>${status(b.status)}</div><div class="metric-grid"><div class="metric"><span>${tx("Net ticket value", "实付票款")}</span><strong>${money(b.net_ticket_minor)}</strong></div><div class="metric"><span>${tx("Change fee", "本次改签费")}</span><strong>${money(b.current_fee_minor)}</strong></div><div class="metric"><span>${tx("Cumulative fees", "累计改签费")}</span><strong>${money(b.cumulative_fee_minor)}</strong></div></div>${table(
+        [tx("Seat", "座位"), tx("Fare type", "票种"), tx("Face value", "票面价格")],
         (data.tickets || b.tickets || []).map((t) => [
           t.row_no
-            ? `Row ${esc(t.row_no)}, seat ${esc(t.seat_no)}`
-            : `Seat …${esc(short(t.seat_id))}`,
-          statuses[t.fare_type] || esc(t.fare_type),
+            ? tx(`Row ${esc(t.row_no)}, seat ${esc(t.seat_no)}`, `${esc(t.row_no)} 排 ${esc(t.seat_no)} 座`)
+            : tx(`Seat …${esc(short(t.seat_id))}`, `座位 …${esc(short(t.seat_id))}`),
+          esc(statusText(t.fare_type)),
           money(t.face_price_minor),
         ]),
-      )}<h3>Refund history</h3>${table(
-        ["Refund amount", "Status", "Completed at"],
+      )}<h3>${tx("Refund history", "退款记录")}</h3>${table(
+        [tx("Refund amount", "退款金额"), tx("Status", "状态"), tx("Completed at", "完成时间")],
         (data.refunds || b.refunds || []).map((r) => [
           money(r.amount_minor),
           status(r.status),
-          r.settled_at ? dateTime(r.settled_at) : "Awaiting processing",
+          r.settled_at ? dateTime(r.settled_at) : tx("Awaiting processing", "待处理"),
         ]),
-        "No refunds",
-      )}<h3>Compensation coupons</h3>${table(
-        ["Status", "Discount", "Issued at"],
+        tx("No refunds", "暂无退款"),
+      )}<h3>${tx("Compensation coupons", "补偿券")}</h3>${table(
+        [tx("Status", "状态"), tx("Discount", "优惠"), tx("Issued at", "发放时间")],
         (
           data.compensation_coupons ||
           data.coupons ||
           b.coupons ||
           (b.compensation_coupon ? [b.compensation_coupon] : [])
         ).map((c) => [
-          c.status === "AVAILABLE" ? "Available" : "Used",
-          "50% off at the same cinema",
-          c.issued_at ? dateTime(c.issued_at) : "Issued",
+          c.status === "AVAILABLE" ? tx("Available", "可用") : tx("Used", "已使用"),
+          tx("50% off at the same cinema", "本店五折优惠"),
+          c.issued_at ? dateTime(c.issued_at) : tx("Issued", "已发放"),
         ]),
-        "No compensation coupons",
+        tx("No compensation coupons", "暂无补偿券"),
       )}</div>`,
     );
   }
   async function refunds(page) {
     const result = await request(`/staff/refunds?page=${page}`);
     result.items.forEach((r) => refundRecords.set(String(r.id), r));
-    return panel(
-      "Refunds",
+    return () => panel(
+      tx("Refunds", "退款"),
       alertBox(
-        "Refunds enter settlement totals only after completion. Retrying the same refund cannot credit it twice. Coupon issuance and refund completion are tracked separately.",
+        tx("Refunds enter settlement totals only after completion. Retrying the same refund cannot credit it twice. Coupon issuance and refund completion are tracked separately.", "已完成的退款才计入结算。重试同一笔退款不会重复入账。优惠券发放与退款进度分别记录。"),
       ) +
         table(
-          ["Booking / film", "Amount", "Reason", "Status", "Actions"],
+          [tx("Booking / film", "订单 / 影片"), tx("Amount", "金额"), tx("Reason", "原因"), tx("Status", "状态"), tx("Actions", "操作")],
           result.items.map((r) => [
-            `…${esc(short(r.booking_id))}<div class="muted">${esc(r.film_title || "")}</div>`,
+            `…${esc(short(r.booking_id))}<div class="muted">${esc(filmTitle(r.film_title) || "")}</div>`,
             money(r.amount_minor),
-            r.reason === "CUSTOMER_CANCELLATION" ? "Customer ticket refund" : r.reason === "CINEMA_CANCELLATION"
-              ? "Cinema cancellation"
-              : "Change difference",
+            r.reason === "CUSTOMER_CANCELLATION" ? tx("Customer ticket refund", "顾客退票") : r.reason === "CINEMA_CANCELLATION"
+              ? tx("Cinema cancellation", "影院取消")
+              : tx("Change difference", "改签差额"),
             status(r.status),
             r.status === "SUCCEEDED"
               ? dateTime(r.settled_at)
-              : button("Process refund", "retry-refund", r.id),
+              : button(tx("Process refund", "处理退款"), "retry-refund", r.id),
           ]),
-          "No refunds",
+          tx("No refunds", "暂无退款"),
         ) +
         pager(
           page,
@@ -721,69 +694,69 @@ export async function renderOperations(ctx) {
     const r = refundRecords.get(String(id));
     if (!r) return;
     const d = dialog(
-      "Confirm refund",
-      `<form class="stack"><p>Booking …${esc(short(r.booking_id))}${r.customer_name ? ` · ${esc(r.customer_name)}` : ""}</p><div class="metric"><span>Credit to customer balance</span><strong>${money(r.amount_minor)}</strong></div><p>This refund will be credited to the customer’s balance. A completed refund cannot be paid twice.</p>${formEnd("Confirm refund")}</form>`,
+      tx("Confirm refund", "确认退款"),
+      `<form class="stack"><p>${tx("Booking …", "订单 …")}${esc(short(r.booking_id))}${r.customer_name ? ` · ${esc(r.customer_name)}` : ""}</p><div class="metric"><span>${tx("Credit to customer balance", "退回顾客余额")}</span><strong>${money(r.amount_minor)}</strong></div><p>${tx("This refund will be credited to the customer’s balance. A completed refund cannot be paid twice.", "退款将退回到顾客余额。已完成的退款不会重复入账。")}</p>${formEnd(tx("Confirm refund", "确认退款"))}</form>`,
     );
     formAction(d.querySelector("form"), async () => {
       await request(`/staff/refunds/${id}/retry`, "POST", {});
       d.close();
-      toast("Refund completed.");
+      toast(tx("Refund completed.", "退款已完成。"));
       await reload();
     });
   }
 
   async function cinemaPanel() {
     await fetchAdmin();
-    return (
+    return () => (
       panel(
-        "Cinema locations",
+        tx("Cinema locations", "影院门店"),
         table(
           [
-            "Cinema / brand",
-            "District / address",
-            "Status",
-            "Manager",
-            "Actions",
+            tx("Cinema / brand", "影院 / 品牌"),
+            tx("District / address", "行政区 / 地址"),
+            tx("Status", "状态"),
+            tx("Manager", "经理"),
+            tx("Actions", "操作"),
           ],
           cinemas.map((c) => [
-            `<strong>${esc(c.name)}</strong><div class="muted">${esc(c.brand)}</div>`,
-            `${esc(districtName(c.district_id))}<div class="muted">${esc(c.address)}</div>`,
-            `<span class="badge">${c.is_active ? "Active" : "Manager required"}</span>`,
+            `<strong>${esc(venueName(c.name))}</strong><div class="muted">${esc(venueBrand(c.brand))}</div>`,
+            `${esc(districtName(c.district_id))}<div class="muted">${esc(venueAddress(c.name, c.address))}</div>`,
+            `<span class="badge">${c.is_active ? tx("Active", "已启用") : tx("Manager required", "待指定经理")}</span>`,
             esc(
               staff.find((s) => String(s.id) === String(c.manager_user_id))
-                ?.display_name || "Not assigned",
+                ?.display_name || tx("Not assigned", "未指派"),
             ),
-            `${button("Edit", "edit-cinema", c.id)} ${button("Assign manager", "manager", c.id, "ghost")}`,
+            `${button(tx("Edit", "编辑"), "edit-cinema", c.id)} ${button(tx("Assign manager", "指定经理"), "manager", c.id, "ghost")}`,
           ]),
-          "No cinemas yet",
+          tx("No cinemas yet", "暂无影院"),
         ),
-        button("＋ Add cinema", "create-cinema", "", ""),
+        button(tx("＋ Add cinema", "＋ 添加影院"), "create-cinema", "", ""),
       ) +
       panel(
-        "Beijing districts",
+        tx("Beijing districts", "北京行政区"),
         table(
-          ["District", "Code", "Actions"],
+          [tx("District", "行政区"), tx("Code", "行政区划代码"), tx("Actions", "操作")],
           districts.map((d) => [
-            esc(d.name),
+            esc(districtLabel(d)),
             esc(d.admin_code),
-            button("Edit", "edit-district", d.id),
+            button(tx("Edit", "编辑"), "edit-district", d.id),
           ]),
         ),
-        button("＋ Add district", "create-district", "", "secondary"),
+        button(tx("＋ Add district", "＋ 添加行政区"), "create-district", "", "secondary"),
       )
     );
   }
   function cinemaDialog(id) {
     const c = cinemas.find((c) => String(c.id) === String(id)) || {};
     const d = dialog(
-      id ? "Edit cinema" : "Add cinema",
-      `<form class="stack"><div class="form-grid">${input("Cinema name", "name", c.name, "text", 'required maxlength="120"')}${input("Brand", "brand", c.brand, "text", 'required maxlength="80"')}${select(
-        "District",
+      id ? tx("Edit cinema", "编辑影院") : tx("Add cinema", "添加影院"),
+      `<form class="stack"><div class="form-grid">${input(tx("Cinema name", "影院名称"), "name", c.name, "text", 'required maxlength="120"')}${input(tx("Brand", "品牌"), "brand", c.brand, "text", 'required maxlength="80"')}${select(
+        tx("District", "行政区"),
         "district_id",
-        districts.map((v) => [v.id, v.name]),
+        districts.map((v) => [v.id, districtLabel(v)]),
         c.district_id,
         "required",
-      )}</div>${input("Street address", "address", c.address, "text", 'required maxlength="255"')}${id ? `<details><summary>Map coordinates (optional)</summary><p class="muted">Enter both GCJ-02 coordinates, or leave both blank. The cinema address remains available.</p><div class="form-grid">${input("Latitude", "latitude", c.latitude, "number", 'step="any" min="-90" max="90"')}${input("Longitude", "longitude", c.longitude, "number", 'step="any" min="-180" max="180"')}</div></details>` : alertBox("The new cinema becomes active after a staff member is assigned as its manager.")}${formEnd("Save cinema")}</form>`,
+      )}</div>${input(tx("Street address", "详细地址"), "address", c.address, "text", 'required maxlength="255"')}${id ? `<details><summary>${tx("Map coordinates (optional)", "地图坐标（选填）")}</summary><p class="muted">${tx("Enter both GCJ-02 coordinates, or leave both blank. The cinema address remains available.", "请同时填写 GCJ-02 经纬度，或全部留空。未填写坐标时仍会显示影院地址。")}</p><div class="form-grid">${input(tx("Latitude", "纬度"), "latitude", c.latitude, "number", 'step="any" min="-90" max="90"')}${input(tx("Longitude", "经度"), "longitude", c.longitude, "number", 'step="any" min="-180" max="180"')}</div></details>` : alertBox(tx("The new cinema becomes active after a staff member is assigned as its manager.", "从本店员工中指定一位经理后，新影院即可启用。"))}${formEnd(tx("Save cinema", "保存影院"))}</form>`,
     );
     formAction(d.querySelector("form"), async (fd) => {
       const body = {
@@ -796,9 +769,7 @@ export async function renderOperations(ctx) {
         const lat = fd.get("latitude"),
           lon = fd.get("longitude");
         if (Boolean(lat) !== Boolean(lon))
-          throw new Error(
-            "Enter both latitude and longitude, or leave both blank.",
-          );
+          throw new LocalizedError("Enter both latitude and longitude, or leave both blank.", "经纬度需同时填写或同时留空。");
         body.latitude = lat ? Number(lat) : null;
         body.longitude = lon ? Number(lon) : null;
         if (lat) body.coordinate_system = "GCJ02";
@@ -809,15 +780,15 @@ export async function renderOperations(ctx) {
         body,
       );
       d.close();
-      toast("Cinema details saved.");
+      toast(tx("Cinema details saved.", "影院信息已保存。"));
       await reload();
     });
   }
   function districtDialog(id) {
     const item = districts.find((d) => String(d.id) === String(id)) || {};
     const d = dialog(
-      id ? "Edit district" : "Add district",
-      `<form class="stack">${input("District name", "name", item.name, "text", 'required maxlength="80"')}${input("Six-digit administrative code", "admin_code", item.admin_code, "text", 'required pattern="1101[0-9]{2}" maxlength="6" placeholder="For example: 110105"')}${formEnd("Save district")}</form>`,
+      id ? tx("Edit district", "编辑行政区") : tx("Add district", "添加行政区"),
+      `<form class="stack">${input(tx("District name", "行政区名称"), "name", item.name, "text", 'required maxlength="80"')}${input(tx("Six-digit administrative code", "六位行政区划代码"), "admin_code", item.admin_code, "text", `required pattern="1101[0-9]{2}" maxlength="6" placeholder="${tx("For example: 110105", "例如：110105")}"`)}${formEnd(tx("Save district", "保存行政区"))}</form>`,
     );
     formAction(d.querySelector("form"), async (fd) => {
       await request(
@@ -827,7 +798,7 @@ export async function renderOperations(ctx) {
       );
       districts = rowsOf(await request("/districts"));
       d.close();
-      toast("District saved.");
+      toast(tx("District saved.", "行政区已保存。"));
       await reload();
     });
   }
@@ -837,16 +808,16 @@ export async function renderOperations(ctx) {
     );
     if (!employees.length) {
       toast(
-        "Create a staff account for this cinema before assigning its manager.",
+        tx("Create a staff account for this cinema before assigning its manager.", "请先为这家影院创建员工账号，再指定经理。"),
         "error",
       );
       return;
     }
     const c = cinemas.find((c) => String(c.id) === String(id));
     const d = dialog(
-      `Assign manager · ${c.name}`,
+      tx(`Assign manager · ${venueName(c.name)}`, `指定经理 · ${venueName(c.name)}`),
       `<form class="stack">${select(
-        "Cinema employee",
+        tx("Cinema employee", "影院员工"),
         "staff_id",
         employees.map((e) => [
           e.id,
@@ -854,42 +825,42 @@ export async function renderOperations(ctx) {
         ]),
         c.manager_user_id,
         "required",
-      )}${alertBox("An active cinema has one manager. Saving replaces the current manager and activates the cinema. The manager can view this branch’s turnover.")}${formEnd("Confirm manager")}</form>`,
+      )}${alertBox(tx("An active cinema has one manager. Saving replaces the current manager and activates the cinema. The manager can view this branch’s turnover.", "每家启用的影院设一位经理。保存后，新经理将接任并可查看本店营业额，影院也将启用。"))}${formEnd(tx("Confirm manager", "确认指派"))}</form>`,
     );
     formAction(d.querySelector("form"), async (fd) => {
       await request(`/admin/cinemas/${id}/manager`, "PUT", {
         staff_id: fd.get("staff_id"),
       });
       d.close();
-      toast("Manager assigned and cinema activated.");
+      toast(tx("Manager assigned and cinema activated.", "已指定经理，影院已启用。"));
       await reload();
     });
   }
 
   async function filmPanel(page) {
     const result = await request(`/admin/films?page=${page}&page_size=20`);
-    return (
+    return () => (
       panel(
-        "Shared film catalogue",
+        tx("Shared film catalogue", "平台片库"),
         table(
-          ["Film", "Runtime", "Status", "Actions"],
+          [tx("Film", "影片"), tx("Runtime", "片长"), tx("Status", "状态"), tx("Actions", "操作")],
           result.items.map((f) => [
-            `<strong>${esc(f.title)}</strong>`,
-            `${esc(f.duration_minutes)} min`,
-            `<span class="badge">${f.archived ? "Archived" : "Available"}</span>`,
-            button("Edit", "edit-film", f.id),
+            `<strong>${esc(filmTitle(f))}</strong>`,
+            tx(`${esc(f.duration_minutes)} min`, `${esc(f.duration_minutes)} 分钟`),
+            `<span class="badge">${f.archived ? tx("Archived", "已归档") : tx("Available", "已上架")}</span>`,
+            button(tx("Edit", "编辑"), "edit-film", f.id),
           ]),
-          "No films yet",
+          tx("No films yet", "暂无影片"),
         ) + pager(page, result.total > page * result.page_size),
-        button("＋ Add film", "create-film", "", ""),
+        button(tx("＋ Add film", "＋ 添加影片"), "create-film", "", ""),
       ) +
       panel(
-        "Genres",
+        tx("Genres", "影片类型"),
         table(
-          ["Type", "Actions"],
-          genres.map((g) => [esc(g.name), button("Edit", "edit-genre", g.id)]),
+          [tx("Type", "类型"), tx("Actions", "操作")],
+          genres.map((g) => [esc(genreName(g)), button(tx("Edit", "编辑"), "edit-genre", g.id)]),
         ),
-        button("＋ Add genre", "create-genre"),
+        button(tx("＋ Add genre", "＋ 添加类型"), "create-genre"),
       )
     );
   }
@@ -897,8 +868,8 @@ export async function renderOperations(ctx) {
     const f = id ? await request(`/films/${id}`) : {};
     const selected = (f.genres || []).map((g) => String(g.id));
     const d = dialog(
-      id ? "Edit film" : "Add film",
-      `<form class="stack"><div class="form-grid">${input("Film title", "title", f.title, "text", 'required maxlength="200"')}${input("Runtime (minutes)", "duration_minutes", f.duration_minutes || 120, "number", 'required min="1" max="1000"')}</div>${textarea("Synopsis", "synopsis", f.synopsis || "", 'maxlength="6000"')}<fieldset><legend>Genres</legend><div class="actions">${genres.map((g) => `<label><input type="checkbox" name="genre_ids" value="${esc(g.id)}" ${selected.includes(String(g.id)) ? "checked" : ""}> ${esc(g.name)}</label>`).join("")}</div></fieldset><label><input type="checkbox" name="archived" ${f.archived ? "checked" : ""}> Archive (stop ticket sales and new screenings)</label>${alertBox("Changing the runtime affects future screenings only. Published screenings and issued tickets retain their original details.")}${formEnd("Save film")}</form>`,
+      id ? tx("Edit film", "编辑影片") : tx("Add film", "添加影片"),
+      `<form class="stack"><div class="form-grid">${input(tx("Film title", "片名"), "title", f.title, "text", 'required maxlength="200"')}${input(tx("Runtime (minutes)", "片长（分钟）"), "duration_minutes", f.duration_minutes || 120, "number", 'required min="1" max="1000"')}</div>${textarea(tx("Synopsis", "剧情简介"), "synopsis", f.synopsis || "", 'maxlength="6000"')}<fieldset><legend>${tx("Genres", "影片类型")}</legend><div class="actions">${genres.map((g) => `<label><input type="checkbox" name="genre_ids" value="${esc(g.id)}" ${selected.includes(String(g.id)) ? "checked" : ""}> ${esc(genreName(g))}</label>`).join("")}</div></fieldset><label><input type="checkbox" name="archived" ${f.archived ? "checked" : ""}> ${tx("Archive (stop ticket sales and new screenings)", "归档（停止售票和新增排片）")}</label>${alertBox(tx("Changing the runtime affects future screenings only. Published screenings and issued tickets retain their original details.", "片长修改仅适用于新排场次。已发布的场次和已出票的订单保留原信息。"))}${formEnd(tx("Save film", "保存影片"))}</form>`,
     );
     formAction(d.querySelector("form"), async (fd) => {
       await request(
@@ -914,15 +885,15 @@ export async function renderOperations(ctx) {
       );
       films = rowsOf(await request("/films?page_size=100"));
       d.close();
-      toast("Film details saved.");
+      toast(tx("Film details saved.", "影片信息已保存。"));
       await reload();
     });
   }
   function genreDialog(id) {
     const g = genres.find((g) => String(g.id) === String(id)) || {};
     const d = dialog(
-      id ? "Edit genre" : "Add genre",
-      `<form class="stack">${input("Genre name", "name", g.name, "text", 'required maxlength="60"')}${formEnd("Save genre")}</form>`,
+      id ? tx("Edit genre", "编辑影片类型") : tx("Add genre", "添加影片类型"),
+      `<form class="stack">${input(tx("Genre name", "类型名称"), "name", g.name, "text", 'required maxlength="60"')}${formEnd(tx("Save genre", "保存类型"))}</form>`,
     );
     formAction(d.querySelector("form"), async (fd) => {
       await request(
@@ -932,54 +903,66 @@ export async function renderOperations(ctx) {
       );
       genres = rowsOf(await request("/genres"));
       d.close();
-      toast("Genre saved.");
+      toast(tx("Genre saved.", "影片类型已保存。"));
       await reload();
     });
   }
 
   async function staffPanel() {
     await fetchAdmin();
-    return (
-      panel(
-        "Staff & managers",
-        table(
-          ["Name / email", "Assigned cinema", "Role", "Actions"],
-          staff.map((s) => [
-            `<strong>${esc(s.display_name)}</strong><div class="muted">${esc(s.email_normalized)}</div>`,
-            esc(cinemaName(s.staff_cinema_id)),
-            cinemas.some((c) => String(c.manager_user_id) === String(s.id))
-              ? "Manager"
-              : "Staff",
-            button("Transfer", "transfer", s.id),
+    const rosters = new Map(cinemas.map(c => [String(c.id), []]));
+    for (const person of staff) {
+      rosters.get(String(person.staff_cinema_id))?.push(person);
+    }
+    if (!rosters.has(staffCinemaFilter)) staffCinemaFilter = "";
+    return () => {
+      const collator = new Intl.Collator(getLanguage(), { numeric: true });
+      const branches = [...cinemas].sort((a, b) => collator.compare(venueName(a.name), venueName(b.name)));
+      const filter = select(tx("Filter by cinema", "按影院筛选"), "staff_cinema_filter",
+        [["", tx("All cinemas", "全部影院")], ...branches.map(c => [c.id, venueName(c.name)])], staffCinemaFilter);
+      const sections = branches.map(cinema => {
+        const id = String(cinema.id);
+        const members = rosters.get(id);
+        const isManager = person => String(person.id) === String(cinema.manager_user_id);
+        members.sort((a, b) => Number(isManager(b)) - Number(isManager(a))
+          || collator.compare(a.display_name, b.display_name) || collator.compare(a.email_normalized, b.email_normalized));
+        const roster = members.length ? table(
+          [tx("Name / email", "姓名 / 邮箱"), tx("Role", "职务"), tx("Actions", "操作")],
+          members.map(person => [
+            `<strong>${esc(person.display_name)}</strong><div class="muted">${esc(person.email_normalized)}</div>`,
+            isManager(person) ? `<span class="badge">${tx("Manager", "经理")}</span>` : tx("Staff", "员工"),
+            button(tx("Transfer", "调店"), "transfer", person.id),
           ]),
-          "No staff yet",
-        ),
-        button("＋ Create staff", "create-staff", "", ""),
-      ) +
-      alertBox(
-        "Transferring a manager requires a replacement from the original cinema. The staff transfer and management handover complete together.",
-      )
-    );
+        ) : `<p class="muted">${tx("No staff assigned to this cinema.", "这家影院暂无员工。")}</p>`;
+        return `<section class="staff-roster" data-staff-cinema="${esc(id)}" aria-labelledby="staff-cinema-${esc(id)}"
+          ${staffCinemaFilter && staffCinemaFilter !== id ? "hidden" : ""}>
+          <header><h3 id="staff-cinema-${esc(id)}">${esc(venueName(cinema.name))}</h3>
+          <span class="muted">${tx(`${members.length} staff`, `共 ${members.length} 人`)}</span></header>${roster}</section>`;
+      });
+      return panel(tx("Staff & managers", "员工与经理"),
+        branches.length ? `<div class="toolbar">${filter}</div>${sections.join("")}` : tx("No cinemas yet", "暂无影院"),
+        button(tx("＋ Create staff", "＋ 创建员工账号"), "create-staff", "", ""));
+    };
   }
   function staffDialog() {
     if (!cinemas.length) {
-      toast("Create a cinema first.", "error");
+      toast(tx("Create a cinema first.", "请先添加影院。"), "error");
       return;
     }
     const d = dialog(
-      "Create staff account",
-      `<form class="stack">${input("Name", "display_name", "", "text", 'required maxlength="80"')}${input("Email", "email", "", "email", 'required autocomplete="off"')}${input("Initial password", "password", "", "password", 'required minlength="10" maxlength="128" autocomplete="new-password"')}${select(
-        "Assigned cinema",
+      tx("Create staff account", "创建员工账号"),
+      `<form class="stack">${input(tx("Name", "姓名"), "display_name", "", "text", 'required maxlength="80"')}${input(tx("Email", "邮箱"), "email", "", "email", 'required autocomplete="off"')}${input(tx("Initial password", "初始密码"), "password", "", "password", 'required minlength="10" maxlength="128" autocomplete="new-password"')}${select(
+        tx("Assigned cinema", "所属影院"),
         "cinema_id",
-        cinemas.map((c) => [c.id, c.name]),
-        "",
+        cinemas.map((c) => [c.id, venueName(c.name)]),
+        staffCinemaFilter,
         "required",
-      )}${formEnd("Create staff")}</form>`,
+      )}${formEnd(tx("Create staff", "创建员工账号"))}</form>`,
     );
     formAction(d.querySelector("form"), async (fd) => {
       await request("/admin/staff", "POST", Object.fromEntries(fd));
       d.close();
-      toast("Staff account created.");
+      toast(tx("Staff account created.", "员工账号已创建。"));
       await reload();
     });
   }
@@ -991,7 +974,7 @@ export async function renderOperations(ctx) {
       (c) => String(c.id) !== String(s.staff_cinema_id),
     );
     if (!targets.length) {
-      toast("Create another cinema before transferring staff.", "error");
+      toast(tx("Create another cinema before transferring staff.", "请先添加另一家影院，再调动员工。"), "error");
       return;
     }
     const replacements = staff.filter(
@@ -1000,19 +983,19 @@ export async function renderOperations(ctx) {
         String(e.id) !== String(id),
     );
     const d = dialog(
-      `Transfer staff · ${s.display_name}`,
-      `<form class="stack"><p>Current cinema: ${esc(old?.name || "")}</p>${select(
-        "Destination cinema",
+      tx(`Transfer staff · ${s.display_name}`, `员工调店 · ${s.display_name}`),
+      `<form class="stack"><p>${tx("Current cinema:", "当前影院：")} ${esc(venueName(old?.name) || "")}</p>${select(
+        tx("Destination cinema", "调入影院"),
         "cinema_id",
-        targets.map((c) => [c.id, c.name]),
+        targets.map((c) => [c.id, venueName(c.name)]),
         "",
         "required",
-      )}${isManager ? select("Replacement manager at original cinema", "replacement_manager_id", [["", "Choose a replacement"], ...replacements.map((e) => [e.id, e.display_name])], "", "required") : ""}${isManager ? alertBox("This employee is the current manager. Choose another employee from the original cinema to take over.") : ""}${formEnd("Confirm transfer")}</form>`,
+      )}${isManager ? select(tx("Replacement manager at original cinema", "原门店接任经理"), "replacement_manager_id", [["", tx("Choose a replacement", "选择接任者")], ...replacements.map((e) => [e.id, e.display_name])], "", "required") : ""}${isManager ? alertBox(tx("This employee is the current manager. Choose another employee from the original cinema to take over.", "该员工是现任经理，请从原门店选择另一位员工接任。")) : ""}${formEnd(tx("Confirm transfer", "确认调店"))}</form>`,
     );
     formAction(d.querySelector("form"), async (fd) => {
       await request(`/admin/staff/${id}/cinema`, "PUT", Object.fromEntries(fd));
       d.close();
-      toast("Staff assignment updated.");
+      toast(tx("Staff assignment updated.", "员工所属影院已更新。"));
       await reload();
     });
   }
@@ -1025,21 +1008,21 @@ export async function renderOperations(ctx) {
       "T00:00";
     return (
       panel(
-        "Turnover & settlement",
+        tx("Turnover & settlement", "营业额与结算"),
         `<form data-turnover class="stack"><div class="form-grid">${
           admin
             ? select(
-                "Cinema",
+                tx("Cinema", "影院"),
                 "cinema_id",
-                cinemas.map((c) => [c.id, c.name]),
+                cinemas.map((c) => [c.id, venueName(c.name)]),
                 "",
                 "required",
               )
             : `<input type="hidden" name="cinema_id" value="${esc(user.staff_cinema_id)}">`
-        }${input("From (inclusive, Beijing time)", "from", start, "datetime-local", "required")}${input("To (exclusive, Beijing time)", "to", tomorrow, "datetime-local", "required")}</div>${formEnd("View turnover")}</form><div data-turnover-result class="stack"></div>`,
+        }${input(tx("From (inclusive, Beijing time)", "起始时间（含，北京时间）"), "from", start, "datetime-local", "required")}${input(tx("To (exclusive, Beijing time)", "截止时间（不含，北京时间）"), "to", tomorrow, "datetime-local", "required")}</div>${formEnd(tx("View turnover", "查询营业额"))}</form><div data-turnover-result class="stack"></div>`,
       ) +
       alertBox(
-        "Totals use successful settlement times. Ticket and fee amounts are separate; changes contribute only the ticket difference and new fee. Registration credits are excluded. Pending refunds show the current amount, not a historical snapshot.",
+        tx("Totals use successful settlement times. Ticket and fee amounts are separate; changes contribute only the ticket difference and new fee. Registration credits are excluded. Pending refunds show the current amount, not a historical snapshot.", "按结算成功时间统计，票款和手续费分别计算。改签仅计入票款差额及新增手续费，注册赠金不计入。待退款显示当前金额。"),
       )
     );
   }
@@ -1048,21 +1031,22 @@ export async function renderOperations(ctx) {
       const from = zoned(fd.get("from")),
         to = zoned(fd.get("to"));
       if (from >= to)
-        throw new Error("The end time must be after the start time.");
+        throw new LocalizedError("The end time must be after the start time.", "截止时间必须晚于起始时间。");
       const params = new URLSearchParams({ from, to });
       const t = await request(
         `/cinemas/${fd.get("cinema_id")}/turnover?${params}`,
       );
-      const metrics = [
-        ["Net settlement", t.net_settled_minor],
-        ["Net ticket amount", t.ticket_minor],
-        ["Net fees", t.fee_minor],
-        ["Successful payments", t.payments_minor],
-        ["Successful refunds", t.refunds_minor],
-        ["Pending refunds now", t.pending_refunds_now_minor],
-      ];
-      content.querySelector("[data-turnover-result]").innerHTML =
-        `<p class="muted">${esc(cinemaName(t.cinema_id))} · ${dateTime(t.from)} — ${dateTime(t.to)} (end exclusive)</p><div class="metric-grid">${metrics.map(([label, value]) => `<div class="metric"><span>${label}</span><strong>${money(value)}</strong></div>`).join("")}</div><p class="muted">As of: ${dateTime(t.as_of)} · Net settlement = payments − refunds</p>`;
+      showResult("[data-turnover-result]", () => {
+        const metrics = [
+          [tx("Net settlement", "结算净额"), t.net_settled_minor],
+          [tx("Net ticket amount", "票款净额"), t.ticket_minor],
+          [tx("Net fees", "手续费净额"), t.fee_minor],
+          [tx("Successful payments", "已收款金额"), t.payments_minor],
+          [tx("Successful refunds", "已退款金额"), t.refunds_minor],
+          [tx("Pending refunds now", "当前待退款金额"), t.pending_refunds_now_minor],
+        ];
+        return `<p class="muted">${esc(cinemaName(t.cinema_id))} · ${dateTime(t.from)} — ${dateTime(t.to)} ${tx("(end exclusive)", "（不含截止时间）")}</p><div class="metric-grid">${metrics.map(([label, value]) => `<div class="metric"><span>${label}</span><strong>${money(value)}</strong></div>`).join("")}</div><p class="muted">${tx("As of:", "统计时间：")} ${dateTime(t.as_of)} · ${tx("Net settlement = payments − refunds", "结算净额 = 收款 − 退款")}</p>`;
+      });
     });
   }
   function bindCurrent(tab, page) {
@@ -1098,8 +1082,15 @@ export async function renderOperations(ctx) {
         target.disabled = false;
       }
     });
-    if (tab === "counter") bindCounter();
     if (tab === "turnover") bindTurnover();
+    if (tab === "staff") {
+      content.querySelector('[name="staff_cinema_filter"]')?.addEventListener("change", event => {
+        staffCinemaFilter = event.target.value;
+        for (const section of content.querySelectorAll("[data-staff-cinema]")) {
+          section.hidden = Boolean(staffCinemaFilter && section.dataset.staffCinema !== staffCinemaFilter);
+        }
+      });
+    }
     if (tab === "bookings")
       formAction(content.querySelector("[data-booking-search]"), async (fd) => {
         bookingQuery = String(fd.get("q")).trim();
@@ -1109,8 +1100,9 @@ export async function renderOperations(ctx) {
   const requestedTab = new URLSearchParams(
     location.hash.split("?")[1] || "",
   ).get("tab");
-  if (tabs.some(([id]) => id === requestedTab)) currentTab = requestedTab;
+  if (tabs().some(([id]) => id === requestedTab)) currentTab = requestedTab;
   await showTab(currentTab);
+  root.querySelector("[data-workspace-heading]").innerHTML = heading();
   return () => {
     alive = false;
     revision++;

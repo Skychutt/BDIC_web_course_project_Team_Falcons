@@ -2,6 +2,7 @@
 import logging
 import os
 import secrets
+from pathlib import Path
 
 from flask import Flask
 
@@ -10,6 +11,7 @@ from .conversation import SessionStore
 from .agent import AgentService
 from .domain import now_beijing
 from .providers import DeepSeekProvider, ModelRunner, StubProvider
+from .limits import MessageLimits
 from .repository import MockCinemaRepository
 
 
@@ -42,13 +44,21 @@ def init_app(app, repository=None, provider=None, clock=None):
     if not 0 < timeout <= 60:
         raise ValueError("AI_TIMEOUT_SECONDS must be in (0, 60]")
     catalog = catalog or CatalogService(repository, clock)
+    instance = Path(app.instance_path)
+    for key, default in (("AI_MESSAGES_PER_MINUTE", 6), ("AI_MESSAGES_PER_DAY", 50), ("AI_IP_ALERT_PER_MINUTE", 60)):
+        app.config.setdefault(key, os.getenv(key, default))
+    limits = MessageLimits(app.config.get("AI_LIMITS_PATH", instance / "assistant-limits.sqlite3"),
+                           app.config["AI_MESSAGES_PER_MINUTE"], app.config["AI_MESSAGES_PER_DAY"],
+                           app.config["AI_IP_ALERT_PER_MINUTE"])
     runner = ModelRunner()
     app.extensions["cinema_ai"] = {
         "catalog": catalog, "provider": provider, "runner": runner,
+        "limits": limits, "pause_file": instance / "assistant.paused",
         "sessions": SessionStore(clock), "clock": clock,
         "chat": AgentService(catalog, provider, runner, clock, timeout),
     }
-    from .routes import blueprint
+    from .routes import assistant_access, blueprint
+    app.before_request(assistant_access)
     app.register_blueprint(blueprint)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("openai").setLevel(logging.WARNING)

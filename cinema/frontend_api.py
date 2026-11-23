@@ -6,6 +6,7 @@ from datetime import timedelta
 from flask import Blueprint, g, request
 
 from . import auth, booking, catalog
+from .catalog_locale import matching_film_titles
 from .ratings import attach_ratings
 from .api import body, logged, output
 from .core import (
@@ -44,11 +45,15 @@ def bootstrap():
         actor = g.actor
         admin = bool(actor and actor["role"] == "PLATFORM_ADMIN")
         cinema_where = "" if admin else " WHERE c.is_active=1"
+        staff_branch = actor["staff_cinema_id"] if actor and actor["role"] == "STAFF" else None
+        if staff_branch is not None:
+            cinema_where = " WHERE c.id=:branch"
         cinemas = rows(
             c,
             """SELECT c.id,c.district_id,c.name,c.brand,c.address,c.latitude,c.longitude,
             c.coordinate_system,c.is_active,d.name AS district_name FROM cinemas c
             JOIN districts d ON d.id=c.district_id""" + cinema_where + " ORDER BY c.name,c.id",
+            branch=staff_branch,
         )
         user = None
         if actor:
@@ -61,7 +66,7 @@ def bootstrap():
                 user["owncinema_label"] = own["name"]
         at = now()
         end = (at + timedelta(days=14)).replace(hour=0, minute=0, second=0, microsecond=0)
-        dates = rows(
+        dates = [] if staff_branch is not None else rows(
             c,
             """SELECT DISTINCT DATE(s.starts_at) AS date FROM screenings s
             JOIN cinemas c ON c.id=s.cinema_id JOIN films f ON f.id=s.film_id
@@ -70,7 +75,7 @@ def bootstrap():
             at=at, end=end,
         )
         return output({
-            "districts": rows(c, "SELECT id,admin_code,name FROM districts ORDER BY admin_code"),
+            "districts": [] if staff_branch is not None else rows(c, "SELECT id,admin_code,name FROM districts ORDER BY admin_code"),
             "genres": rows(c, "SELECT id,name FROM genres ORDER BY name"),
             "cinemas": cinemas,
             "films": film_metadata(c, rows(c, "SELECT * FROM films WHERE archived=0 ORDER BY title,id")),
@@ -144,7 +149,12 @@ def staff_bookings():
             require(len(q) >= 2, "VALIDATION", "Film title search needs at least two characters")
             # Treat %, _ and ! as literal input, never as caller-controlled wildcards.
             params["title"] = "%" + q.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%"
-            where += " AND f.title LIKE :title ESCAPE '!'"
+            clauses = ["f.title LIKE :title ESCAPE '!'"]
+            for index, title in enumerate(matching_film_titles(q)):
+                key = f"translated_title_{index}"
+                params[key] = title
+                clauses.append(f"f.title=:{key}")
+            where += " AND (" + " OR ".join(clauses) + ")"
     with db().connect() as c:
         return output(booking_page(c, where, params, page, size))
 

@@ -1,6 +1,8 @@
 """Explicit opt-in live-model checks. Uses synthetic messages and public reads only."""
 import argparse
+import getpass
 import http.cookiejar
+import urllib.error
 import json
 import time
 import urllib.request
@@ -8,11 +10,27 @@ import urllib.request
 parser = argparse.ArgumentParser()
 parser.add_argument("--allow-live", action="store_true", required=True)
 parser.add_argument("--base-url", default="http://127.0.0.1:5001")
+parser.add_argument("--email", required=True, help="A test customer on the target cinema site")
 args = parser.parse_args()
 
 
+opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+try:
+    opener.open(args.base_url + "/api/ai/session")
+except urllib.error.HTTPError as error:
+    assert error.code == 401
+else:
+    raise AssertionError("Guest assistant access must be denied")
+
+csrf = json.load(opener.open(args.base_url + "/api/auth/csrf"))["data"]["csrf_token"]
+login = urllib.request.Request(args.base_url + "/api/auth/login",
+    data=json.dumps({"email": args.email, "password": getpass.getpass("Cinema account password: ")}).encode(),
+    headers={"Content-Type": "application/json", "X-CSRF-Token": csrf})
+token = json.load(opener.open(login))["data"]["csrf_token"]
+
+
 def session():
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    opener.open(urllib.request.Request(args.base_url + "/api/ai/session", method="DELETE", headers={"X-CSRF-Token": token})).close()
     data = json.load(opener.open(args.base_url + "/api/ai/session"))["data"]
     assert data["provider"] == "deepseek", "Live checks require the DeepSeek provider"
     return opener, data["csrf_token"]
@@ -23,22 +41,22 @@ def ask(pair, label, message):
     request = urllib.request.Request(args.base_url + "/api/assistant/chat", data=json.dumps({"message": message, "locale": "zh"}).encode(),
         headers={"Content-Type": "application/json", "X-CSRF-Token": token})
     at = time.monotonic()
-    value = json.load(opener.open(request, timeout=70))["data"]
+    try:
+        value = json.load(opener.open(request, timeout=70))["data"]
+    except urllib.error.HTTPError as error:
+        delay = int(error.headers.get("Retry-After", "0"))
+        if error.code != 429 or not 0 < delay <= 60:
+            raise
+        time.sleep(delay)
+        value = json.load(opener.open(request, timeout=70))["data"]
     print(json.dumps({"case": label, "status": value["status"], "tools": value["tool_calls"], "films": len(value["films"]),
         "cards": len(value["cards"]), "seconds": round(time.monotonic()-at, 2), "fallback": value.get("explanation_fallback", False),
         "error": value.get("error_code") or value.get("model_error_code")}, ensure_ascii=False), flush=True)
     return value
 
 
-value = ask(session(), "small_talk", "我想睡觉，今天有点累。")
-assert value["status"] == "ok" and not value["tool_calls"]
-pair = session()
-value = ask(pair, "general_knowledge", "为什么天空是蓝色的？用两句话解释。")
-assert value["status"] == "ok" and not value["tool_calls"] and not value["cards"]
-value = ask(pair, "general_followup", "Now explain that in English in one sentence.")
-assert value["status"] == "ok" and value["locale"] == "en" and not value["tool_calls"]
-value = ask(session(), "writing", "帮我给大学电影社写一条40字以内的招新文案")
-assert value["status"] == "ok" and not value["tool_calls"]
+value = ask(session(), "scope", "帮我写一篇电影主题论文")
+assert value["intent"] == "cinema_scope" and not value["tool_calls"]
 value = ask(session(), "film_recommendation", "推荐一部电影")
 assert value["status"] == "ok" and value["films"] and value["filters"]["party_size"] is None
 pair = session()
@@ -72,6 +90,4 @@ assert all(second["filters"][k] == first["filters"][k] for k in ("date", "distri
 value = ask(pair, "hard_budget", "每人预算不超过50元，其他不变。")
 assert value["status"] in {"ok", "needs_clarification"} and value["filters"]["budget_minor"] == 5000 and value["filters"]["budget_scope"] == "per_ticket"
 assert all(c["fares"]["regular"] <= 5000 for c in value["cards"])
-value = ask(session(), "anonymous_orders", "查询我的订单")
-assert value["status"] == "login_required"
-print("PASS: live small talk, film discovery, soft/hard ratings and recovery, screening follow-up, hard budget and login boundary.")
+print("PASS: guest access, scope, film discovery, rating recovery and screening follow-ups.")

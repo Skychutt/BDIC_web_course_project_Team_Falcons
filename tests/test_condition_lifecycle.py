@@ -55,11 +55,11 @@ def test_recovery_click_uses_fresh_data_and_does_not_call_model(app, chat, clien
     assert result["tool_calls"] == ["recover_search"]
 
 
-def test_recovery_options_are_session_bound_single_use_and_csrf_protected(app, chat, client):
+def test_recovery_options_are_session_bound_single_use_and_csrf_protected(app, chat, client, signed_client):
     unrated(app)
     first = chat("推荐高分电影")
     assert client.post("/api/ai/recovery", json={"token": first["recovery"]["token"], "option_id": "include_unrated_movies"}).status_code == 403
-    stranger = app.test_client()
+    stranger = signed_client(2)
     assert choose(stranger, first).json["error_code"] == "stale_recovery"
     assert choose(client, first, "invented").status_code == 400
     assert choose(client, first).json["films"]

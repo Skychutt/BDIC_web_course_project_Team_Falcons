@@ -109,6 +109,8 @@ def test_movie_ratings_types_and_budget_share_ordinary_search(env):
         fid = env["ids"]["film"] if "film" in env["ids"] else one(c, "SELECT id FROM films LIMIT 1")["id"]
         ins(c, "ratings", customer_id=actor(env)["id"], film_id=fid, stars=5, created_at=now(), updated_at=now())
     client = env["app"].test_client()
+    with client.session_transaction() as cookie:
+        cookie["user_id"] = str(env["users"]["customer@cinema.test"]["id"])
     token = client.get("/api/ai/session").json["data"]["csrf_token"]
     response = client.post("/api/assistant/chat", json={"message": "最近评分高的冒险电影", "locale": "zh"}, headers={"X-CSRF-Token": token}).json["data"]
     assert response["status"] == "ok" and len(response["films"]) == 1 and response["films"][0]["rating_count"] == 1

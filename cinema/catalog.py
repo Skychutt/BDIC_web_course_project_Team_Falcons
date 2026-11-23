@@ -308,6 +308,8 @@ def seatmap(c, sid, actor=None):
     # All allocation writers lock the screening. Wait to read their outcome at the boundary.
     s = one(c, "SELECT * FROM screenings WHERE id=:id FOR SHARE", id=sid)
     require(s is not None, "NOT_FOUND", "screenings record not found", 404)
+    if actor and actor["role"] == "STAFF":
+        branch(actor, s["cinema_id"], c=c)
     as_of = now()
     screen = get(c, "screens", s["screen_id"])
     s["screen_name"] = screen["name"]

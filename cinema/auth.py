@@ -1,18 +1,13 @@
 import hashlib
 import hmac
-import re
 from flask import current_app
 from werkzeug.security import check_password_hash, generate_password_hash
 from .core import *
+from . import registration
 
 
 def credentials(data):
-    email = string(data.get("email"), "email", 254).casefold()
-    require(
-        re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email) is not None,
-        "VALIDATION",
-        "Invalid email",
-    )
+    email = registration.normalized_email(data.get("email"))
     password = data.get("password")
     require(
         isinstance(password, str) and 10 <= len(password) <= 128,
@@ -33,34 +28,40 @@ def register(data, key):
     email, password = credentials(data)
     name = string(data.get("display_name"), "display_name", 80)
     require(
-        set(data) <= {"email", "password", "display_name"},
+        set(data) <= {"email", "password", "display_name", "challenge_id", "code"},
         "VALIDATION",
-        "Registration only accepts name, email and password",
+        "Unexpected registration field",
     )
-    # A keyed digest supports exact replay without storing plaintext or a fast password digest.
+    challenge, code_proof = registration.read_proof(data)
+    # Bind a lost response to the same password and verification challenge.
     proof = hmac.new(
         current_app.config["SECRET_KEY"].encode(), password.encode(), hashlib.sha256
     ).hexdigest()
     payload = dict(
-        action="REGISTER", email=email, display_name=name, password_proof=proof
+        action="REGISTER", email=email, display_name=name, password_proof=proof, code_proof=code_proof
     )
-    password_hash = generate_password_hash(password)
 
     def work(c):
+        pending = registration.lock_challenge(c, email, challenge)
         existing = one(c, "SELECT * FROM users WHERE email_normalized=:e", e=email)
         if existing:
             result = replay(c, existing["id"], key, payload)
             require(
-                result is not None, "EMAIL_EXISTS", "Email is already registered", 409
+                result is not None and pending and pending["created_at"] + registration.CODE_LIFETIME > now()
+                and existing["role"] == "CUSTOMER"
+                and check_password_hash(existing["password_hash"], password),
+                "CODE_EXPIRED", "Please sign in or request a new code", 409
             )
             return result
+        if not registration.consume(c, pending, challenge, code_proof):
+            return None  # Commit the failed attempt.
         at = now()
         uid = ins(
             c,
             "users",
             display_name=name,
             email_normalized=email,
-            password_hash=password_hash,
+            password_hash=generate_password_hash(password),
             role="CUSTOMER",
             created_at=at,
         )
@@ -82,7 +83,9 @@ def register(data, key):
         upd(c, "wallets", wallet, balance_minor=100000)
         return result
 
-    return transaction(work)
+    result = transaction(work)
+    require(result is not None, "CODE_INVALID", "Incorrect email verification code")
+    return result
 
 
 def login(data):

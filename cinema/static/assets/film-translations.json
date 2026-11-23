@@ -108,5 +108,16 @@
       "en": "Harry discovers he is a wizard, begins his first year at Hogwarts and joins two new friends to investigate a secret hidden in the school."
     },
     "source_synopsis": "Harry discovers he is a wizard, begins his first year at Hogwarts and joins two new friends to investigate a secret hidden in the school."
+  },
+  "Journey Beyond the City": {
+    "titles": {
+      "zh": "城市之外的旅程",
+      "en": "Journey Beyond the City"
+    },
+    "synopses": {
+      "zh": "这部学生项目的虚构影片讲述了一群朋友探索一座隐秘城市的故事。",
+      "en": "A fictional student-project film about friends exploring a hidden city."
+    },
+    "source_synopsis": "A fictional student-project film about friends exploring a hidden city."
   }
 }

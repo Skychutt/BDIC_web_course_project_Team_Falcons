@@ -30,6 +30,7 @@ class Conversation:
     task_action: str = "continue"
     recovery: dict | None = None
     locale: str | None = None
+    internal_data_refused: bool = False
 
     def __post_init__(self):
         self.set_defaults()
@@ -49,6 +50,7 @@ class Conversation:
         self.task_kind = kind
         self.recovery = None
         self.task_action = "new"
+        self.internal_data_refused = False
 
 
 def condition(value, source, strength, original_text, status="active"):
@@ -154,7 +156,9 @@ PRIVATE_REQUEST = re.compile(
     re.I,
 )
 SECRET_INPUT = re.compile(
-    r"sk-[a-z0-9_-]{12,}|(?:我的|数据库|系统|DeepSeek)(?:的)?(?:密码|密钥)\s*[:：=]\s*\S+",
+    r"sk-[a-z0-9_-]{12,}|(?:我的|数据库|系统|DeepSeek)(?:的)?(?:密码|密钥)\s*[:：=]\s*\S+|"
+    r"(?:验证码(?:\s*/\s*code)?|verification code|one[- ]time (?:code|password)|\botp\b)"
+    r"\s*(?:是|为|is)?\s*[:：=]?\s*[0-9]{6}(?![0-9])|^\s*[0-9]{6}\s*$",
     re.I,
 )
 

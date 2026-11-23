@@ -8,7 +8,7 @@ const copy = {
     map: "Cinema map & location",
     hard: "Required", soft: "Preferred", default: "Default", user_explicit: "Your request", model_inferred: "Interpreted", system_default: "System default", ratingPriority: "Higher platform ratings first", recovery: "How would you like to continue?", temporary: "Applies to this task; no long-term preferences saved.",
     title: "Your movie companion", stub: "Offline parser · Live cinema data", live: "DeepSeek · Live cinema data",
-    reset: "New conversation", welcome: "Ask a question, get help with writing or study, or talk about films. After sign-in, you can also check your own orders and coupons.",
+    reset: "New conversation", welcome: "Explore films, compare showtimes, or ask about your tickets and coupons.",
     label: "Your question or movie plans", placeholder: "Tomorrow in Chaoyang, three people, preferably middle seats",
     send: "Send", working: "Thinking about your question…", note: "Suggestions do not reserve seats. Choose seats to review live availability.",
     conditions: "Current search conditions", party: "Party size not set", all: "All Beijing", people: "people",
@@ -30,14 +30,14 @@ const copy = {
     couponAvailable: "Available", couponUnavailable: "Unavailable for this selection", couponUnchecked: "Choose a screening to check applicability",
     gross: "Ticket subtotal", net: "After discount", fee: "Change fee", due: "Estimated payable (negative = refund)",
     previewNote: "Preview only · no reservation or payment", change: "Review reschedule", eligible: "Eligible to request a change", ineligible: "Change currently unavailable",
-    close: "Minimize assistant", preferences: "Current search conditions", hello: "What’s on your mind?", intro: "Questions, ideas, writing or your next movie night. Let’s talk.", browse: "Browse movies", retry: "Reconnect", compactPlaceholder: "Ask a question, talk about films, or check my orders…",
+    close: "Minimize assistant", preferences: "Current search conditions", hello: "What’s on your mind?", intro: "Discover a film, find seats or check your tickets.", browse: "Browse movies", retry: "Reconnect", compactPlaceholder: "Ask a question, talk about films, or check my orders…",
   },
   zh: {
     languageHint: "回复自动跟随提问语言，历史消息保留原文。",
     map: "影院地图与定位",
     hard: "硬限制", soft: "偏好", default: "默认", user_explicit: "你的表达", model_inferred: "助手理解", system_default: "系统默认", ratingPriority: "优先本站高分", recovery: "接下来怎么选？", temporary: "仅用于本次任务，未保存为长期偏好。",
     title: "你的观影助手", stub: "离线解析 · 平台场次数据", live: "DeepSeek · 平台场次数据",
-    reset: "新对话", welcome: "可以问知识、写文字、聊电影，也能帮你找场次；登录后还可以查询自己的订单和优惠券。",
+    reset: "新对话", welcome: "可以聊影片、比较场次，也可以查询自己的订单和优惠券。",
     label: "你的问题或观影计划", placeholder: "明天朝阳区三个人看电影，尽量坐中间",
     send: "发送", working: "正在思考并准备回复…", note: "推荐不会占座。点击选座，重新确认实时座位和票价。",
     conditions: "本次筛选条件", party: "人数待确认", all: "北京全市", people: "人",
@@ -59,7 +59,7 @@ const copy = {
     couponAvailable: "可用", couponUnavailable: "当前选择不可用", couponUnchecked: "选择场次后检查适用性",
     gross: "票面合计", net: "折后票款", fee: "改签手续费", due: "预计需付（负数为退款）",
     previewNote: "仅预览 · 未占座、未付款", change: "进入改签确认", eligible: "当前可以申请改签", ineligible: "当前不能改签",
-    close: "收起助手", preferences: "本次筛选条件", hello: "今天，想聊点什么？", intro: "问个问题、写段文字、聊聊电影，或查询你的观影计划。", browse: "浏览电影", retry: "重新连接", compactPlaceholder: "问个问题、聊聊电影，或查询我的订单…",
+    close: "收起助手", preferences: "本次筛选条件", hello: "今天，想聊点什么？", intro: "挑部电影、查查场次，或看看自己的电影票。", browse: "浏览电影", retry: "重新连接", compactPlaceholder: "问个问题、聊聊电影，或查询我的订单…",
   },
 };
 
@@ -95,7 +95,18 @@ export async function mountConversation(ctx, panel, results) {
   const controller = ctx.controller || new AbortController();
   controller.signal.addEventListener("abort", () => { alive = false; stopLanguage(); }, { once: true });
   const t = (key) => copy[language][key] || copy[language].failure;
-  const request = (path, options = {}) => api.request(`${path}${path.includes("?") ? "&" : "?"}locale=${language}`, { ...options, signal: controller.signal });
+  async function request(path, options = {}) {
+    try {
+      return await api.request(`${path}${path.includes("?") ? "&" : "?"}locale=${language}`, { ...options, signal: controller.signal });
+    } catch (error) {
+      if (alive && error.code === "assistant_customer_only") {
+        // Another tab may have signed into a staff account. Rebuild the page for that session.
+        controller.abort();
+        window.location.reload();
+      }
+      throw error;
+    }
+  }
   panel.innerHTML = `<div class="panel-header"><h2 data-ai="title"></h2></div>
     <div class="ai-chat-body"><div class="toolbar"><span class="assistant-mode" id="ai-mode"></span><button type="button" class="button ghost small" id="ai-reset" data-ai="reset"></button></div>
     <label class="field"><span data-ai="manualDistrict"></span><select id="ai-district"></select></label>
@@ -232,7 +243,11 @@ export async function mountConversation(ctx, panel, results) {
   }
   async function failure(error) {
     if (!alive || error.name === "AbortError") return;
-    if (error.status === 403 && ["CSRF", "csrf"].includes(error.code)) {
+    if (error.status === 401 && ctx.onLoginRequired) {
+      ctx.onLoginRequired();
+    } else if (["assistant_rate_limit", "assistant_paused"].includes(error.code)) {
+      message("assistant", error.message);
+    } else if (error.status === 403 && ["CSRF", "csrf"].includes(error.code)) {
       try { await bootstrap(); if (alive) labels(); } catch {}
       if (alive) message("assistant", t("refreshed"));
     } else message("assistant", t("failure"));
@@ -287,8 +302,10 @@ export async function mountConversation(ctx, panel, results) {
   try { await bootstrap(); if (alive) { labels(); if (!floating) message("assistant", t("welcome")); } }
   catch (error) {
     if (alive && error.name !== "AbortError") {
-      if (floating) {
-        el("ai-feed").innerHTML = `${notice(t("failure"), "error")}<button type="button" class="button" id="ai-retry">${t("retry")}</button><a class="button ghost" href="#/discover">${t("browse")}</a>`;
+      if (error.status === 401 && ctx.onLoginRequired) {
+        ctx.onLoginRequired();
+      } else if (floating) {
+        el("ai-feed").innerHTML = `${notice(error.code === "assistant_paused" ? error.message : t("failure"), "error")}<button type="button" class="button" id="ai-retry">${t("retry")}</button><a class="button ghost" href="#/discover">${t("browse")}</a>`;
         el("ai-retry").onclick = ctx.onRetry;
         el("chat-form").hidden = true;
       } else panel.innerHTML = notice(t("failure"), "error");

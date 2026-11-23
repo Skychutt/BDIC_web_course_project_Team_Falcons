@@ -51,7 +51,7 @@ def turn(provider, messages, state, history, today, timeout, locale, context, **
     if intent.intent in {"help", "unsupported"}:
         # Generic movie discovery and small talk get their own treatment below.
         if not re.search(r"推荐|电影|films?|movies?|高分|rating|预算|每人|整单|per person|total|budget|每张", lowered):
-            return AgentTurn(content=tr(intent.intent, locale))
+            return AgentTurn(content=tr("cinema_scope" if intent.intent == "help" else intent.intent, locale))
     patch = intent.updates.model_dump(exclude_unset=True)
     for word, genre in [("科幻", "Science Fiction"), ("sci-fi", "Science Fiction"), ("science fiction", "Science Fiction"),
                          ("喜剧", "Comedy"), ("comedy", "Comedy"), ("冒险", "Adventure"), ("adventure", "Adventure"),

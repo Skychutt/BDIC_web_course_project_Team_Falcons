@@ -42,7 +42,7 @@ POST /api/ai/recovery → 校验会话绑定的恢复选项，更新用户选择
 | `GET /api/catalog/screenings` | AI 页普通筛选，最多 3 张卡片；不改变聊天条件 |
 | `GET /api/catalog/screenings/<id>` | 每次实时读取，包含不可售状态，不锁座 |
 | `GET /api/screenings` | 原分页查询及原字段契约保持兼容 |
-| `POST /api/assistant/recommendations` | 原结构化推荐入口保持确定性排序；不调用模型 |
+| `POST /api/assistant/recommendations` | 登录顾客可用，按场次和座位确定性排序 |
 
 浏览器先 GET 初始化接口，保留 Cookie，写操作发送 `X-CSRF-Token`。登录后使用登录响应里的新 token，或重新初始化。403 后前端重新获取 token，并提示错误，不自动重放消息或交易。
 

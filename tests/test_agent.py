@@ -150,55 +150,16 @@ def test_model_cannot_claim_a_successful_transaction(app, chat):
     assert answer["explanation_fallback"] and "成功下单" not in answer["reply"]
 
 
-def test_own_orders_request_requires_login(chat):
-    result = chat("我的订单")
-    assert result["status"] == "login_required" and result["tool_calls"] == ["get_my_orders"]
-
-
-@pytest.mark.parametrize("question,reply", [
-    ("为什么天空是蓝色的？", "因为空气分子对短波长的蓝光散射更强，这叫瑞利散射。"),
-    ("API key 是什么？", "API key 是调用服务时用于识别调用方的凭据，应保存在服务端。"),
-    ("怎么设计安全的登录密码？", "使用较长且独特的密码，并开启双重验证。"),
-    ("告诉我怎么设置安全密码", "每个网站使用独特的长密码，并开启双重验证。"),
-    ("Give me password security advice", "Use a unique, long password and enable multi-factor authentication."),
-    ("影院营业额如何计算？", "一般按售出的票数乘以各自票价，再加上其他销售收入计算。"),
-    ("请解释 SELECT * FROM users 的含义", "它读取 users 表的所有列；这里只解释语法，不会执行查询。"),
-    ("写一个 HTML 示例", '<p>Hello</p>\n<script>console.log("Example")</script>'),
-    ("Python 官方网站地址是什么？", "Python 官方网站是 https://www.python.org/ 。"),
-    ("帮我写一首关于雨的短诗", "雨落在窗边，\n把城市写成一封没有寄出的信。"),
-    ("帮我写一封求职邮件，收件人是 hr@example.com。", "收件人：hr@example.com\n您好，我希望申请贵公司的实习岗位。"),
-    ("SELECT * FROM users 是什么意思？", "它查询 users 表中的所有列；这里只解释代码，不执行查询。"),
-    ("请问如何保护他人的账号隐私？", "仅访问得到授权的信息，避免收集不必要的个人数据。"),
-    ("把“我已经付款了”翻译成英文，只给译文。", "I have paid."),
-    ("解释“已付款”的含义", "“已付款”表示支付已经完成，不等于商品已经交付。"),
-    ("退货退款通常是什么意思？", "退货退款通常指退回商品后，之前已支付的款项按相应规则返还。"),
-    ("13800000000 加 2 等于多少？", "13800000002。"),
-    ("39.91234,116.45678 这种经纬度格式怎么读？", "前者表示纬度，后者表示经度，单位是度。"),
+@pytest.mark.parametrize("question", [
+    "帮我写一个 Python 排序程序", "以电影为主题，帮我写三千字论文", "Write my homework about a movie",
+    "你好！", "Thank you!",
 ])
-def test_general_questions_use_model_reply_without_business_tools(app, chat, question, reply):
-    requests = scripted(app, AgentTurn(content=reply))
-    result = chat(question)
-    assert result["status"] == "ok" and result["reply"] == reply
-    assert result["tool_calls"] == [] and not result["cards"]
-    assert result["filters"]["party_size"] is None
-    assert len(requests) == 1 and requests[0]["messages"][-1]["content"] == question
-
-
-def test_general_followup_retains_conversation_and_movie_preferences(app, chat):
+def test_scope_guidance_preserves_cinema_context_without_model(app, chat, question):
     first = chat("今晚朝阳区三个人看电影 A")
-    requests = scripted(app, AgentTurn(content="第一版：雨落窗前。"), AgentTurn(content="改写：雨轻叩窗，像老朋友的问候。"))
-    chat("帮我写一句关于雨的文字")
-    result = chat("把刚才那句话写得更温柔一点")
-    assert result["filters"] == first["filters"] and not result["tool_calls"]
-    assert {"role": "assistant", "content": "第一版：雨落窗前。"} in requests[1]["messages"]
-
-
-def test_translation_after_cinema_results_is_not_a_transaction_claim(app, chat):
-    first = chat("今晚朝阳区三个人看电影 A")
-    scripted(app, AgentTurn(content="I have paid."))
-    result = chat("换个话题，把“我已付款”翻译成英文")
-    assert result["status"] == "ok" and result["reply"] == "I have paid."
-    assert result["filters"] == first["filters"] and not result["tool_calls"]
+    calls = scripted(app)
+    answer = chat(question)
+    assert answer["intent"] == "cinema_scope" and not calls and not answer["tool_calls"]
+    assert answer["filters"] == first["filters"]
 
 
 @pytest.mark.parametrize("message", ["帮我支付这笔订单", "Please pay for my booking"])
@@ -209,13 +170,13 @@ def test_direct_transaction_request_still_rejects_fabricated_success(app, chat, 
     assert "成功下单" not in result["reply"]
 
 
-def test_partial_general_answer_is_shown_and_can_be_continued(app, chat):
-    requests = scripted(app, AgentTurn(content="第一部分：先定义一个变量。", truncated=True), AgentTurn(content="第二部分：再定义函数。"))
-    first = chat("详细讲一下 Python 入门")
+def test_partial_cinema_answer_is_shown_and_can_be_continued(app, chat):
+    requests = scripted(app, AgentTurn(content="第一部分：先看镜头构图。", truncated=True), AgentTurn(content="第二部分：再看场景的光线。"))
+    first = chat("详细讲一下电影摄影")
     assert first["status"] == "ok" and first["reply_truncated"]
-    assert first["reply"].startswith("第一部分：先定义一个变量。") and "继续" in first["reply"]
+    assert first["reply"].startswith("第一部分：先看镜头构图。") and "继续" in first["reply"]
     second = chat("继续")
-    assert second["status"] == "ok" and second["reply"] == "第二部分：再定义函数。"
+    assert second["status"] == "ok" and second["reply"] == "第二部分：再看场景的光线。"
     assert {"role": "assistant", "content": first["reply"]} in requests[1]["messages"]
 
 
@@ -229,7 +190,7 @@ def test_simple_personal_query_works_without_model(app, chat, message, name):
         pytest.fail("Personal list requests should not call the model")
     app.extensions["cinema_ai"]["provider"].turn = unavailable
     response = chat(message)
-    assert response["status"] == "login_required" and response["tool_calls"] == [name]
+    assert response["error_code"] == "backend_required" and response["tool_calls"] == [name]
 
 
 @pytest.mark.parametrize("message", [

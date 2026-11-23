@@ -3,12 +3,10 @@
 Unknown records keep their original names/text. If source prose changes, its old
 translation is not reused. This layer never changes IDs, rankings, prices or seats.
 """
-import json
 import re
-from importlib.resources import files
+from cinema.catalog_locale import CINEMA_TRANSLATIONS, FILM_TRANSLATIONS
 
-TRANSLATIONS = json.loads(files("cinema_ai").joinpath("data/translations.json").read_text(encoding="utf-8"))
-TRANSLATIONS["films"] = json.loads(files("cinema").joinpath("static/assets/film-translations.json").read_text(encoding="utf-8"))
+TRANSLATIONS = {"cinemas": CINEMA_TRANSLATIONS, "films": FILM_TRANSLATIONS}
 
 
 def reply_locale(message, previous="zh"):

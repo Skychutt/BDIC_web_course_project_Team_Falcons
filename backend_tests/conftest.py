@@ -11,7 +11,7 @@ from cinema.core import get, db
 
 
 @pytest.fixture
-def env():
+def env(tmp_path_factory):
     url = os.getenv("TEST_DATABASE_URL")
     if not url:
         pytest.skip(
@@ -34,6 +34,7 @@ def env():
             .set(database=schema)
             .render_as_string(hide_password=False),
             "CLOCK": lambda: clock[0],
+            "AI_MESSAGES_PER_MINUTE": 50, "AI_LIMITS_PATH": tmp_path_factory.mktemp("assistant") / "limits.sqlite3",
         }
     )
     try:

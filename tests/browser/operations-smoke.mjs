@@ -297,8 +297,8 @@ try {
           .getByRole("button", { name: "Confirm transfer", exact: true })
           .click(),
     );
-    await row(labels.staff)
-      .getByText(destinations[0].text, { exact: true })
+    await page.getByRole("region", { name: destinations[0].text, exact: true })
+      .getByRole("row").filter({ hasText: labels.staff })
       .waitFor();
     await tab("Cinemas");
     await row(labels.cinema)
@@ -590,7 +590,7 @@ try {
     await tab("Counter sales");
     await page
       .getByRole("heading", {
-        name: "1 · Receive reservation approval",
+        name: "Counter sales",
         exact: true,
       })
       .waitFor();

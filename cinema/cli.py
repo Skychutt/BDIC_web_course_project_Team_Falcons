@@ -30,9 +30,27 @@ def initialize(engine):
     initialize_rating_snapshots(engine)
     from .cancellations import initialize_cancellations
     initialize_cancellations(engine)
+    from .counter import initialize_counter
+    initialize_counter(engine)
+    from .registration import initialize_registration
+    initialize_registration(engine)
 
 
 def register_cli(app):
+    @app.cli.command("migrate-registration-email")
+    def migrate_registration_email():
+        """Add registration verification tables to an existing database."""
+        from .registration import initialize_registration
+        initialize_registration(db())
+        click.echo("Registration email verification schema ready.")
+
+    @app.cli.command("migrate-counter-email")
+    def migrate_counter_email():
+        """Add the counter email verification table to an existing database."""
+        from .counter import initialize_counter
+        initialize_counter(db())
+        click.echo("Counter email sales schema ready.")
+
     @app.cli.command("migrate-customer-refunds")
     def migrate_customer_refunds():
         """Enable customer refunds without resetting orders, payments or seats."""

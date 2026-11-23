@@ -1,3 +1,4 @@
+import { venueName, venueAddress, auditoriumName } from "./venue-locale.js";
 import { esc, money, dateTime, timeOnly, screenName, notice } from "./ui.js";
 import { filmArtwork } from "./film-artwork.js";
 import { tx } from "./locale.js";
@@ -118,13 +119,13 @@ export async function renderTicketCanvas(data) {
   const ctx = canvas.getContext("2d");
   const seats = data.seats;
   const title = filmTitle(data.film_title);
-  const hallLabel = `${data.screen_name} · ${tx("YOUR SEATS", "座位")}`;
+  const hallLabel = `${auditoriumName(data.screen_name)} · ${tx("YOUR SEATS", "座位")}`;
   const state = stateFor(data);
   const tagline = Object.hasOwn(LINES, data.film_title) ? LINES[data.film_title] : DEFAULT_TAGLINE;
   ctx.font = font(35, 700);
-  const cinemaHeight = wrap(ctx, data.cinema_name, 936).length * 46;
+  const cinemaHeight = wrap(ctx, venueName(data.cinema_name), 936).length * 46;
   ctx.font = font(25);
-  const addressHeight = wrap(ctx, data.cinema_address, 936).length * 34;
+  const addressHeight = wrap(ctx, venueAddress(data.cinema_name, data.cinema_address), 936).length * 34;
   ctx.font = font(32, 700);
   const holderHeight = Math.max(44, wrap(ctx, data.holder_name, 600).length * 42);
   ctx.font = font(21, 700);
@@ -134,7 +135,7 @@ export async function renderTicketCanvas(data) {
   const footerY = 772 + detailHeight;
   canvas.width = 1080; canvas.height = footerY + 360;
   canvas.setAttribute("role", "img");
-  canvas.setAttribute("aria-label", [title, data.cinema_name, dateTime(data.starts_at), seatText(seats), state.badge].join(tx(". ", "。")));
+  canvas.setAttribute("aria-label", [title, venueName(data.cinema_name), dateTime(data.starts_at), seatText(seats), state.badge].join(tx(". ", "。")));
   ctx.textBaseline = "top";
   rounded(ctx, 0, 0, 1080, canvas.height, 36, "#fbf8f0");
   text(ctx, "falcons.", 64, 36, 52, "#ec255b", 900);
@@ -173,8 +174,8 @@ export async function renderTicketCanvas(data) {
   ctx.strokeStyle = "#e3ddd1"; ctx.beginPath(); ctx.moveTo(72, y); ctx.lineTo(1008, y); ctx.stroke();
   y += 32;
   text(ctx, tx("YOUR CINEMA", "影院"), 72, y, 19, "#8b8375", 700); y += 34;
-  y += paragraph(ctx, data.cinema_name, 72, y, 936, 35, "#252b3d", 700, 46);
-  y += paragraph(ctx, data.cinema_address, 72, y + 8, 936, 25, "#77756e", 400, 34) + 28;
+  y += paragraph(ctx, venueName(data.cinema_name), 72, y, 936, 35, "#252b3d", 700, 46);
+  y += paragraph(ctx, venueAddress(data.cinema_name, data.cinema_address), 72, y + 8, 936, 25, "#77756e", 400, 34) + 28;
   text(ctx, tx("TICKET HOLDER", "购票人"), 72, y, 19, "#8b8375", 700);
   const totalLabel = tx(`${seats.length} ${seats.length === 1 ? "TICKET" : "TICKETS"} · TOTAL`, `${seats.length} 张 · 合计`);
   text(ctx, totalLabel, 785, y, 19, "#8b8375", 700);
@@ -216,7 +217,7 @@ function content(data) {
       <dl class="ticket-card-facts">
         <div><dt>${tx("Film", "影片")}</dt><dd>${esc(filmTitle(data.film_title))}</dd></div>
         <div><dt>${tx("When", "场次时间")}</dt><dd>${esc(dateTime(data.starts_at))} · ${tx("Beijing", "北京时间")}</dd></div>
-        <div><dt>${tx("Cinema", "影院")}</dt><dd>${esc(data.cinema_name)}<small>${esc(data.screen_name)} · ${esc(screenName(data.screen_type))}</small></dd></div>
+        <div><dt>${tx("Cinema", "影院")}</dt><dd>${esc(venueName(data.cinema_name))}<small>${esc(auditoriumName(data.screen_name))} · ${esc(screenName(data.screen_type))}</small></dd></div>
         <div><dt>${tx("Seats", "座位")}</dt><dd>${esc(seatText(data.seats))}</dd></div>
         <div><dt>${tx("Ticket holder", "购票人")}</dt><dd>${esc(data.holder_name)}</dd></div>
       </dl>

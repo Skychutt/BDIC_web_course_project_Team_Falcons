@@ -4,8 +4,9 @@ import threading
 import time
 from collections import defaultdict, deque
 from datetime import timedelta
+from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 from flask import Flask, g, jsonify, request, session
 from sqlalchemy.exc import DBAPIError
 from werkzeug.exceptions import HTTPException
@@ -34,9 +35,20 @@ def create_app(config=None):
         DEEPSEEK_API_KEY=os.getenv("DEEPSEEK_API_KEY", ""),
         DEEPSEEK_MODEL=os.getenv("DEEPSEEK_MODEL", "deepseek-flash"),
         AI_TIMEOUT_SECONDS=os.getenv("AI_TIMEOUT_SECONDS", "30"),
+        SMTP_HOST=os.getenv("SMTP_HOST", ""),
+        SMTP_PORT=os.getenv("SMTP_PORT", "587"),
+        SMTP_SECURITY=os.getenv("SMTP_SECURITY", "starttls"),
+        SMTP_FROM=os.getenv("SMTP_FROM", ""),
+        SMTP_USERNAME=os.getenv("SMTP_USERNAME", ""),
+        SMTP_PASSWORD=os.getenv("SMTP_PASSWORD", ""),
         AMAP_JS_KEY=os.getenv("AMAP_JS_KEY", ""),
         AMAP_SECURITY_CODE=os.getenv("AMAP_SECURITY_CODE", ""),
     )
+    if not app.config["SMTP_HOST"]:
+        mail_settings = dotenv_values(Path(app.root_path).parent / ".env.smtp", interpolate=False)
+        for key in ("SMTP_HOST", "SMTP_PORT", "SMTP_SECURITY", "SMTP_FROM", "SMTP_USERNAME", "SMTP_PASSWORD"):
+            if mail_settings.get(key) is not None:
+                app.config[key] = mail_settings[key]
     if config:
         app.config.update(config)
     require(
@@ -79,15 +91,6 @@ def create_app(config=None):
                     429,
                 )
                 bucket.append(at)
-        if request.method not in ("GET", "HEAD", "OPTIONS"):
-            csrf = request.headers.get("X-CSRF-Token", "")
-            expected = session.get("csrf", "")
-            require(
-                expected and csrf.isascii() and hmac.compare_digest(csrf, expected),
-                "CSRF",
-                "Obtain /api/auth/csrf and send X-CSRF-Token with this session",
-                403,
-            )
         uid = session.get("user_id")
         if uid:
             with app.extensions["db"].connect() as c:
@@ -155,6 +158,8 @@ def create_app(config=None):
     from .api import api
 
     app.register_blueprint(api)
+    from .counter import counter
+    app.register_blueprint(counter)
     from .community import community
     app.register_blueprint(community)
     from .frontend_api import ui_api
@@ -169,4 +174,16 @@ def create_app(config=None):
     if app.config["ENABLE_AI"]:
         from cinema_ai import init_app
         init_app(app)
+    @app.before_request
+    def enforce_csrf():
+        if request.method not in ("GET", "HEAD", "OPTIONS"):
+            csrf = request.headers.get("X-CSRF-Token", "")
+            expected = session.get("csrf", "")
+            require(
+                expected and csrf.isascii() and hmac.compare_digest(csrf, expected),
+                "CSRF",
+                "Obtain /api/auth/csrf and send X-CSRF-Token with this session",
+                403,
+            )
+
     return app

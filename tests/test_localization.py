@@ -11,7 +11,7 @@ from cinema_ai.references import screening_film_index
 @pytest.mark.parametrize("message,stale_locale,expected_locale,expected", [
     ("我想睡觉", "en", "zh", "休息"), ("I'm tired", "zh", "en", "Get some rest"),
     ("学生票有什么要求", "en", "zh", "学生"), ("student ticket rules", "zh", "en", "student"),
-    ("我的订单", "en", "zh", "登录"), ("my orders", "zh", "en", "Sign in"),
+    ("我的订单", "en", "zh", "业务后端"), ("my orders", "zh", "en", "business backend"),
 ])
 def test_question_language_overrides_stale_client_locale(chat, message, stale_locale, expected_locale, expected):
     result = chat(message, stale_locale)
@@ -87,7 +87,8 @@ def test_reviewed_translations_preserve_source_and_fallback_on_edits():
         assert film_text(title, "Updated plot")[1] == {"zh":"Updated plot", "en":"Updated plot"}
     for name, entry in TRANSLATIONS["cinemas"].items():
         names, addresses = cinema_text(name, entry["source_address"])
-        assert names["zh"] == name and not re.search(r"[\u4e00-\u9fff]", names["en"] + addresses["en"])
+        assert name in names.values() and re.search(r"[\u4e00-\u9fff]", names["zh"])
+        assert not re.search(r"[\u4e00-\u9fff]", names["en"] + addresses["en"])
         assert cinema_text(name, "New address")[1] == {"zh":"New address", "en":"New address"}
     assert film_text("Unknown film", "Original plot") == ({"zh":"Unknown film","en":"Unknown film"}, {"zh":"Original plot","en":"Original plot"})
 

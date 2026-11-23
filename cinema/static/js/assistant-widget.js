@@ -2,6 +2,10 @@ import { mountConversation } from "./assistant.js";
 import { icon } from "./ui.js";
 import { getLanguage, onLanguage } from "./locale.js";
 
+export function canShowAssistantEntry(user) {
+  return !user || user.role === "CUSTOMER";
+}
+
 // One instance lives beside <main>, so page changes never discard the conversation or draft.
 // Nothing is persisted in browser storage except the existing language preference.
 export function createAssistantWidget(api) {
@@ -28,6 +32,12 @@ export function createAssistantWidget(api) {
     launcher.setAttribute("aria-label", action);
     launcher.title = action;
     tooltip.textContent = label;
+    if (panel.querySelector("[data-login-prompt]")) {
+      panel.querySelector("#ai-widget-title").textContent = label;
+      panel.querySelector("[data-login-prompt]").textContent = language === "zh" ? "请使用顾客账号登录观影助手。" : "Sign in with a customer account to use the movie assistant.";
+      panel.querySelector("a").textContent = language === "zh" ? "登录" : "Sign in";
+      panel.querySelector("button").ariaLabel = language === "zh" ? "收起助手" : "Minimize assistant";
+    }
     host.setAttribute("lang", language === "zh" ? "zh-CN" : "en");
   }
 
@@ -50,7 +60,19 @@ export function createAssistantWidget(api) {
     if (restoreFocus) (previousFocus?.isConnected ? previousFocus : launcher).focus({ preventScroll: true });
   }
 
+  function loginPrompt() {
+    controller?.abort();
+    identity = "guest";
+    mounted = true;
+    panel.innerHTML = `<header class="ai-widget-header"><div class="ai-widget-identity"><h2 id="ai-widget-title"></h2></div><button type="button" class="ai-widget-icon-button">${icon("close")}</button></header>
+      <div class="ai-widget-welcome"><p data-login-prompt></p><a class="button" href="#/login?next=%23%2Fassistant"></a></div>`;
+    panel.querySelector("button").onclick = () => close();
+    labels();
+    if (opened) panel.querySelector("a").focus();
+  }
+
   async function mount() {
+    if (api.userId === "guest") { loginPrompt(); return; }
     mounted = true;
     const active = new AbortController();
     controller = active;
@@ -62,6 +84,7 @@ export function createAssistantWidget(api) {
       api, root: panel, floating: true, controller: active,
       isOpen: () => opened,
       onClose: () => close(),
+      onLoginRequired: loginPrompt,
       onReply: () => { if (!opened) unread.hidden = false; },
       onRetry: () => { active.abort(); mount(); },
     }, panel, results);
@@ -71,7 +94,7 @@ export function createAssistantWidget(api) {
   }
 
   function open() {
-    if (opened) return;
+    if (host.hidden || opened) return;
     previousFocus = document.activeElement;
     opened = true;
     panel.hidden = false;
@@ -110,8 +133,10 @@ export function createAssistantWidget(api) {
 
   return {
     open,
-    syncIdentity() {
-      if (identity === api.userId) return;
+    syncIdentity(user) {
+      const hidden = !canShowAssistantEntry(user);
+      if (identity === api.userId && host.hidden === hidden) return;
+      host.hidden = hidden;
       identity = api.userId;
       controller?.abort();
       // Never retain another account's private cards, requests or draft after a login/logout.

@@ -4,7 +4,7 @@ import { getLanguage } from "./locale.js";
 
 export function filmTitle(film, language = getLanguage()) {
   const title = typeof film === "string" ? film : film?.title;
-  return language === "zh" ? translations[title]?.titles?.zh ?? title : title;
+  return translations[title]?.titles?.[language] ?? title;
 }
 
 export function filmSynopsis(film) {
@@ -17,5 +17,5 @@ export function filmSynopsis(film) {
 
 export function genreName(genre) {
   const name = typeof genre === "string" ? genre : genre.name;
-  return getLanguage() === "zh" ? genreLabel(name, "zh") : name;
+  return genreLabel(name, getLanguage());
 }

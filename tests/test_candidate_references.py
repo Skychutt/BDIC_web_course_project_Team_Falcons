@@ -65,9 +65,9 @@ def test_unknown_ordinals_ask_without_changing_state(app, chat, message):
     assert not result["tool_calls"]
 
 
-def test_selection_does_not_use_another_session_or_a_cleared_task(app, chat):
+def test_selection_does_not_use_another_session_or_a_cleared_task(app, chat, signed_client):
     chat("推荐电影")
-    second = app.test_client()
+    second = signed_client(2)
     token = second.get("/api/ai/session").json["csrf_token"]
     result = second.post("/api/ai/chat", json={"message": "查第3部电影的场次"},
         headers={"X-CSRF-Token": token}).json

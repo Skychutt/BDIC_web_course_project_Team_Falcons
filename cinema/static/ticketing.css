@@ -81,6 +81,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .catalogue-heading>a .icon {width: 15px;height: 15px;}
 .catalogue-layout {display: grid;grid-template-columns: minmax(0,1fr) 310px;gap: 24px;}
 .film-rail {display: grid;grid-template-columns: repeat(auto-fill,minmax(160px,1fr));gap: 20px;min-width: 0;}
+.film-rail:only-child {grid-column: 1 / -1;}
 .catalogue-film {min-width: 0;background: #fff;border: 1px solid var(--line);border-radius: 9px;overflow: hidden;}
 .catalogue-poster {display: block;}
 .catalogue-film .film-poster {width: 100%;aspect-ratio: 2/2.8;}

@@ -1,3 +1,5 @@
+import { getLanguage, tx } from "./locale.js";
+
 // Native permission prompt first. No IP fallback masquerading as device location.
 export function locateDevice() {
   return new Promise((resolve, reject) => {
@@ -12,7 +14,8 @@ export function locateDevice() {
 // Isolate the vendor SDK from the booking document's strict script policy.
 export function createMapFrame(container, onCinema, config) {
   const frame = document.createElement("iframe");
-  frame.title = "Cinema map · 高德地图";
+  const frameTitle = () => tx("Cinema map · AMap", "影院地图 · 高德地图");
+  frame.title = frameTitle();
   frame.src = "/maps/embed";
   frame.referrerPolicy = "same-origin";
   frame.setAttribute("sandbox", "allow-scripts allow-same-origin");
@@ -25,7 +28,7 @@ export function createMapFrame(container, onCinema, config) {
   function receive(event) {
     if (disposed || event.source !== frame.contentWindow || event.origin !== location.origin || event.data?.channel !== "falcons-map") return;
     const msg = event.data;
-    if (msg.type === "config-request") { send({ type:"config", config }); }
+    if (msg.type === "config-request") { send({ type:"config", config, language: getLanguage() }); }
     else if (msg.type === "ready") { clearTimeout(timer); readyResolve(); }
     else if (msg.type === "error") { clearTimeout(timer); readyReject(new Error("load_failed")); }
     else if (msg.type === "cinema" && /^\d+$/.test(msg.id)) onCinema(msg.id);
@@ -38,7 +41,10 @@ export function createMapFrame(container, onCinema, config) {
   }
   window.addEventListener("message", receive);
   return { ready,
-    render(cinemas, position) { send({ type:"render", cinemas, position }); },
+    render(cinemas, position) {
+      frame.title = frameTitle();
+      send({ type:"render", cinemas, position, language: getLanguage() });
+    },
     focus(position, zoom=13) { send({ type:"focus", position, zoom }); },
     clearRoute() { send({type:"clear-route"}); },
     route(origin, destination, mode = "walking") {

@@ -68,6 +68,9 @@ def test_html_csp_and_entire_static_module_graph_are_accessible():
             assert urlparse(asset).netloc == "" and asset.startswith("/static/")
             module = client.get(asset)
             assert module.status_code == 200, asset
+            if asset.endswith(".json"):
+                assert module.is_json and isinstance(module.get_json(), dict), asset
+                continue
             assert module.mimetype in ("text/javascript", "application/javascript"), asset
             source = module.get_data(as_text=True)
             imports = re.findall(r"(?m)^\s*import\s+(?:[^;\n]*?\s+from\s+)?['\"]([^'\"]+)['\"]", source)

@@ -1,3 +1,4 @@
+import { venueName, auditoriumName } from "./venue-locale.js";
 import { esc, money, dateTime, empty, notice, screenName } from "./ui.js";
 import { openTicketCard } from "./ticket-card.js";
 import { tx } from "./locale.js";
@@ -40,6 +41,15 @@ const seatLabel = (seat) => tx(
   `Row ${seat.row_no} · Seat ${seat.seat_no}`,
   `${seat.row_no} 排 ${seat.seat_no} 座`,
 );
+
+// Historic notices include staff-authored reasons. Translate only the two system templates.
+function noticeBody(body) {
+  const cancelled = /^Screening cancelled: (.*)\. Refund pending; a same-cinema 50% coupon is available\. No automatic rebooking\.$/s.exec(body);
+  if (cancelled) return tx(body, `场次已取消。原因：${cancelled[1]}。退款待处理，本店五折券已发放。如需继续观影，请重新订票。`);
+  const refund = /^Your tickets have been cancelled and all seats released\. Refund: ¥([\d.]+) to your demo wallet\. Cancellation fee: ¥([\d.]+)\. These tickets are no longer valid\.$/.exec(body);
+  if (refund) return tx(body, `退票已完成，座位已释放。¥${refund[1]} 已退回演示钱包，退票手续费为 ¥${refund[2]}。原影票已失效。`);
+  return body;
+}
 
 function badge(value) {
   const tone = ["CONFIRMED", "AVAILABLE", "SUCCEEDED"].includes(value)
@@ -189,7 +199,7 @@ export async function renderAccount(ctx) {
     : "";
   const selectedBooking = query.get("booking");
   const getCinema = (id) =>
-    asList(bootstrap?.cinemas).find((c) => String(c.id) === String(id))?.name ||
+    venueName(asList(bootstrap?.cinemas).find((c) => String(c.id) === String(id))?.name) ||
     tx("Cinema", "影院");
   const getFilm = (id, title) =>
     filmTitle(title || asList(bootstrap?.films).find((f) => String(f.id) === String(id))) ||
@@ -226,10 +236,10 @@ export async function renderAccount(ctx) {
     const open = String(selectedBooking || "") === String(b.id);
     const partySize = Number(b.ticket_count ?? b.tickets?.length ?? 0);
     return `<article class="panel" data-booking="${esc(b.id)}">
-      <div class="panel-header"><div><p class="eyebrow">${esc(b.cinema_name || getCinema(b.cinema_id))}</p><h2>${esc(getFilm(b.film_id, b.film_title))}</h2></div><div class="actions">${badge(b.status)}${ended ? `<span class="badge">${tx("Started", "已开场")}</span>` : ""}</div></div>
+      <div class="panel-header"><div><p class="eyebrow">${esc(venueName(b.cinema_name) || getCinema(b.cinema_id))}</p><h2>${esc(getFilm(b.film_id, b.film_title))}</h2></div><div class="actions">${badge(b.status)}${ended ? `<span class="badge">${tx("Started", "已开场")}</span>` : ""}</div></div>
       <div class="form-grid account-booking-facts">
         ${datum(tx("Beijing time", "北京时间"), esc(b.starts_at ? dateTime(b.starts_at) : tx("See booking details", "请查看订单详情")))}
-        ${datum(tx("Screen", "影厅"), esc([b.screen_name, screenName(b.screen_type)].filter(Boolean).join(" · ") || tx("Cinema screen", "影厅")))}
+        ${datum(tx("Screen", "影厅"), esc([auditoriumName(b.screen_name), screenName(b.screen_type)].filter(Boolean).join(" · ") || tx("Cinema screen", "影厅")))}
         ${datum(tx("Party size", "人数"), tx(`${partySize} ${partySize === 1 ? "person" : "people"}`, `${partySize} 人`))}
         ${datum(tx("Net ticket value", "折后票款"), `<strong>${money(b.net_ticket_minor)}</strong>`)}
       </div>
@@ -365,7 +375,7 @@ export async function renderAccount(ctx) {
   function noticesMarkup(data) {
     return `${data.items.length ? data.items.map((n) => `<article class="panel" data-notice="${esc(n.id)}">
       <div class="panel-header"><div><p class="eyebrow">${esc(getCinema(n.cinema_id))}</p><h2>${tx("Cinema notice", "影院通知")}</h2></div><span data-notice-state class="badge ${n.read_at ? "" : "warning"}">${n.read_at ? tx("Read", "已读") : tx("Unread", "未读")}</span></div>
-      <p style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(n.body)}</p>
+      <p style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(noticeBody(n.body))}</p>
       <p class="muted">${esc(dateTime(n.created_at))}</p>
       <div class="actions">
         <a class="button secondary" href="${accountURL("orders", { booking: n.booking_id })}">${tx("View booking & compensation", "查看订单与补偿")}</a>
@@ -517,7 +527,7 @@ export async function renderAccount(ctx) {
         const feeRate = Number(preview.fee_rate_bps) / 100;
         const previousFees = money(preview.previous_fees_minor);
         d.querySelector("[data-refund-content]").outerHTML = `<div data-refund-content class="stack">
-          <p><strong>${esc(filmTitle(preview.film_title))}</strong><br>${esc(preview.cinema_name)} · ${esc(preview.screen_name)}<br>${esc(dateTime(preview.starts_at))}</p>
+          <p><strong>${esc(filmTitle(preview.film_title))}</strong><br>${esc(venueName(preview.cinema_name))} · ${esc(auditoriumName(preview.screen_name))}<br>${esc(dateTime(preview.starts_at))}</p>
           <p class="muted">${preview.seats.map((seat) => esc(seatLabel(seat))).join(" / ")}</p>
           <div class="account-refund-amounts">
             <div class="toolbar"><span>${tx("Net ticket value", "折后票款")}</span><strong>${money(preview.ticket_value_minor)}</strong></div>

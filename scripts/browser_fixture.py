@@ -98,6 +98,9 @@ def main():
             "DATABASE_URL": make_url(source_url).set(database=schema).render_as_string(hide_password=False),
             "SESSION_COOKIE_NAME": "cinema_browser_fixture",
             "AI_PROVIDER": "stub",
+            # check:counter owns this loopback-only mailbox while the test runs.
+            "SMTP_HOST": HOST, "SMTP_PORT": 10025, "SMTP_SECURITY": "plain",
+            "SMTP_FROM": "tickets@cinema.test", "SMTP_USERNAME": "", "SMTP_PASSWORD": "",
         })
         with app.app_context():
             if args.resume:

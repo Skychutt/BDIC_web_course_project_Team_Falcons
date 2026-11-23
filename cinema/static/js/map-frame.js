@@ -1,11 +1,20 @@
+import { getLanguage } from "./locale.js";
 import { createRoutePlanner } from "./map-route.js";
 import { loadAMap, toMapPosition, addressFor } from "./amap-sdk.js";
 let map, AMap, markers = [], ready = false, planner, routeVersion = 0, markerKey = "", userMarker;
 const send = (data) => parent.postMessage({ channel: "falcons-map", ...data }, location.origin);
+function localizeFrame(language = getLanguage()) {
+  const tx = (en, zh) => language === "zh" ? zh : en;
+  document.documentElement.lang = tx("en", "zh-CN");
+  document.title = tx("Cinema map · AMap", "影院地图 · 高德地图");
+  document.getElementById("map").setAttribute("aria-label", tx("AMap", "高德地图"));
+  document.getElementById("route-panel").setAttribute("aria-label", tx("Driving and walking routes", "驾车与步行路线"));
+  document.getElementById("map-error").textContent = tx("Map unavailable. Please retry.", "地图暂时无法加载，请重试。");
+}
+localizeFrame();
 const fail = () => {
   const error = document.getElementById("map-error");
   error.hidden = false;
-  error.textContent = "地图暂时无法加载 / Map unavailable. Please retry.";
   send({ type: "error" });
 };
 window.addEventListener("error", () => { if (!ready) fail(); });
@@ -25,6 +34,7 @@ window.addEventListener("message", async (event) => {
       if (version === routeVersion) send({type:"route-error", id:msg.id, code:error.message});
     }
   } else if (msg.type === "render") {
+    localizeFrame(msg.language);
     const cinemas = (msg.cinemas || []).slice(0, 200);
     const nextKey = JSON.stringify(cinemas);
     if (nextKey !== markerKey) {
@@ -63,6 +73,7 @@ try {
     const timeout = setTimeout(() => { window.removeEventListener("message", receiveConfig); reject(new Error("config")); }, 10000);
     function receiveConfig(event) {
       if (event.source !== parent || event.origin !== location.origin || event.data?.channel !== "falcons-map" || event.data.type !== "config") return;
+      localizeFrame(event.data.language);
       clearTimeout(timeout); window.removeEventListener("message", receiveConfig); resolve(event.data.config);
     }
     window.addEventListener("message", receiveConfig);

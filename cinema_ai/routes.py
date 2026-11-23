@@ -1,12 +1,14 @@
 import hmac
 import secrets
+import sqlite3
+from datetime import datetime
 
-from flask import Blueprint, current_app, jsonify, render_template, request, session
+from flask import Blueprint, current_app, g, jsonify, redirect, render_template, request, session
 from pydantic import ValidationError
 from werkzeug.exceptions import BadRequest, RequestEntityTooLarge, UnsupportedMediaType
 
 from .catalog import DISTRICTS
-from .domain import ChatInput, Filters
+from .domain import BEIJING, ChatInput, Filters
 from .messages import tr
 from .localization import reply_locale
 from .providers import ProviderError
@@ -20,8 +22,22 @@ def services():
     return current_app.extensions["cinema_ai"]
 
 
+def assistant_access():
+    if request.blueprint != blueprint.name or not request.path.startswith(("/api/ai/", "/api/assistant/")):
+        return
+    request.max_content_length = 16 * 1024
+    if not getattr(g, "actor", None):
+        return error("assistant_login", 401)
+    if g.actor.get("role") != "CUSTOMER":
+        return error("assistant_customer_only", 403)
+    if services()["pause_file"].is_file():
+        return error("assistant_paused", 503)
+
+
 def current_conversation():
-    sid, conversation = services()["sessions"].get(session.get("cinema_ai_sid"))
+    owner = str(g.actor["id"])
+    sid, conversation = services()["sessions"].get(session.get("cinema_ai_sid") if session.get("cinema_ai_owner") == owner else None)
+    session["cinema_ai_owner"] = owner
     session["cinema_ai_sid"] = sid
     return conversation
 
@@ -38,10 +54,11 @@ def locale():
     return fallback
 
 
-def error(key, status, code=None):
+def error(key, status, code=None, **fields):
+    message = tr(key, locale()).format(**fields)
     if current_app.config.get("AI_ENVELOPE"):
-        return jsonify(error={"code": code or key, "message": tr(key, locale())}), status
-    return jsonify(error_code=code or key, reply=tr(key, locale())), status
+        return jsonify(error={"code": code or key, "message": message}), status
+    return jsonify(error_code=code or key, reply=message), status
 
 
 def output(value=None, **kwargs):
@@ -65,18 +82,34 @@ def csrf_valid(conversation):
 
 @blueprint.get("/assistant")
 def index():
+    actor = getattr(g, "actor", None)
+    if actor and actor.get("role") != "CUSTOMER":
+        if current_app.config.get("AI_ENVELOPE"):
+            return redirect("/#/operations")
+        return error("assistant_customer_only", 403)
+    if current_app.config.get("AI_ENVELOPE") and not actor:
+        return redirect("/#/assistant")
     return render_template("assistant.html")
 
 
 @blueprint.get("/api/ai/session")
 def bootstrap():
     conversation = current_conversation()
-    catalog = services()["catalog"]
     return output(csrf_token=csrf_token(conversation), **public_state(conversation),
-                   provider=services()["provider"].name, data_source=catalog.repository.source_name,
-                   districts=[{"id": code, "zh": labels[0], "en": labels[1]} for code, labels in DISTRICTS.items()],
-                   films=[{"id": f.id, "titles": f.titles} for f in catalog.repository.films()],
-                   today=services()["clock"]().date().isoformat())
+                  provider=services()["provider"].name, **catalog_options())
+
+
+def catalog_options():
+    catalog = services()["catalog"]
+    return dict(data_source=catalog.repository.source_name,
+                districts=[{"id": code, "zh": labels[0], "en": labels[1]} for code, labels in DISTRICTS.items()],
+                films=[{"id": f.id, "titles": f.titles} for f in catalog.repository.films()],
+                today=services()["clock"]().date().isoformat())
+
+
+@blueprint.get("/api/catalog/options")
+def options():
+    return output(catalog_options())
 
 
 @blueprint.post("/api/ai/chat")
@@ -92,8 +125,18 @@ def chat():
     if not conversation.lock.acquire(blocking=False):
         return error("busy", 409)
     try:
-        from flask import g
-        return output(services()["chat"].chat(conversation, body.message, body.locale, actor=getattr(g, "actor", None)))
+        tag = hmac.digest(current_app.secret_key.encode() if isinstance(current_app.secret_key, str) else current_app.secret_key,
+                          (request.remote_addr or "").encode(), "sha256").hex()
+        try:
+            wait = services()["limits"].admit(g.actor["id"], tag, datetime.now(BEIJING))
+        except sqlite3.Error:
+            current_app.logger.error("assistant_limit_store_unavailable")
+            return error("fallback", 503)
+        if wait:
+            response, status = error("assistant_rate_limit", 429, seconds=wait)
+            response.headers["Retry-After"] = str(wait)
+            return response, status
+        return output(services()["chat"].chat(conversation, body.message, body.locale, actor=g.actor))
     finally:
         conversation.lock.release()
 
@@ -154,8 +197,7 @@ def recovery():
     if not conversation.lock.acquire(blocking=False):
         return error("busy", 409)
     try:
-        from flask import g
-        return output(services()["chat"].recover(conversation, args, language, actor=getattr(g, "actor", None)))
+        return output(services()["chat"].recover(conversation, args, language, actor=g.actor))
     finally:
         conversation.lock.release()
 

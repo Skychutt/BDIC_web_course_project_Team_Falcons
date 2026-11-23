@@ -1,8 +1,14 @@
 """Small, explicit bilingual UI and response vocabulary."""
 TEXT = {
+    "internal_data": ("这属于受限信息，观影助手不能提供或估算。你可以查询公开场次、票价和自己的订单。", "That information is restricted. I can’t provide or estimate it. I can help with public showtimes, ticket prices or your own bookings."),
+    "assistant_login": ("请使用顾客账号登录观影助手。", "Sign in with a customer account to use the movie assistant."),
+    "assistant_customer_only": ("观影助手仅对顾客账号开放。", "The movie assistant is available only to customers."),
+    "assistant_paused": ("观影助手已暂停服务，你仍可在电影页面查询场次和购票。", "The assistant is paused. You can still browse showtimes and book tickets on the Movies page."),
+    "assistant_rate_limit": ("你的提问次数已达上限，请在 {seconds} 秒后再试。", "Your message limit has been reached. Try again in {seconds} seconds."),
+    "cinema_scope": ("我可以帮你选电影、聊影片、查场次和了解购票规则。你想看什么？", "I can recommend films, discuss movies, find showtimes or explain booking rules. What would you like to see?"),
     "help": ("我可以查询影片、影院、购票规则，或按区域、时间、人数和座位偏好推荐场次。试试：今晚朝阳区三个人看电影 A，尽量坐中间。", "I can look up films, cinemas and booking rules, or recommend screenings by district, time, party size and seating preference. Try: Three people, movie A, Chaoyang tonight, middle seats."),
-    "unsupported": ("我不能读取他人账户、系统密钥或后台私有报表。可以解释相关概念，也可以在你登录后查询本人的订单和优惠券。", "I cannot retrieve other people's account data, system secrets or private reports. I can explain related concepts, or look up your own orders and coupons after sign-in."),
-    "secret_input": ("消息中似乎包含密码或 API 密钥。请把凭据替换成占位符后重新提问，我可以继续帮你分析。", "This message appears to contain a password or API key. Replace the credential with a placeholder and ask again; I can still help with the question."),
+    "unsupported": ("我不能读取他人账户、系统密钥或后台私有报表。可以查询你本人的订单和优惠券。", "I cannot retrieve other people's account data, system secrets or private reports. I can help you check your own orders and coupons."),
+    "secret_input": ("请在对应的网页表单中填写验证码、密码或密钥。在聊天中请省略这些凭据。", "Enter verification codes, passwords and keys only in their intended forms. Leave them out of chat."),
     "reply_truncated": ("这次回复已达到长度上限，你可以回复“继续”让我接着讲。", 'This reply reached its length limit. Say "continue" for the rest.'),
     "party_size": ("一共有几位观众？确认人数后才能检查整组座位。", "How many people are going? I need the party size to check seats for the whole group."),
     "time": ("请明确日期或开场时间范围，例如明天 18:00–22:00。其他已确认条件已保留。", "Please specify the date or start-time range, for example tomorrow 18:00–22:00. Your other confirmed preferences are retained."),

@@ -72,6 +72,8 @@ def test_catalogue_ai_and_screenings_read_the_same_initial_score(env):
     client = env["app"].test_client()
     film = client.get("/api/ui/bootstrap").json["data"]["films"][0]
     assert film["rating"] == {"average": "9.7", "count": 3352918, "scale": 10}
+    with client.session_transaction() as cookie:
+        cookie["user_id"] = str(env["users"]["customer@cinema.test"]["id"])
     token = client.get("/api/ai/session").json["data"]["csrf_token"]
     answer = client.post("/api/ai/chat", headers={"X-CSRF-Token": token}, json={"message": "推荐至少9分的电影"}).json["data"]
     assert answer["status"] == "ok" and answer["filters"]["min_rating"] == 9
@@ -85,6 +87,8 @@ def test_catalogue_ai_and_screenings_read_the_same_initial_score(env):
 
 def test_ten_is_not_parsed_as_one_by_offline_agent(env):
     client = env["app"].test_client()
+    with client.session_transaction() as cookie:
+        cookie["user_id"] = str(env["users"]["customer@cinema.test"]["id"])
     token = client.get("/api/ai/session").json["data"]["csrf_token"]
     result = client.post("/api/ai/chat", headers={"X-CSRF-Token": token}, json={"message": "推荐评分10分的电影"}).json["data"]
     assert result["filters"]["min_rating"] == 10 and not result["films"]

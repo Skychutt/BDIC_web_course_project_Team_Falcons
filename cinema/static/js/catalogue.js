@@ -3,6 +3,7 @@ import { filmArtwork } from './film-artwork.js';
 import { filmRating } from './film-rating.js';
 import { filmTitle, filmSynopsis, genreName } from './film-locale.js';
 import { tx } from './locale.js';
+import { canShowAssistantEntry } from './assistant-widget.js';
 
 // The homepage uses public catalogue facts only; it never invents release dates or scores.
 export function filmShowtimesLink(film, filters) {
@@ -42,6 +43,6 @@ export function renderCatalogue(bootstrap, filters, activeFilmId) {
       <a class="catalogue-poster" href="#/film/${esc(film.id)}" aria-label="${tx('About', '关于')} ${esc(filmTitle(film))}">${poster(film)}</a>
       <div class="catalogue-film-copy"><p class="catalogue-label">${tx('IN THE CATALOGUE', '片单中')}</p><h3><a href="#/film/${esc(film.id)}">${esc(filmTitle(film))}</a></h3><p class="catalogue-rating">${filmRating(film)}</p><p class="catalogue-meta">${esc(film.duration_minutes)} ${tx('min', '分钟')}${film.genres.map(genre => ` · ${esc(genreName(genre))}`).join('')}</p><p class="catalogue-synopsis">${esc(filmSynopsis(film))}</p><a class="button" href="${filmShowtimesLink(film, filters)}">${tx('View showtimes', '查看场次')} ${icon('arrow')}</a></div>
     </article>`).join('')}</div>
-    <aside class="concierge-card"><span class="concierge-icon">${icon('spark')}</span><p class="eyebrow">${tx('FALCONS AI ASSISTANT', 'FALCONS 观影助手')}</p><h2>${tx('A movie night,<br>made for you.', '一场电影，<br>按你的安排来。')}</h2><p>${tx('A time that works. A cinema nearby.<br>Seats for your whole group.', '合适的时间。附近的影院。<br>整组都能坐下。')}</p><button type="button" data-open-assistant class="button">${tx('Ask the assistant', '问问助手')} ${icon('spark')}</button><span class="concierge-languages">${tx('中文 / English · Your preferences, remembered', '中文 / English · 记住你的偏好')}</span></aside></div>
+    ${canShowAssistantEntry(bootstrap.user) ? `<aside class="concierge-card"><span class="concierge-icon">${icon('spark')}</span><p class="eyebrow">${tx('FALCONS AI ASSISTANT', 'FALCONS 观影助手')}</p><h2>${tx('A movie night,<br>made for you.', '一场电影，<br>按你的安排来。')}</h2><p>${tx('A time that works. A cinema nearby.<br>Seats for your whole group.', '合适的时间。附近的影院。<br>整组都能坐下。')}</p><button type="button" data-open-assistant class="button">${tx('Ask the assistant', '问问助手')} ${icon('spark')}</button><span class="concierge-languages">${tx('中文 / English · Your preferences, remembered', '中文 / English · 记住你的偏好')}</span></aside>` : ''}</div>
   </section>`;
 }

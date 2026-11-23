@@ -46,9 +46,9 @@ def test_outside_city_requires_explicit_switch(chat):
     assert chat("换到朝阳区")["cards"]
 
 
-def test_chinese_english_same_business_result(app, chat):
+def test_chinese_english_same_business_result(app, chat, signed_client):
     cn = chat("今晚朝阳区三个人看电影 A，尽量坐中间")
-    other = app.test_client()
+    other = signed_client(2)
     token = other.get("/api/ai/session").json["csrf_token"]
     en = other.post("/api/ai/chat", json={"message": "Movie A, three people, Chaoyang tonight, middle seats", "locale": "en"}, headers={"X-CSRF-Token": token}).json
     assert en["locale"] == "en" and cn["locale"] == "zh"
@@ -89,9 +89,9 @@ def test_private_requests_never_reach_provider(app, chat, message):
     assert chat(message)["intent"] == "unsupported"
 
 
-def test_sessions_are_isolated_and_reset(client, app, chat):
+def test_sessions_are_isolated_and_reset(client, app, chat, signed_client):
     chat("明天朝阳区三个人看电影 A")
-    other = app.test_client()
+    other = signed_client(2)
     assert other.get("/api/ai/session").json["filters"]["party_size"] is None
     token = client.get("/api/ai/session").json["csrf_token"]
     result = client.delete("/api/ai/session", headers={"X-CSRF-Token": token})
@@ -177,14 +177,13 @@ def test_csrf_input_validation_and_no_client_roles(client):
     assert client.get("/api/catalog/screenings/99999").status_code == 404
 
 
-def test_missing_key_does_not_fall_back_to_fake_ai(clock):
-    app = create_app({"TESTING": True, "AI_PROVIDER": "deepseek", "DEEPSEEK_API_KEY": ""}, clock=clock)
-    c = app.test_client()
-    token = c.get("/api/ai/session").json["csrf_token"]
-    result = c.post("/api/ai/chat", json={"message": "hello"}, headers={"X-CSRF-Token": token}).json
+def test_missing_key_does_not_fall_back_to_fake_ai(app, client):
+    from cinema_ai.providers import DeepSeekProvider
+    app.extensions["cinema_ai"]["chat"].provider = DeepSeekProvider("", "test")
+    token = client.get("/api/ai/session").json["csrf_token"]
+    result = client.post("/api/ai/chat", json={"message": "推荐电影"}, headers={"X-CSRF-Token": token}).json
     assert result["error_code"] == "missing_key" and result["provider"] == "deepseek"
-    assert c.get("/api/catalog/screenings").status_code == 200
-    app.extensions["cinema_ai"]["runner"].pool.shutdown()
+    assert client.get("/api/catalog/screenings").status_code == 200
 
 
 def test_cinema_questions_and_unknown_cinema(chat):

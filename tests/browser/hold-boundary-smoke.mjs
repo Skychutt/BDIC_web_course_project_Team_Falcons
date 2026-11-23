@@ -4,6 +4,7 @@
  */
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
+import { openMailbox } from "./mailbox.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
@@ -38,7 +39,7 @@ const report = {
   api_fixtures: [],
   screenshots: [],
 };
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL });
 const context = await browser.newContext({
   viewport: { width: 1380, height: 960 },
   locale: "en-GB",
@@ -82,13 +83,21 @@ async function screenshot(name) {
 
 try {
   csrf = (await api("/auth/csrf")).csrf_token;
-  await api(
+  const mailbox = await openMailbox();
+  let challenge, code;
+  try {
+    challenge = await api("/auth/register/code", "POST", { email });
+    const message = mailbox.mail.find(item => item.recipient.includes(email));
+    code = message.body.match(/Code: (\d{6})/)[1];
+  } finally {
+    mailbox.close();
+  }
+  const login = await api(
     "/auth/register",
     "POST",
-    { email, password, display_name: "Hold Boundary QA" },
+    { email, password, display_name: "Hold Boundary QA", challenge_id: challenge.challenge_id, code },
     crypto.randomUUID(),
   );
-  const login = await api("/auth/login", "POST", { email, password });
   csrf = login.csrf_token;
   user = login.user;
   report.api_fixtures.push({

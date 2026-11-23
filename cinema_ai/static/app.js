@@ -103,7 +103,7 @@ function setLanguage() {
     else responseViews.delete(node);
   }
   if (bootstrapData) {
-    $('mode-label').textContent = t(bootstrapData.provider === 'stub' ? 'demo' : 'deepseek');
+    $('mode-label').textContent = !bootstrapData.provider ? (language === 'zh' ? '请在主站登录后使用观影助手。' : 'Sign in on the cinema website to use the assistant.') : t(bootstrapData.provider === 'stub' ? 'demo' : 'deepseek');
     $('data-note').textContent = t(bootstrapData.data_source === 'mock' ? 'mock_data' : 'live_data');
     const district = $('district').value;
     const filmId = $('film_query').selectedOptions[0]?.dataset.filmId;
@@ -272,6 +272,23 @@ async function sendMessage(message) {
 }
 async function loadSession() {
   const response = await fetch(`/api/ai/session?locale=${language}`, { credentials: 'same-origin' });
+  if (response.status === 403) {
+    window.location.reload();
+    return;
+  }
+  if (response.status === 401 || response.status === 503) {
+    bootstrapData = await api('/api/catalog/options');
+    $('chat-form').hidden = true;
+    $('reset').hidden = true;
+    document.querySelector('.suggestions').hidden = true;
+    $('date').value = bootstrapData.today;
+    setLanguage();
+    if (response.status === 503) {
+      const data = await response.json();
+      showError(data.error?.message || data.reply);
+    }
+    return;
+  }
   if (!response.ok) throw new Error(t('network'));
   const result = await response.json();
   bootstrapData = result.data ?? result;

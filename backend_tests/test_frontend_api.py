@@ -315,6 +315,8 @@ def test_booking_pages_filters_totals_and_own_branch(env):
     assert exact["total"] == 1
     title = staff.get("/api/staff/bookings?q=Journey").json["data"]
     assert title["total"] == 2
+    localized = staff.get("/api/staff/bookings", query_string={"q": "城市之外"}).json["data"]
+    assert localized["items"] == title["items"]
     assert staff.get("/api/staff/bookings?q=%25%25").json["data"]["total"] == 0
     assert staff.get("/api/staff/bookings?page_size=101").status_code == 400
     assert staff.get("/api/staff/bookings?page=0").status_code == 400

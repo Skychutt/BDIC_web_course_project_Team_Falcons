@@ -2,7 +2,7 @@ import secrets
 from functools import wraps
 from flask import Blueprint, g, jsonify, request, session
 from .core import *
-from . import auth, booking, catalog, management, platform
+from . import auth, booking, catalog, management, platform, registration
 from .seating import auditorium_layout
 
 api = Blueprint("api", __name__, url_prefix="/api")
@@ -51,19 +51,29 @@ def csrf():
     return output({"csrf_token": session["csrf"]})
 
 
+@api.post("/auth/register/code")
+def registration_code():
+    return output(registration.send_code(body(), request.remote_addr or "unknown"), 201)
+
+
+def start_session(user):
+    session.clear()
+    session["user_id"] = str(user["id"])
+    session["csrf"] = secrets.token_urlsafe(32)
+    session.permanent = True
+    return session["csrf"]
+
+
 @api.post("/auth/register")
 def register():
-    return output(auth.register(body(), key()), 201)
+    result = auth.register(body(), key())
+    return output({**result, "csrf_token": start_session(result["user"])}, 201)
 
 
 @api.post("/auth/login")
 def login():
     user = auth.login(body())
-    session.clear()
-    session["user_id"] = str(user["id"])
-    session["csrf"] = secrets.token_urlsafe(32)
-    session.permanent = True
-    return output({"user": user, "csrf_token": session["csrf"]})
+    return output({"user": user, "csrf_token": start_session(user)})
 
 
 @api.post("/auth/logout")
@@ -102,7 +112,8 @@ def cinemas():
         return output(
             rows(
                 c,
-                "SELECT id,district_id,name,brand,address,latitude,longitude,coordinate_system FROM cinemas WHERE is_active=1 AND (:d IS NULL OR district_id=:d) ORDER BY name",
+                "SELECT id,district_id,name,brand,address,latitude,longitude,coordinate_system FROM cinemas WHERE is_active=1 AND (:d IS NULL OR district_id=:d) AND (:cid IS NULL OR id=:cid) ORDER BY name",
+                cid=g.actor["staff_cinema_id"] if g.actor and g.actor["role"] == "STAFF" else None,
                 d=did,
             )
         )
@@ -145,7 +156,10 @@ def rating(fid):
 @api.get("/screenings")
 def screenings():
     with db().connect() as c:
-        return output(catalog.search(c, request.args.to_dict()))
+        filters = request.args.to_dict()
+        if g.actor and g.actor["role"] == "STAFF":
+            filters["cinema_id"] = g.actor["staff_cinema_id"]
+        return output(catalog.search(c, filters))
 
 
 @api.get("/screenings/<int:sid>/seats")
@@ -157,11 +171,15 @@ def seatmap(sid):
 @api.get("/screenings/<int:sid>/sale-status")
 def sale_status(sid):
     with db().connect() as c:
+        if g.actor and g.actor["role"] == "STAFF":
+            branch(g.actor, get(c, "screenings", sid)["cinema_id"], c=c)
         return output({"saleable": catalog.sale_closed_reason(c, sid) is None})
 
 
 @api.post("/assistant/recommendations")
+@logged
 def recommend():
+    role(g.actor, "CUSTOMER")
     data = body()
     require(
         isinstance(data.get("filters"), dict),
