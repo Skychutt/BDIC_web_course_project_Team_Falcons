@@ -1,24 +1,25 @@
 import { esc, money, dateTime } from "./ui.js";
+import { tx } from "./locale.js";
 
-const statuses = {
-  PUBLISHED: "Published",
-  CANCELLED: "Cancelled",
-  CONFIRMED: "Confirmed",
-  RESCHEDULED: "Rescheduled",
-  CINEMA_CANCELLED: "Cinema cancellation",
-  CUSTOMER_CANCELLED: "Customer refunded",
-  PENDING: "Pending refund",
-  FAILED: "Needs retry",
-  SUCCEEDED: "Completed",
-  STANDARD: "Standard",
-  STUDENT: "Student",
+const statuses = () => ({
+  PUBLISHED: tx("Published", "已发布"),
+  CANCELLED: tx("Cancelled", "已取消"),
+  CONFIRMED: tx("Confirmed", "已确认"),
+  RESCHEDULED: tx("Rescheduled", "已改签"),
+  CINEMA_CANCELLED: tx("Cinema cancellation", "影院取消"),
+  CUSTOMER_CANCELLED: tx("Customer refunded", "顾客已退票"),
+  PENDING: tx("Pending refund", "退款处理中"),
+  FAILED: tx("Needs retry", "待重试"),
+  SUCCEEDED: tx("Completed", "已完成"),
+  STANDARD: tx("Standard", "标准厅"),
+  STUDENT: tx("Student", "学生票"),
   IMAX: "IMAX",
-  DOLBY_CINEMA: "Dolby Cinema",
-  ONLINE: "Online",
-  COUNTER: "Counter",
-};
+  DOLBY_CINEMA: tx("Dolby Cinema", "杜比影院"),
+  ONLINE: tx("Online", "线上"),
+  COUNTER: tx("Counter", "柜台"),
+});
 const status = (value) =>
-  `<span class="badge status ${esc(value)}">${esc(statuses[value] || value)}</span>`;
+  `<span class="badge status ${esc(value)}">${esc(statuses()[value] || value)}</span>`;
 const rowsOf = (value) => (Array.isArray(value) ? value : value?.items || []);
 const input = (label, name, value = "", type = "text", extra = "") =>
   `<label class="field"><span>${esc(label)}</span><input name="${esc(name)}" type="${type}" value="${esc(value ?? "")}" ${extra}></label>`;
@@ -28,26 +29,26 @@ const select = (label, name, options, value = "", extra = "") =>
   `<label class="field"><span>${esc(label)}</span><select name="${esc(name)}" aria-label="${esc(label)}" ${extra}>${options.map(([id, title]) => `<option value="${esc(id)}" ${String(id) === String(value) ? "selected" : ""}>${esc(title)}</option>`).join("")}</select></label>`;
 const button = (text, action, id = "", kind = "secondary") =>
   `<button type="button" class="button ${kind}" data-act="${action}" data-id="${esc(id)}">${text}</button>`;
-const table = (head, rows, fallback = "No records yet") =>
+const table = (head, rows, fallback) =>
   rows.length
     ? `<div class="table-wrap"><table class="table"><thead><tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`
-    : `<div class="empty"><strong>${esc(fallback)}</strong><p class="muted">Records will appear here after the relevant activity.</p></div>`;
+    : `<div class="empty"><strong>${esc(fallback || tx("No records yet", "暂无记录"))}</strong><p class="muted">${tx("Records will appear here after the relevant activity.", "有相关操作后，记录会出现在这里。")}</p></div>`;
 const alertBox = (text) => `<div class="notice">${esc(text)}</div>`;
 const beijingNow = () =>
   new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 16);
 const zoned = (value) => {
   if (!/^\d{4}-\d\d-\d\dT\d\d:\d\d$/.test(value))
-    throw new Error("Choose a valid date and time in Beijing time.");
+    throw new Error(tx("Choose a valid date and time in Beijing time.", "请选择有效的北京时间。"));
   return `${value}:00+08:00`;
 };
 const fen = (value) => {
   const match = /^(\d{1,7})(?:\.(\d{1,2}))?$/.exec(String(value).trim());
   if (!match)
-    throw new Error("Enter a positive fare with at most two decimal places.");
+    throw new Error(tx("Enter a positive fare with at most two decimal places.", "请输入最多两位小数的正票价。"));
   const amount =
     Number(match[1]) * 100 + Number((match[2] || "").padEnd(2, "0"));
   if (amount <= 0 || amount > 10000000)
-    throw new Error("Fares must be between ¥0.01 and ¥100,000.00.");
+    throw new Error(tx("Fares must be between ¥0.01 and ¥100,000.00.", "票价须在 ¥0.01 到 ¥100,000.00 之间。"));
   return amount;
 };
 const yuan = (value) => (value == null ? "" : (Number(value) / 100).toFixed(2));
@@ -59,7 +60,10 @@ export async function renderOperations(ctx) {
   const admin = user.role === "PLATFORM_ADMIN";
   if (!admin && user.role !== "STAFF") {
     root.innerHTML = alertBox(
-      "Sign in with a cinema staff or platform administrator account to use this workspace.",
+      tx(
+        "Sign in with a cinema staff or platform administrator account to use this workspace.",
+        "请使用影院员工或平台管理员账号登录后进入工作台。",
+      ),
     );
     return;
   }
@@ -78,35 +82,35 @@ export async function renderOperations(ctx) {
   const dialogs = new Set();
   const tabs = admin
     ? [
-        ["cinemas", "Cinemas"],
-        ["films", "Films & genres"],
-        ["staff", "Staff & managers"],
-        ["turnover", "Turnover"],
+        ["cinemas", tx("Cinemas", "影院")],
+        ["films", tx("Films & genres", "影片与类型")],
+        ["staff", tx("Staff & managers", "员工与店长")],
+        ["turnover", tx("Turnover", "营业额")],
       ]
     : [
-        ["programme", "Screenings & fares"],
-        ["layouts", "Auditoriums & seats"],
-        ["counter", "Counter sales"],
-        ["bookings", "Branch bookings"],
-        ["refunds", "Refunds"],
-        ...(user.is_manager ? [["turnover", "Turnover"]] : []),
+        ["programme", tx("Screenings & fares", "场次与票价")],
+        ["layouts", tx("Auditoriums & seats", "影厅与座位")],
+        ["counter", tx("Counter sales", "柜台售票")],
+        ["bookings", tx("Branch bookings", "门店订单")],
+        ["refunds", tx("Refunds", "退款")],
+        ...(user.is_manager ? [["turnover", tx("Turnover", "营业额")]] : []),
       ];
   const cinemaName = (id) =>
-    cinemas.find((c) => String(c.id) === String(id))?.name || "Your cinema";
+    cinemas.find((c) => String(c.id) === String(id))?.name || tx("Your cinema", "你的影院");
   const filmName = (id) =>
     films.find((f) => String(f.id) === String(id))?.title ||
-    `Film ${short(id)}`;
+    `${tx("Film", "影片")} ${short(id)}`;
   const screenName = (id) =>
     screens.find((s) => String(s.id) === String(id))?.name ||
-    `Auditorium ${short(id)}`;
+    `${tx("Auditorium", "影厅")} ${short(id)}`;
   const districtName = (id) =>
-    districts.find((d) => String(d.id) === String(id))?.name || "Not set";
-  root.innerHTML = `<div class="page-heading"><div><p class="eyebrow">${admin ? "PLATFORM CONSOLE" : "CINEMA WORKSPACE"}</p><h1>${admin ? "Platform management" : "Cinema workspace"}</h1><p class="muted">${admin ? "Manage the shared catalogue, cinemas and staff, and review branch settlements." : `${esc(cinemaName(user.staff_cinema_id))} · ${user.is_manager ? "Manager" : "Staff"} · All times are Beijing time`}</p></div></div><nav class="tabs" aria-label="Operations navigation">${tabs.map(([id, label]) => `<button class="tab ${id === currentTab ? "active" : ""}" data-tab="${id}" type="button">${label}</button>`).join("")}</nav><div class="operations-body stack" aria-live="polite"></div>`;
+    districts.find((d) => String(d.id) === String(id))?.name || tx("Not set", "未设置");
+  root.innerHTML = `<div class="page-heading"><div><p class="eyebrow">${admin ? tx("PLATFORM CONSOLE", "平台控制台") : tx("CINEMA WORKSPACE", "影院工作台")}</p><h1>${admin ? tx("Platform management", "平台管理") : tx("Cinema workspace", "影院工作台")}</h1><p class="muted">${admin ? tx("Manage the shared catalogue, cinemas and staff, and review branch settlements.", "管理共享片单、影院和员工，并查看门店结算。") : `${esc(cinemaName(user.staff_cinema_id))} · ${user.is_manager ? tx("Manager", "店长") : tx("Staff", "员工")} · ${tx("All times are Beijing time", "时间均为北京时间")}`}</p></div></div><nav class="tabs" aria-label="${tx("Operations navigation", "运营导航")}">${tabs.map(([id, label]) => `<button class="tab ${id === currentTab ? "active" : ""}" data-tab="${id}" type="button">${label}</button>`).join("")}</nav><div class="operations-body stack" aria-live="polite"></div>`;
   const content = root.querySelector(".operations-body");
   const errorText = (err) =>
     err?.userMessage ||
     err?.message ||
-    "The action could not be completed. Please try again.";
+    tx("The action could not be completed. Please try again.", "操作未能完成，请重试。");
   function bindActions(container, handler) {
     container.onclick = (event) => {
       const target = event.target.closest("[data-act]");
@@ -148,18 +152,22 @@ export async function renderOperations(ctx) {
     });
   }
   function dialog(title, body) {
+    const trigger = document.activeElement;
+    const titleId = `operations-dialog-title-${dialogs.size + 1}`;
     const d = document.createElement("dialog");
     d.className = "modal-dialog operations-dialog";
-    d.setAttribute("aria-label", title);
-    d.innerHTML = `<div class="panel-header"><h2>${esc(title)}</h2><button type="button" class="button ghost" data-close aria-label="Close dialog">Close ×</button></div><div class="stack">${body}</div>`;
+    d.setAttribute("aria-labelledby", titleId);
+    d.innerHTML = `<div class="panel-header"><h2 id="${titleId}">${esc(title)}</h2><button type="button" class="button ghost" data-close aria-label="${tx("Close dialog", "关闭对话框")}">${tx("Close ×", "关闭 ×")}</button></div><div class="stack">${body}</div>`;
     document.body.append(d);
     dialogs.add(d);
     d.querySelector("[data-close]").onclick = () => d.close();
     d.addEventListener("close", () => {
       dialogs.delete(d);
       d.remove();
+      if (trigger?.isConnected) trigger.focus({ preventScroll: true });
     });
     d.showModal();
+    d.querySelector("[data-close]")?.focus({ preventScroll: true });
     return d;
   }
   const formEnd = (label = "Save", kind = "") =>
