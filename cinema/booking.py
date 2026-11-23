@@ -565,6 +565,12 @@ def checkout(actor, body, key):
             c, "SELECT * FROM wallets WHERE customer_id=:u FOR UPDATE", u=h["owner_id"]
         )
         require(
+            w is not None,
+            "WALLET_MISSING",
+            "Customer wallet is unavailable",
+            409,
+        )
+        require(
             w["balance_minor"] >= q["amount_due_minor"],
             "INSUFFICIENT_BALANCE",
             "Wallet balance is insufficient",
