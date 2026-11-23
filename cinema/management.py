@@ -401,9 +401,19 @@ def cancel_confirm(actor, sid, data, key):
         at = now()
         for b in value["bookings"]:
             upd(c, "bookings", b["id"], status="CINEMA_CANCELLED")
-            w = one(c, "SELECT id FROM wallets WHERE customer_id=:u", u=b["owner_id"])
             amount = b["net_ticket_minor"] + b["cumulative_fee_minor"]
             if amount:
+                w = one(
+                    c,
+                    "SELECT id FROM wallets WHERE customer_id=:u",
+                    u=b["owner_id"],
+                )
+                require(
+                    w is not None,
+                    "WALLET_MISSING",
+                    "Customer wallet is unavailable",
+                    409,
+                )
                 ins(
                     c,
                     "refunds",
