@@ -272,6 +272,34 @@ try {
   }
   assert.deepEqual(errors, []);
   console.log("PASS quote and hold survive language switch, payment opens a downloadable Chinese ticket, account/refund render in Chinese");
+
+  await page.goto(`${base}/#/seats/${sid}?seat_ids=${first.id}`);
+  await page.locator("#create-hold").click();
+  await page.locator("#change-seats").click();
+  await page.locator("#create-hold").waitFor();
+  assert.equal(new URL(page.url()).hash, `#/seats/${sid}?seat_ids=${first.id}&party_size=1`);
+
+  await page.locator("#create-hold").click();
+  await page.locator("#quote-form").waitFor();
+  const holdId = new URLSearchParams(new URL(page.url()).hash.split("?")[1]).get("hold_id");
+  const draftKey = `falcons.checkout.${fixture.ids.accounts["customer@cinema.test"]}.${sid}`;
+  assert.equal(await page.evaluate(key => JSON.parse(sessionStorage.getItem(key)).hold_id, draftKey), holdId);
+  await page.route(`**/api/holds/${holdId}`, async route => {
+    const response = await route.fetch();
+    await page.locator(".review-film-grid").waitFor();
+    await route.fulfill({ response });
+  }, { times: 1 });
+  const releasing = page.waitForRequest(req => req.method() === "DELETE" && req.url().endsWith("/holds/" + holdId));
+  await page.locator("#change-seats").click();
+  await releasing;
+  await page.locator('#main-nav a[href="#/reviews"]').click();
+  await page.waitForFunction(key => sessionStorage.getItem(key) === null, draftKey);
+  assert.equal(new URL(page.url()).hash, "#/reviews");
+  assert.ok(await page.locator(".review-film-grid").isVisible());
+  const afterRelease = await api(context, `/screenings/${sid}/seats`);
+  assert.equal(afterRelease.seats.find(seat => seat.id === first.id).state, "AVAILABLE");
+  assert.deepEqual(errors, []);
+  console.log("PASS releasing seats completes without redirecting a customer who has opened reviews");
 } finally {
   await browser.close();
 }

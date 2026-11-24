@@ -670,9 +670,12 @@ export async function renderSeats(ctx, sid) {
     }
   }
   async function release() {
+    const holdId = state.hold.id;
+    let expectedHash = location.hash;
     try {
-      await api.request("/holds/" + state.hold.id, { method: "DELETE" });
-      sessionStorage.removeItem(draftKey);
+      await api.request("/holds/" + holdId, { method: "DELETE" });
+      if (readDraft(draftKey)?.hold_id === holdId) sessionStorage.removeItem(draftKey);
+      if (!alive || location.hash !== expectedHash) return;
       state.hold = null;
       state.quote = null;
       state.phase = "choose";
@@ -681,9 +684,13 @@ export async function renderSeats(ctx, sid) {
       if (state.source) params.set("source_booking_id", state.source.id);
       else params.delete("source_booking_id");
       history.replaceState(null, "", "#/seats/" + sid + "?" + params);
-      map = await api.request("/screenings/" + sid + "/seats");
+      expectedHash = location.hash;
+      const nextMap = await api.request("/screenings/" + sid + "/seats");
+      if (!alive || location.hash !== expectedHash) return;
+      map = nextMap;
       render();
     } catch (e) {
+      if (!alive || location.hash !== expectedHash) return;
       state.error = e;
       render();
     }
