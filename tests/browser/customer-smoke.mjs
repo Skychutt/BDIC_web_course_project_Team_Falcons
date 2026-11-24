@@ -98,6 +98,13 @@ try {
     .slice(0, 2)
     .map((s) => s.id);
   assert.equal(seatIds.length, 2);
+  const couponList = "**/api/me/coupons*";
+  let couponReads = 0;
+  let couponsOffline = true;
+  await page.route(couponList, route => {
+    couponReads++;
+    return couponsOffline ? route.abort("failed") : route.continue();
+  });
   await check(
     "Choose actual seats, hold them, preserve deadline on refresh",
     async () => {
@@ -105,13 +112,19 @@ try {
         .locator(`.session-button[href^="#/seats/${first.id}?"]`)
         .click();
       await page.locator(".seat-grid").waitFor();
+      assert.equal(couponReads, 0, "Selecting seats does not require the coupon list");
       while (await page.locator("[data-seat][aria-pressed=true]").count())
         await page.locator("[data-seat][aria-pressed=true]").first().click();
       for (const id of seatIds)
         await page.locator(`[data-seat="${id}"]`).click();
       await shot("seat-selection-desktop");
       await page.locator("#create-hold").click();
-      await page.locator("#quote-form").waitFor();
+      await page.locator("#retry-coupons").waitFor();
+      couponsOffline = false;
+      const reloadedCoupons = page.waitForResponse(r => new URL(r.url()).pathname === "/api/me/coupons" && r.ok());
+      await page.locator("#retry-coupons").click();
+      await reloadedCoupons;
+      couponsOffline = true;
       const holdId = new URLSearchParams(page.url().split("?")[1]).get(
         "hold_id",
       );
@@ -121,7 +134,7 @@ try {
         (h) => h.id === holdId,
       );
       await page.reload();
-      await page.locator("#quote-form").waitFor();
+      await page.locator("#retry-coupons").waitFor();
       const after = (await api("/me/holds?page_size=100")).items.find(
         (h) => h.id === holdId,
       );
@@ -170,10 +183,13 @@ try {
         locked,
         "All checkout-changing controls must lock during payment",
       );
+      const readsBeforeRecovery = couponReads;
       await page.reload();
       await page
         .getByRole("heading", { name: "See you at the cinema." })
         .waitFor();
+      assert.equal(couponReads, readsBeforeRecovery, "Lost receipt recovery is independent of coupons");
+      await page.unroute(couponList);
       assert.equal(await page.locator(".seat-tag").count(), 2);
       assert.ok(paymentKeys[0]);
       assert.deepEqual(paymentKeys, [paymentKeys[0], paymentKeys[0]]);

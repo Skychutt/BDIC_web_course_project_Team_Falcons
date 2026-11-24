@@ -29,11 +29,11 @@ function readDraft(key) {
 const counterSalesUrl = "#/operations?tab=counter";
 const seatTag = (s) => tx(`R${s.row_no} · S${s.seat_no}`, `${s.row_no} 排 ${s.seat_no} 座`);
 const fareLabel = (f) => f === "STUDENT" ? tx("Student", "学生票") : tx("Standard", "标准票");
-async function allRows(api, path) {
+async function allRows(api, path, signal) {
   const result = [];
   let page = 1;
   while (true) {
-    const data = await api.request(`${path}?page=${page}&page_size=100`);
+    const data = await api.request(`${path}?page=${page}&page_size=100`, { signal });
     result.push(...data.items);
     if (result.length >= data.total || !data.items.length) break;
     page++;
@@ -48,7 +48,7 @@ export async function renderSeats(ctx, sid) {
     interval, saleTimer, renderedOnSale, renderedChangeClosed;
   let saleCheck, mapRefresh, holdRefresh, closeTicket;
   let locatedSeatId, locateTimer;
-  let pendingLanguage = false;
+  let pendingRender = false;
   let map = await api.request(
     "/screenings/" + encodeURIComponent(sid) + "/seats",
   );
@@ -81,10 +81,8 @@ export async function renderSeats(ctx, sid) {
   const customer = user?.role === "CUSTOMER";
   let holdId = params.get("hold_id");
   let coupons = [];
+  let couponStatus = "idle";
   if (customer) {
-    coupons = (await allRows(api, "/me/coupons")).filter(
-      (c) => c.cinema_id === map.screening.cinema_id && c.status === "AVAILABLE",
-    );
     const pending = draft?.hold_id && api.pending?.("pay:" + draft.hold_id);
     if (pending && draft.quote) {
       holdId = draft.hold_id;
@@ -204,7 +202,7 @@ export async function renderSeats(ctx, sid) {
       controls.forEach(([el, disabled]) => {
         if (el.isConnected) el.disabled = disabled;
       });
-      if (pendingLanguage) updateLanguage();
+      if (pendingRender) requestRender();
       else tick();
     }
   }
@@ -447,13 +445,13 @@ export async function renderSeats(ctx, sid) {
       root.querySelector(".seat-located")?.classList.remove("seat-located");
     }, 2000);
   }
-  function updateLanguage() {
+  function requestRender() {
     if (!alive) return;
     if (state.working) {
-      pendingLanguage = true;
+      pendingRender = true;
       return;
     }
-    pendingLanguage = false;
+    pendingRender = false;
 
     render();
   }
@@ -499,6 +497,7 @@ export async function renderSeats(ctx, sid) {
     }
     const isHeld = ["held", "quoted"].includes(state.phase);
     const source = state.source;
+    if (isHeld && !source && couponStatus === "idle") void loadCoupons();
     const previousMap = root.querySelector(".seat-scroll");
     const mapScroll = previousMap ? { left: previousMap.scrollLeft, top: previousMap.scrollTop } : null;
     root.innerHTML = `<div class="breadcrumb"><a href="#/discover${source ? "?source_booking_id=" + esc(source.id) : ""}">${tx("Showtimes", "场次")}</a>${icon("chevron")}<span>${esc(filmTitle(film))}</span></div><div class="booking-progress"><span class="${state.phase === "choose" ? "active" : ""}"><b>1</b>${tx("Choose seats", "选座")}</span><i class="rule"></i><span class="${isHeld ? "active" : ""}"><b>2</b>${tx("Review & confirm", "核对并确认")}</span><i class="rule"></i><span><b>3</b>${tx("Your tickets", "电子影票")}</span></div><div class="page-heading"><div><p class="eyebrow">${source ? tx("RESCHEDULE YOUR WHOLE BOOKING", "整单改签") : tx("A GOOD NIGHT STARTS WITH A GOOD SEAT", "选择座位")}</p><h1>${state.phase === "recover" ? tx("Let’s confirm your booking.", "正在确认订单") : isHeld ? tx("Your seats are on hold.", "座位已为你保留") : tx("Choose your seats.", "请选择座位")}</h1></div><span class="live-note">${dateTime(s.starts_at)} · ${tx("Beijing time", "北京时间")}</span></div>${source ? notice(tx(
@@ -598,6 +597,10 @@ export async function renderSeats(ctx, sid) {
           render();
         }),
     );
+    root.querySelector("#retry-coupons")?.addEventListener("click", () => {
+      void loadCoupons();
+      render();
+    });
     root.querySelector("#coupon")?.addEventListener("change", (e) => {
       state.coupon_id = e.target.value || null;
       state.quote = null;
@@ -646,6 +649,29 @@ export async function renderSeats(ctx, sid) {
       ? tx(`Pay ${money(amount)} & change`, `支付 ${money(amount)} 并改签`)
       : tx(`Pay ${money(amount)} & book`, `支付 ${money(amount)} 并购票`);
   }
+  async function loadCoupons() {
+    couponStatus = "loading";
+    try {
+      const rows = await allRows(api, "/me/coupons", AbortSignal.timeout(8000));
+      coupons = rows.filter(c => c.cinema_id === map.screening.cinema_id && c.status === "AVAILABLE");
+      couponStatus = "ready";
+    } catch {
+      couponStatus = "error";
+    }
+    if (state.phase === "held" || state.phase === "quoted") requestRender();
+  }
+  function couponField() {
+    const id = state.coupon_id;
+    const savedOption = id && !coupons.some(c => c.id === id)
+      ? `<option selected value="${esc(id)}">${tx("Previously selected coupon", "此前选择的优惠券")} · ${esc(id.slice(-6))}</option>` : "";
+    const options = coupons.map(c => `<option value="${esc(c.id)}" ${id === c.id ? "selected" : ""}>${tx("50% off · coupon", "五折券 · 编号")} ${esc(c.id.slice(-6))}</option>`);
+    const hint = couponStatus === "loading" ? tx("Loading coupons…", "正在加载优惠券…")
+      : couponStatus === "error" ? tx("Coupons could not be loaded. You can retry or review the price with your current selection.", "优惠券暂时无法加载。可重试，也可按当前选择核价。")
+      : tx("Only unused coupons from this cinema apply.", "仅可使用本影院的未使用优惠券。");
+    return `<label class="field" style="margin:18px 0"><span>${tx("Coupon", "优惠券")}</span>
+      <select id="coupon"><option value="">${tx("No coupon", "不使用优惠券")}</option>${savedOption}${options.join("")}</select>
+      <small role="status">${hint}</small></label>${couponStatus === "error" ? `<button id="retry-coupons" type="button" class="button secondary small">${tx("Retry coupons", "重新加载优惠券")}</button>` : ""}`;
+  }
   function controls() {
     if (state.phase === "recover")
       return `${notice(state.allowPaymentRetry ? tx("No receipt yet. We’ll keep checking. You can also retry the same payment while the hold is active.", "暂未收到回执，系统会继续查询。占座有效期间，你也可以重试同一笔付款。") : tx("Checking your payment. You can find confirmed tickets in your account.", "正在查询付款结果，已确认的影票可在「我的影票」查看。"), "warning")}${paymentSummary()}<button class="button wide" id="check-result">${tx("Check payment result", "查询付款结果")}</button>${state.allowPaymentRetry && onSale() && remaining() > 0 ? `<button class="button ghost wide" id="pay-now">${tx("Retry the same payment", "重试同一笔付款")}</button>` : ""}<a class="button ghost wide" href="#/account">${tx("View my tickets", "查看我的影票")}</a>`;
@@ -674,7 +700,7 @@ export async function renderSeats(ctx, sid) {
       })
       .join(
         "",
-      )}</div>${state.source ? `<p class="fine-print">${tx("Your original ticket mix and discount are carried forward.", "改签沿用原票种和折扣。")}</p>` : `<label class="field" style="margin:18px 0"><span>${tx("Coupon", "优惠券")}</span><select id="coupon"><option value="">${tx("No coupon", "不使用优惠券")}</option>${coupons.map((c) => `<option value="${esc(c.id)}" ${state.coupon_id === c.id ? "selected" : ""}>${tx("50% off · coupon", "五折券 · 编号")} ${esc(c.id.slice(-6))}</option>`).join("")}</select><small>${tx("Only unused coupons from this cinema apply.", "仅可使用本影院的未使用优惠券。")}</small></label>`}<p class="fine-print">${tx("Student eligibility is checked at admission.", "入场时需出示有效学生证明。")}</p>${state.phase === "quoted" ? `${paymentSummary()}<button class="button wide" type="button" id="pay-now">${payLabel()}${icon("arrow")}</button><p class="fine-print">${state.source ? tx("Only a successful change releases your old tickets.", "改签成功后才会释放原座位。") : tx("Payment uses your demo wallet balance.", "本次使用演示钱包余额付款。")} ${tx("The server verifies the current price and seat hold again.", "确认时会再次核对票价和占座状态。")}</p>` : `<button class="button wide" type="submit">${tx("Review final price", "核对最终价格")} ${icon("arrow")}</button>`}</form><button class="button ghost wide small" id="change-seats" style="margin-top:12px">${tx("Release hold & change seats", "释放占座并重新选座")}</button>`;
+      )}</div>${state.source ? `<p class="fine-print">${tx("Your original ticket mix and discount are carried forward.", "改签沿用原票种和折扣。")}</p>` : couponField()}<p class="fine-print">${tx("Student eligibility is checked at admission.", "入场时需出示有效学生证明。")}</p>${state.phase === "quoted" ? `${paymentSummary()}<button class="button wide" type="button" id="pay-now">${payLabel()}${icon("arrow")}</button><p class="fine-print">${state.source ? tx("Only a successful change releases your old tickets.", "改签成功后才会释放原座位。") : tx("Payment uses your demo wallet balance.", "本次使用演示钱包余额付款。")} ${tx("The server verifies the current price and seat hold again.", "确认时会再次核对票价和占座状态。")}</p>` : `<button class="button wide" type="submit">${tx("Review final price", "核对最终价格")} ${icon("arrow")}</button>`}</form><button class="button ghost wide small" id="change-seats" style="margin-top:12px">${tx("Release hold & change seats", "释放占座并重新选座")}</button>`;
   }
   function tick() {
     if (!alive || state.phase === "complete") return;
@@ -899,7 +925,7 @@ export async function renderSeats(ctx, sid) {
       };
     }
   }
-  ctx.updateLanguage = updateLanguage;
+  ctx.updateLanguage = requestRender;
   render();
   interval = setInterval(tick, 1000);
   const salePoll = setInterval(checkVisibleSale, 5000);
