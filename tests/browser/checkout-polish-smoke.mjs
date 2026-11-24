@@ -42,6 +42,41 @@ async function language(code, label) {
   await page.getByRole("heading", { name: label, exact: true }).waitFor();
 }
 
+async function checkFareMixAfterChangingSeats() {
+  const checkout = await context.newPage();
+  try {
+    const show = fixture.ids.screenings[1];
+    const map = await api(context, `/screenings/${show}/seats`);
+    const [replacement, retained, released] = map.seats.filter(s => s.state === "AVAILABLE");
+    const fares = Object.fromEntries(map.fares.map(f => [f.fare_type, f.price_minor]));
+    const expected = fares.STANDARD + fares.STUDENT;
+    await checkout.goto(`${base}/#/seats/${show}?party_size=2&seat_ids=${retained.id},${released.id}`);
+    await checkout.locator("#create-hold").click();
+    await checkout.locator(`[data-fare="${released.id}"]`).selectOption("STUDENT");
+    await checkout.locator("#change-seats").click();
+    await checkout.locator("#party-size").waitFor();
+    await checkout.locator(`[data-seat="${released.id}"]`).click();
+    await checkout.locator(`[data-seat="${replacement.id}"]`).click();
+    await checkout.locator(`[data-seat="${replacement.id}"][aria-pressed=true]`).waitFor();
+    for (const reload of [false, true]) {
+      if (reload) await checkout.reload();
+      assert.ok((await checkout.locator(".summary-total strong").innerText()).includes((expected / 100).toFixed(2)),
+        "Changing seats must preserve the student fare in the estimate");
+    }
+    await checkout.locator("#create-hold").click();
+    assert.equal(await checkout.locator(`[data-fare="${retained.id}"]`).inputValue(), "STANDARD");
+    assert.equal(await checkout.locator(`[data-fare="${replacement.id}"]`).inputValue(), "STUDENT");
+    const quoted = checkout.waitForResponse(r => r.url().endsWith("/quote") && r.ok());
+    await checkout.locator("#quote-form [type=submit]").click();
+    assert.equal((await (await quoted).json()).data.amount_due_minor, expected);
+    await checkout.locator("#change-seats").click();
+    await checkout.locator("#party-size").waitFor();
+    console.log("PASS swapping seats preserves individual fares, the estimate and the server quote across reload");
+  } finally {
+    await checkout.close();
+  }
+}
+
 async function checkCheckoutDeadlines() {
   const manager = await browser.newContext();
   // Earlier expiry checks advance the main context's clock. Use real time for the fee change.
@@ -564,6 +599,7 @@ try {
     await checkout.close();
   }
   await checkCheckoutDeadlines();
+  await checkFareMixAfterChangingSeats();
 } finally {
   await browser.close();
 }

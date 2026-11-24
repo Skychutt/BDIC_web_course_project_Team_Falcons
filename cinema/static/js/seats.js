@@ -262,15 +262,29 @@ export async function renderSeats(ctx, sid) {
   }
   const searchFilters = showtimeFilters(params, state.source);
   const searchFare = searchFilters.fare_type === "student" ? "STUDENT" : "STANDARD";
-  const fareMix = (params.get("fare_mix") || "").split(",");
-  const retryFares = !state.source && fareMix.length <= 12 && fareMix.every(f => f === "STANDARD" || f === "STUDENT")
-    ? fareMix : [];
+  function savedFareMix() {
+    const mix = (params.get("fare_mix") || "").split(",");
+    return !state.source && mix.length <= 12 && mix.every(f => f === "STANDARD" || f === "STUDENT") ? mix : [];
+  }
   function tickets() {
     const original = state.source?.tickets || [];
-    return selectedSeats().map((seat, i) => ({
-      seat_id: seat.id,
-      fare_type: state.fares[seat.id] || original[i]?.fare_type || retryFares[i] || searchFare,
-    }));
+    const mix = savedFareMix();
+    const seatIds = (params.get("fare_seat_ids") || "").split(",");
+    const retained = new Map();
+    const unassigned = [];
+    for (const [i, fare] of mix.entries()) {
+      const id = seatIds[i];
+      if (state.selected.has(id)) retained.set(id, fare);
+      else unassigned.push(fare);
+    }
+    return selectedSeats().map((seat, i) => {
+      // Keep the fare on each retained seat and move the remaining fares to replacements.
+      const preferred = retained.get(seat.id) || unassigned.shift();
+      return {
+        seat_id: seat.id,
+        fare_type: state.fares[seat.id] || original[i]?.fare_type || preferred || searchFare,
+      };
+    });
   }
   function save() {
     if (state.hold)
@@ -650,7 +664,7 @@ export async function renderSeats(ctx, sid) {
         // Expiry cleanup can remove the seat allocations before this page is reopened.
         const savedTickets = draft?.hold_id === state.hold.id ? draft.tickets : [];
         const previous = state.selected.size ? tickets() : savedTickets;
-        const fares = previous?.length ? previous.map(ticket => ticket.fare_type) : retryFares;
+        const fares = previous?.length ? previous.map(ticket => ticket.fare_type) : savedFareMix();
         if (fares.some(fare => fare !== searchFare)) next.set("fare_mix", fares.join(","));
       }
       sessionStorage.removeItem(draftKey);
@@ -831,6 +845,15 @@ export async function renderSeats(ctx, sid) {
       }
       if (readDraft(draftKey)?.hold_id === holdId) sessionStorage.removeItem(draftKey);
       if (!alive || location.hash !== expectedHash) return;
+      if (!state.source) {
+        const previous = tickets();
+        const mix = previous.map(ticket => ticket.fare_type);
+        if (mix.some(fare => fare !== searchFare)) params.set("fare_mix", mix.join(","));
+        else params.delete("fare_mix");
+        if (new Set(mix).size > 1) params.set("fare_seat_ids", previous.map(ticket => ticket.seat_id).join(","));
+        else params.delete("fare_seat_ids");
+        state.fares = {};
+      }
       state.hold = null;
       state.quote = null;
       state.phase = "choose";
