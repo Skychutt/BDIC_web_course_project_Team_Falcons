@@ -62,6 +62,21 @@ def purchase(env, index=0, name="customer"):
     return booking.checkout(actor(env, name), {"quote_token": quote["quote_token"]}, key())
 
 
+def test_customer_hold_detail_matches_history_through_expiry(env):
+    hold, _ = prepare_quote(env)
+    path = f"/api/me/holds/{hold['hold_id']}"
+    customer = client(env, "customer")
+    for at, status in ((env["clock"][0], "ACTIVE"), (hold["expires_at"], "EXPIRED")):
+        env["clock"][0] = at
+        detail = customer.get(path).json["data"]
+        assert detail == customer.get("/api/me/holds").json["data"]["items"][0]
+        assert detail["effective_status"] == status
+        assert detail["seat_ids"] == [str(seat) for seat in hold["seat_ids"]]
+        assert "quote_hash" not in detail and "active_customer_id" not in detail
+    assert client(env, "customer2").get(path).status_code == 404
+    assert client(env).get(path).status_code == 401
+
+
 def test_checkout_reports_missing_customer_wallet_without_writing_payment(env):
     customer = actor(env)
     _, quote = prepare_quote(env)

@@ -367,6 +367,12 @@ try {
   await page.unroute(mapUrl);
   console.log("PASS real seat conflicts preserve remaining seats and provide a filtered fallback");
 
+  const holdReads = [];
+  const trackHoldRead = request => {
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith("/api/me/holds")) holdReads.push(path);
+  };
+  page.on("request", trackHoldRead);
   await page.goto(`${base}/#/seats/${sid}?party_size=2&seat_ids=${first.id}`);
   await recommend.click();
   await page.locator(`[data-seat="${second.id}"][aria-pressed="true"]`).waitFor();
@@ -375,6 +381,12 @@ try {
   await page.locator("#quote-form").waitFor();
   await page.locator("[data-fare]").first().selectOption("STUDENT");
   const holdUrl = page.url();
+  assert.deepEqual(holdReads, []);
+  await page.reload();
+  await page.locator("#quote-form").waitFor();
+  page.off("request", trackHoldRead);
+  const resumedHold = new URLSearchParams(new URL(holdUrl).hash.split("?")[1]).get("hold_id");
+  assert.deepEqual(holdReads, [`/api/me/holds/${resumedHold}`]);
   await language("en", "Your seats are on hold.");
   assert.equal(await page.locator("[data-fare]").first().inputValue(), "STUDENT");
   assert.equal(page.url(), holdUrl);

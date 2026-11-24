@@ -294,6 +294,35 @@ def lookup_ticket(token):
         return output(ticket_card(c, bid, g.actor, request.url_root))
 
 
+def hold_details(c, h):
+    h.pop("quote_hash", None)
+    h.pop("active_customer_id", None)
+    h["seat_ids"] = [
+        s["seat_id"]
+        for s in rows(
+            c,
+            "SELECT seat_id FROM seat_allocations WHERE hold_id=:h ORDER BY seat_id",
+            h=h["id"],
+        )
+    ]
+    h["effective_status"] = (
+        "EXPIRED"
+        if h["status"] == "ACTIVE" and h["expires_at"] <= now()
+        else h["status"]
+    )
+    return h
+
+
+@api.get("/me/holds/<int:hid>")
+@logged
+def customer_hold(hid):
+    role(g.actor, "CUSTOMER")
+    with db().connect() as c:
+        h = one(c, "SELECT * FROM seat_holds WHERE id=:h AND owner_id=:u", h=hid, u=g.actor["id"])
+        require(h is not None, "NOT_FOUND", "Seat hold not found", 404)
+        return output(hold_details(c, h))
+
+
 @api.get("/me/<resource>")
 @logged
 def personal(resource):
@@ -333,22 +362,7 @@ def personal(resource):
             "n"
         ]
         if resource == "holds":
-            for h in items:
-                h.pop("quote_hash", None)
-                h.pop("active_customer_id", None)
-                h["seat_ids"] = [
-                    s["seat_id"]
-                    for s in rows(
-                        c,
-                        "SELECT seat_id FROM seat_allocations WHERE hold_id=:h ORDER BY seat_id",
-                        h=h["id"],
-                    )
-                ]
-                h["effective_status"] = (
-                    "EXPIRED"
-                    if h["status"] == "ACTIVE" and h["expires_at"] <= now()
-                    else h["status"]
-                )
+            items = [hold_details(c, h) for h in items]
         return output(
             {"items": items, "page": page, "page_size": limit, "total": total}
         )

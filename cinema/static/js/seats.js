@@ -82,7 +82,6 @@ export async function renderSeats(ctx, sid) {
   let holdId = params.get("hold_id");
   let coupons = [];
   if (customer) {
-    const holds = await allRows(api, "/me/holds");
     coupons = (await allRows(api, "/me/coupons")).filter(
       (c) => c.cinema_id === map.screening.cinema_id && c.status === "AVAILABLE",
     );
@@ -92,11 +91,17 @@ export async function renderSeats(ctx, sid) {
       state.phase = "recover";
       state.quote = draft.quote;
     }
-    const h = holds.find((h) => h.id === holdId);
-    if (holdId && !h)
-      throw new Error(
+    let h;
+    if (holdId) {
+      try {
+        if (/^\d{1,19}$/.test(holdId)) h = await api.request("/me/holds/" + holdId);
+      } catch (error) {
+        if (error.status !== 404) throw error;
+      }
+      if (!h) throw new Error(
         tx("This seat hold is unavailable for your account. Please choose seats again.", "当前账号无法使用这次占座。请重新选座。"),
       );
+    }
     if (h && h.screening_id !== sid)
       throw new Error(
         tx("This seat hold belongs to a different screening. Open the hold from My tickets to continue.", "这次占座属于其他场次。请从「我的影票」打开对应的占座。"),
