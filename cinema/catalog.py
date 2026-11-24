@@ -305,19 +305,25 @@ def search(c, filters, *, end_exclusive=False):
     )
 
 
-def sale_closed_reason(c, sid):
+def screening_sale_status(c, sid):
     # A sale and an administrative film update must agree on their commit order.
-    show = one(c, """SELECT s.status,s.starts_at,f.archived,ci.is_active
+    show = one(c, """SELECT s.status,s.starts_at,s.revision_no,f.archived,ci.is_active
         FROM screenings s JOIN films f ON f.id=s.film_id
         JOIN cinemas ci ON ci.id=s.cinema_id WHERE s.id=:sid FOR SHARE OF f""", sid=sid)
     require(show is not None, "NOT_FOUND", "screenings record not found", 404)
+    reason = None
     if show["status"] != "PUBLISHED" or show["starts_at"] <= now():
-        return "Screening is no longer on sale"
-    if show["archived"]:
-        return "This film has been archived"
-    if not show["is_active"]:
-        return "Cinema is inactive"
-    return None
+        reason = "Screening is no longer on sale"
+    elif show["archived"]:
+        reason = "This film has been archived"
+    elif not show["is_active"]:
+        reason = "Cinema is inactive"
+    return reason, show["revision_no"]
+
+
+def sale_closed_reason(c, sid):
+    reason, _ = screening_sale_status(c, sid)
+    return reason
 
 
 def seatmap(c, sid, actor=None):

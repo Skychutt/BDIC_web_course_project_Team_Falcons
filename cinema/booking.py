@@ -7,7 +7,7 @@ from flask import current_app
 from itsdangerous import BadData, URLSafeTimedSerializer
 
 from .core import *
-from .catalog import sale_closed_reason
+from .catalog import sale_closed_reason, screening_sale_status
 
 
 def signer(salt):
@@ -291,7 +291,10 @@ def payment_result(actor, hid, *, include_sale_status=False):
             status = "EXPIRED"
         result = dict(status=status)
         if include_sale_status:
-            result["saleable"] = sale_closed_reason(c, h["screening_id"]) is None
+            reason, revision = screening_sale_status(c, h["screening_id"])
+            result["saleable"] = reason is None
+            if status == "ACTIVE" and reason is None:
+                result["revision_no"] = revision
         return result
 
     return transaction(read)

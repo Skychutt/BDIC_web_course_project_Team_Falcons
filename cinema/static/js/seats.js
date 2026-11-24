@@ -330,6 +330,14 @@ export async function renderSeats(ctx, sid) {
     // A suspended tab can reach its local deadline after another tab has already paid.
     return state.hold?.status === "ACTIVE" && ["held", "quoted", "expired"].includes(state.phase);
   }
+  function discardStaleQuote(revision) {
+    if (state.phase !== "quoted" || state.quote.revision_no >= revision || payPending()) return false;
+    state.quote = null;
+    state.phase = "held";
+    state.error = { code: "QUOTE_CHANGED" };
+    save();
+    return true;
+  }
   function refreshHold() {
     if (holdRefresh) return holdRefresh;
     const hold = state.hold;
@@ -338,7 +346,11 @@ export async function renderSeats(ctx, sid) {
       .then(result => {
         if (!alive || location.hash !== hash || state.hold !== hold || state.working || !canSyncHold()) return;
         if (result.saleable === false) map.saleable = false;
-        if (applyTerminalResult(result) || !onSale()) render();
+        if (applyTerminalResult(result) || !onSale()) return render();
+        if (result.revision_no > map.screening.revision_no) {
+          if (discardStaleQuote(result.revision_no)) render();
+          return refreshMap();
+        }
       })
       .finally(() => { holdRefresh = null; });
     return holdRefresh;
@@ -429,6 +441,7 @@ export async function renderSeats(ctx, sid) {
       return;
     }
     const s = map.screening;
+    discardStaleQuote(s.revision_no);
     renderedOnSale = onSale();
     if (renderedOnSale) {
       const untilStart = Date.parse(s.starts_at) - Date.now() - offset;
@@ -701,7 +714,15 @@ export async function renderSeats(ctx, sid) {
           coupon_id: state.source ? null : state.coupon_id,
         },
       });
+      if (!alive) return;
       validateQuote(q);
+      if (q.revision_no > map.screening.revision_no) {
+        // The manager may have updated fares between the last poll and this quote.
+        const next = await api.request("/screenings/" + sid + "/seats", { signal: AbortSignal.timeout(8000) });
+        if (!alive) return;
+        map = next;
+        offset = Date.parse(next.as_of) - Date.now();
+      }
       state.quote = q;
       state.phase = "quoted";
       save();

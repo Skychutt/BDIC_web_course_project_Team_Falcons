@@ -313,8 +313,52 @@ try {
   await language("zh", "座位已为你保留");
   assert.equal(page.url(), holdUrl);
   assert.match(await page.locator("#pay-now").innerText(), /支付.*并购票/);
+  const manager = await browser.newContext();
+  const originalWallet = (await api(context, "/me/wallet")).balance_minor;
+  let revisedTotal;
+  try {
+    const csrf = (await api(manager, "/auth/csrf")).csrf_token;
+    const session = await api(manager, "/auth/login", "POST", {
+      email: "manager1@cinema.test", password: fixture.password,
+    }, csrf);
+    let revision = map.screening.revision_no;
+    for (const reload of [false, true]) {
+      const delta = reload ? -17 : 125;
+      const fares = Object.fromEntries(map.fares.map(f => [f.fare_type, f.price_minor + delta]));
+      const updated = await api(manager, `/staff/screenings/${sid}/fares`, "PUT",
+        { revision_no: revision, fares }, session.csrf_token);
+      revision = updated.revision_no;
+      const liveStatus = "**/payment-result?include_sale_status=1";
+      if (reload) {
+        await page.route(liveStatus, route => route.abort());
+        await page.reload();
+      }
+      const review = page.locator("#quote-form button[type=submit]");
+      await review.waitFor();
+      if (reload) await page.unroute(liveStatus);
+      assert.equal(await page.locator("#pay-now").count(), 0);
+      await page.getByText("票价或改签费已变化，请核对最新报价。", { exact: true }).waitFor();
+      for (const [index, fare] of ["STUDENT", "STANDARD"].entries()) {
+        const field = page.locator("[data-fare]").nth(index);
+        assert.equal(await field.inputValue(), fare);
+        await field.locator("option:checked").filter({ hasText: (fares[fare] / 100).toFixed(2) }).waitFor({ state: "attached" });
+      }
+      assert.equal(page.url(), holdUrl);
+      assert.equal((await api(context, "/me/wallet")).balance_minor, originalWallet);
+      const newQuote = page.waitForResponse(res => res.url().endsWith("/quote") && res.ok());
+      await review.click();
+      revisedTotal = fares.STUDENT + fares.STANDARD;
+      assert.equal((await (await newQuote).json()).data.amount_due_minor, revisedTotal);
+      await page.locator("#pay-now").waitFor();
+      assert.ok((await page.locator("#pay-now").innerText()).includes((revisedTotal / 100).toFixed(2)));
+    }
+  } finally {
+    await manager.close();
+  }
   await page.locator("#pay-now").click();
   await page.getByRole("heading", { name: "出票成功", exact: true }).waitFor();
+  assert.equal((await api(context, "/me/wallet")).balance_minor, originalWallet - revisedTotal);
+  console.log("PASS fare changes invalidate live and reloaded quotes; only the reconfirmed price is charged");
   assert.equal(await page.locator(".success-ticket [data-locate-seat]").count(), 0);
   await page.locator("[data-success-ticket]").click();
   const modal = page.getByRole("dialog", { name: "电子影票预览" });
