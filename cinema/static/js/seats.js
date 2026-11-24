@@ -43,7 +43,7 @@ export async function renderSeats(ctx, sid) {
   const { root, api, user, bootstrap, params, navigate, toast } = ctx;
   let alive = true,
     interval, saleTimer, renderedOnSale;
-  let saleCheck, closeTicket;
+  let saleCheck, mapRefresh, closeTicket;
   let pendingLanguage = false;
   let map = await api.request(
     "/screenings/" + encodeURIComponent(sid) + "/seats",
@@ -70,7 +70,7 @@ export async function renderSeats(ctx, sid) {
       Math.max(1, Math.trunc(Number(params.get("party_size"))) || 1),
     ),
     error: null,
-    seatConflict: false,
+    seatConflict: null,
     receipt: null,
     allowPaymentRetry: false,
   };
@@ -184,13 +184,18 @@ export async function renderSeats(ctx, sid) {
   }
   const canSelect = (seat) => seat.state === "AVAILABLE" || seat.held_by_me;
   function keepAvailableSelection() {
-    const selected = map.seats.filter(seat => state.selected.has(seat.id) && canSelect(seat));
-    state.selected = new Set(selected.map(seat => seat.id));
+    const lost = map.seats.filter(seat => state.selected.has(seat.id) && !canSelect(seat));
+    if (lost.length) {
+      for (const seat of lost) state.selected.delete(seat.id);
+      state.seatConflict = lost;
+    }
   }
   function seatConflictNotice() {
-    if (!state.seatConflict || state.phase !== "choose") return "";
+    if (!state.seatConflict || state.phase !== "choose" || !onSale()) return "";
     const needed = state.target - state.selected.size;
-    const prefix = tx("Some seats were just taken.", "部分座位刚被占用。");
+    const names = state.seatConflict.map(seatLabel).join(tx(", ", "、"));
+    const prefix = names ? tx(`No longer available: ${names}.`, `${names} 已被占用。`)
+      : tx("Some seats were just taken.", "部分座位刚被占用。");
     if (onSale() && map.seats.filter(canSelect).length >= state.target) {
       if (needed <= 0) return "";
       return notice(tx(
@@ -264,9 +269,35 @@ export async function renderSeats(ctx, sid) {
     }
     return onSale();
   }
+  function refreshMap() {
+    if (mapRefresh) return mapRefresh;
+    const previous = map;
+    const phase = state.phase;
+    const hash = location.hash;
+    mapRefresh = api.request("/screenings/" + sid + "/seats", { signal: AbortSignal.timeout(8000) })
+      .then(next => {
+        if (!alive || location.hash !== hash || state.working || state.phase !== phase || map !== previous) return;
+        // A newer sale-status check may have closed the screening while this read was pending.
+        if (!onSale() && next.saleable) return;
+        const changed = next.saleable !== previous.saleable ||
+          next.screening.revision_no !== previous.screening.revision_no ||
+          next.seats.length !== previous.seats.length ||
+          next.seats.some((seat, i) => {
+            const old = previous.seats[i];
+            return old.id !== seat.id || old.state !== seat.state || old.held_by_me !== seat.held_by_me;
+          });
+        map = next;
+        offset = Date.parse(map.as_of) - Date.now();
+        if (phase === "choose") keepAvailableSelection();
+        if (changed || renderedOnSale !== onSale()) render();
+      })
+      .finally(() => { mapRefresh = null; });
+    return mapRefresh;
+  }
   function checkVisibleSale() {
-    if (!document.hidden && onSale() && state.phase !== "complete")
-      void checkSale().catch(() => {}); // Retry on the next poll or seat click.
+    if (document.hidden || state.working || !onSale() || state.phase === "complete") return;
+    const check = state.phase === "choose" ? refreshMap() : checkSale();
+    void check.catch(() => {}); // Keep the last good map and retry on the next poll.
   }
   function paymentSummary() {
     const q = state.quote;
@@ -356,7 +387,7 @@ export async function renderSeats(ctx, sid) {
             return;
           }
           state.error = null;
-          if (state.selected.size === state.target) state.seatConflict = false;
+          if (state.selected.size === state.target) state.seatConflict = null;
           render();
           root
             .querySelector(`[data-seat="${id}"]`)
@@ -374,16 +405,9 @@ export async function renderSeats(ctx, sid) {
         e.currentTarget,
         async () => {
           try {
-            map = await api.request("/screenings/" + sid + "/seats");
-            offset = new Date(map.as_of).getTime() - Date.now();
-            if (state.phase === "choose") {
-              const previousCount = state.selected.size;
-              keepAvailableSelection();
-              if (state.selected.size < previousCount) state.seatConflict = true;
-            }
-            render();
+            await refreshMap();
           } catch (err) {
-            showError(root.querySelector("#seat-errors"), err);
+            if (alive && root.querySelector("#seat-errors")) showError(root.querySelector("#seat-errors"), err);
           }
         },
         tx("Refreshing…", "正在刷新…"),
@@ -516,7 +540,7 @@ export async function renderSeats(ctx, sid) {
       if (!onSale()) return render();
       state.hold = { ...h, id: h.hold_id };
       state.phase = "held";
-      state.seatConflict = false;
+      state.seatConflict = null;
       state.quote = null;
       save();
       params.set("hold_id", h.hold_id);
@@ -535,7 +559,7 @@ export async function renderSeats(ctx, sid) {
           if (!alive) return;
           offset = new Date(map.as_of).getTime() - Date.now();
           keepAvailableSelection();
-          state.seatConflict = true;
+          state.seatConflict ??= [];
           state.error = null;
         } catch {
           // Until the map refreshes, the original error remains visible.

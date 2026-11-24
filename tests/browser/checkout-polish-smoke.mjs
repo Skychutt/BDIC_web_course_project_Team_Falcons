@@ -86,17 +86,31 @@ try {
   const rivalHold = await api(rival, "/holds", "POST", {
     screening_id: sid, seat_ids: [first.id],
   }, rivalCsrf);
-  await page.locator("#create-hold").click();
-  await page.getByText("部分座位刚被占用。 请再选 1 个座位。", { exact: true }).waitFor();
+  // Wait for the periodic update without clicking refresh or trying to reserve.
+  await page.getByText(`${first.row_no} 排 ${first.seat_no} 座 已被占用。 请再选 1 个座位。`, { exact: true }).waitFor();
+  assert.ok(await page.locator(`[data-seat="${first.id}"]`).isDisabled());
+  assert.ok(await page.locator("#create-hold").isDisabled());
   assert.equal(await page.locator(`[data-seat="${second.id}"]`).getAttribute("aria-pressed"), "true");
   assert.equal(await page.locator(`[data-seat="${first.id}"]`).getAttribute("aria-pressed"), "false");
 
   // The competing hold is real. Restrict the refreshed seat map to exercise the sold-out UI.
   await page.locator(`[data-seat="${third.id}"]`).click();
   await api(rival, `/holds/${rivalHold.hold_id}`, "DELETE", undefined, rivalCsrf);
-  await api(rival, "/holds", "POST", { screening_id: sid, seat_ids: [third.id] }, rivalCsrf);
+  const refreshed = page.waitForResponse(res => new URL(res.url()).pathname === `/api/screenings/${sid}/seats`);
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await refreshed;
+  await page.locator(`[data-seat="${first.id}"]:enabled`).waitFor();
+
+  // Reproduce the race between the last map update and the customer's hold request.
+  let restrictMap = false;
+  await page.route("**/api/holds", async route => {
+    await api(rival, "/holds", "POST", { screening_id: sid, seat_ids: [third.id] }, rivalCsrf);
+    restrictMap = true;
+    await route.continue();
+  }, { times: 1 });
   const mapUrl = `**/api/screenings/${sid}/seats`;
   await page.route(mapUrl, async (route) => {
+    if (!restrictMap) return route.continue();
     const response = await route.fetch();
     const payload = await response.json();
     for (const seat of payload.data.seats) {
