@@ -49,10 +49,27 @@ export async function renderSeats(ctx, sid) {
   let saleCheck, mapRefresh, holdRefresh, closeTicket;
   let locatedSeatId, locateTimer;
   let pendingRender = false;
-  let map = await api.request(
-    "/screenings/" + encodeURIComponent(sid) + "/seats",
-  );
-  let offset = new Date(map.as_of).getTime() - Date.now();
+  let offset = 0;
+  async function readSeatMap(query = "", options) {
+    const requestedAt = Date.now();
+    const data = await api.request("/screenings/" + encodeURIComponent(sid) + "/seats" + query, options);
+    const sampledAt = Date.parse(data.as_of);
+    // The server sampled its clock between send and receive. Keep the current
+    // offset if it fits that window, so transit time cannot move a deadline.
+    const receivedAt = Date.now();
+    const latestOffset = sampledAt - requestedAt;
+    offset = Math.max(sampledAt - receivedAt, Math.min(offset, latestOffset));
+    const startsAt = Date.parse(data.screening.starts_at);
+    if (data.saleable && receivedAt + offset < startsAt && startsAt <= receivedAt + latestOffset) {
+      // Clock skew leaves this particular snapshot ambiguous at showtime.
+      const status = await api.request("/screenings/" + encodeURIComponent(sid) + "/sale-status", {
+        signal: AbortSignal.timeout(8000),
+      });
+      data.saleable = status.saleable;
+    }
+    return data;
+  }
+  let map = await readSeatMap();
   const film =
     bootstrap.films.find((f) => f.id === map.screening.film_id) ||
     (await api.request("/films/" + map.screening.film_id));
@@ -300,7 +317,7 @@ export async function renderSeats(ctx, sid) {
     const previous = map;
     const phase = state.phase;
     const hash = location.hash;
-    mapRefresh = api.request("/screenings/" + sid + "/seats", { signal: AbortSignal.timeout(8000) })
+    mapRefresh = readSeatMap("", { signal: AbortSignal.timeout(8000) })
       .then(next => {
         if (!alive || location.hash !== hash || state.working || state.phase !== phase || map !== previous) return;
         // A newer sale-status check may have closed the screening while this read was pending.
@@ -313,7 +330,6 @@ export async function renderSeats(ctx, sid) {
             return old.id !== seat.id || old.state !== seat.state || old.held_by_me !== seat.held_by_me;
           });
         map = next;
-        offset = Date.parse(map.as_of) - Date.now();
         if (phase === "choose") keepAvailableSelection();
         if (changed || renderedOnSale !== onSale()) render();
       })
@@ -371,10 +387,9 @@ export async function renderSeats(ctx, sid) {
     if (zone) query.set("zone", zone);
     for (const id of state.selected) query.append("selected_id", id);
     try {
-      const next = await api.request(`/screenings/${sid}/seats?${query}`, { signal: AbortSignal.timeout(8000) });
+      const next = await readSeatMap("?" + query, { signal: AbortSignal.timeout(8000) });
       if (!alive || location.hash !== hash || state.phase !== "choose" || !onSale()) return;
       map = next;
-      offset = Date.parse(map.as_of) - Date.now();
       if (!onSale()) return render();
       keepAvailableSelection();
       const ids = next.adjacent_seat_ids;
@@ -739,7 +754,7 @@ export async function renderSeats(ctx, sid) {
       save();
       params.set("hold_id", h.hold_id);
       saveSelectionUrl();
-      map = await api.request("/screenings/" + sid + "/seats");
+      map = await readSeatMap();
       if (!alive) return;
       render();
       if (state.phase === "held") toast(tx("Your seats are on hold. Review ticket types and price.", "座位已保留，请核对票种和价格。"));
@@ -749,9 +764,8 @@ export async function renderSeats(ctx, sid) {
       if (e.code === "SALE_CLOSED") map.saleable = false;
       if (e.code === "SEAT_UNAVAILABLE") {
         try {
-          map = await api.request("/screenings/" + sid + "/seats");
+          map = await readSeatMap();
           if (!alive) return;
-          offset = new Date(map.as_of).getTime() - Date.now();
           keepAvailableSelection();
           state.seatConflict ??= [];
           state.error = null;
@@ -777,10 +791,9 @@ export async function renderSeats(ctx, sid) {
       validateQuote(q);
       if (q.revision_no > map.screening.revision_no) {
         // The manager may have updated fares between the last poll and this quote.
-        const next = await api.request("/screenings/" + sid + "/seats", { signal: AbortSignal.timeout(8000) });
+        const next = await readSeatMap("", { signal: AbortSignal.timeout(8000) });
         if (!alive) return;
         map = next;
-        offset = Date.parse(next.as_of) - Date.now();
       }
       state.quote = q;
       state.phase = "quoted";
@@ -820,7 +833,7 @@ export async function renderSeats(ctx, sid) {
       else params.delete("source_booking_id");
       saveSelectionUrl();
       expectedHash = location.hash;
-      const nextMap = await api.request("/screenings/" + sid + "/seats");
+      const nextMap = await readSeatMap();
       if (!alive || location.hash !== expectedHash) return;
       map = nextMap;
       keepAvailableSelection();

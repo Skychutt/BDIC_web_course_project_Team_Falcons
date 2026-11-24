@@ -42,7 +42,7 @@ async function language(code, label) {
   await page.getByRole("heading", { name: label, exact: true }).waitFor();
 }
 
-async function checkRescheduleFeeChange() {
+async function checkCheckoutDeadlines() {
   const manager = await browser.newContext();
   // Earlier expiry checks advance the main context's clock. Use real time for the fee change.
   const customer = await browser.newContext({ storageState: await context.storageState() });
@@ -61,6 +61,27 @@ async function checkRescheduleFeeChange() {
       seats: [{ row_no: 1, seat_no: 1, aisle_segment: 1, segment_position: 1, map_x: 0, map_y: 0 }],
     }, login.csrf_token);
     const [sourceSeat] = (await api(manager, `/staff/layouts/${layout.layout_id}`)).seats;
+    // Deliver a real, initially saleable seat map after the screening has started.
+    const startsAt = Date.now() + 5000;
+    const soon = await api(manager, "/staff/screenings", "POST", {
+      layout_id: layout.layout_id, film_id: fixture.ids.film_id,
+      fares: { STANDARD: 10000, STUDENT: 5000 }, starts_at: new Date(startsAt).toISOString(),
+    }, login.csrf_token);
+    await checkout.route(`**/api/screenings/${soon.id}/seats`, async route => {
+      const response = await route.fetch();
+      assert.equal((await response.json()).data.saleable, true);
+      await new Promise(resolve => setTimeout(resolve, Math.max(0, startsAt + 250 - Date.now())));
+      await route.fulfill({ response });
+    }, { times: 1 });
+    await checkout.goto(`${base}/#/seats/${soon.id}?seat_ids=${sourceSeat.id}`);
+    await checkout.locator(".seat-grid").waitFor();
+    assert.equal((await api(context, `/screenings/${soon.id}/sale-status`)).saleable, false);
+    assert.equal(await checkout.locator("[data-seat]:enabled").count(), 0,
+      "A delayed seat map must not extend the sale beyond the actual start");
+    assert.ok(await checkout.locator("#create-hold").isDisabled());
+    assert.equal(await checkout.locator(".seat-tag").count(), 0);
+    console.log("PASS a seat map arriving after showtime clears the selection and closes sales immediately");
+
     for (const [hours, oldRate, newRate] of [[12, 0, 500], [6, 500, 2000]]) {
       const map = await api(context, `/screenings/${target}/seats`);
       const seat = map.seats.find(s => s.state === "AVAILABLE").id;
@@ -542,7 +563,7 @@ try {
   } finally {
     await checkout.close();
   }
-  await checkRescheduleFeeChange();
+  await checkCheckoutDeadlines();
 } finally {
   await browser.close();
 }
