@@ -168,6 +168,8 @@ def seatmap(sid):
     size = request.args.get("party_size")
     if size is not None:
         size = integer(size, "party_size", 1, 12)
+        zone = request.args.get("zone")
+        require(zone in (None, "FRONT", "MIDDLE", "REAR"), "VALIDATION", "zone must be FRONT, MIDDLE or REAR")
         selected = request.args.getlist("selected_id")
         require(len(selected) <= size, "VALIDATION", "Too many selected seats")
         selected_ids = {integer(value, "selected_id") for value in selected}
@@ -175,7 +177,7 @@ def seatmap(sid):
         result = catalog.seatmap(c, sid, g.actor)
         if size is not None:
             result["adjacent_seat_ids"] = (
-                catalog.next_adjacent_seat_ids(result["seats"], size, selected_ids)
+                catalog.next_adjacent_seat_ids(result["seats"], size, selected_ids, zone)
                 if result["saleable"] else []
             )
         return output(result)

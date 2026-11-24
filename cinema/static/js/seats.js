@@ -374,6 +374,8 @@ export async function renderSeats(ctx, sid) {
     if (state.phase !== "choose" || !onSale()) return;
     const hash = location.hash;
     const query = new URLSearchParams({ party_size: String(state.target) });
+    const zone = searchFilters.zone;
+    if (zone) query.set("zone", zone);
     for (const id of state.selected) query.append("selected_id", id);
     try {
       const next = await api.request(`/screenings/${sid}/seats?${query}`, { signal: AbortSignal.timeout(8000) });
@@ -389,9 +391,16 @@ export async function renderSeats(ctx, sid) {
         saveSelectionUrl();
         state.error = null;
         state.seatConflict = null;
-        toast(sameSeats
-          ? tx("Your selection is the only adjacent group available.", "当前已选座位是本场唯一可用的连座。")
-          : tx("Adjacent seats selected. Confirm your selection to hold them.", "已选好连座，确认后可占座。"));
+        const selectedZone = selectedSeats()[0].zone;
+        if (zone && selectedZone !== zone) {
+          toast(tx("The suggested seats are together outside your preferred zone. Review them before holding.", "这组连座在偏好区域以外，请核对位置后再占座。"));
+        } else if (sameSeats && zone) {
+          toast(tx("These are the only available adjacent seats for your group in your preferred zone.", "偏好区域内仅剩当前这一组符合人数的连座。"));
+        } else {
+          toast(sameSeats
+            ? tx("Your selection is the only adjacent group available.", "当前已选座位是本场唯一可用的连座。")
+            : tx("Adjacent seats selected. Confirm your selection to hold them.", "已选好连座，确认后可占座。"));
+        }
       } else {
         toast(tx(`No group of ${state.target} adjacent seats is available. You can choose seats separately or try another showtime.`,
           `本场暂无 ${state.target} 个连座，可手动选择分散座位或更换场次。`), "warning");

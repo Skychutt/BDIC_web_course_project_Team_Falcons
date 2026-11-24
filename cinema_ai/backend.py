@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from cinema import catalog as backend
 from cinema.core import db, get, in_ids, now, rows, Problem
 
-from .catalog import CatalogService, HALL_LABELS
+from .catalog import CatalogService, HALL_LABELS, ZONES
 from .domain import BEIJING, Cinema, Film
 from .localization import film_text, cinema_text
 
@@ -17,7 +17,6 @@ DISTRICT_CODES = dict(zip(
 ))
 SLUGS = {code: slug for slug, code in DISTRICT_CODES.items()}
 HALLS = {"standard": "STANDARD", "imax": "IMAX", "dolby": "DOLBY_CINEMA"}
-ZONES = {"front": "FRONT", "middle": "MIDDLE", "back": "REAR"}
 
 
 def backend_clock():
@@ -130,7 +129,8 @@ class BackendCatalog(CatalogService):
                     unmet.append("preferred_zone")
                 cards.append({**self._facts(c, show, locale),
                               "suggested_seats": [self._seat(seats[sid], show["row_count"]) for sid in suggestion["seat_ids"]],
-                              "contiguous": suggestion["adjacent"], "preferred_zone_count": suggestion["preferred_seat_count"],
+                              "contiguous": suggestion["adjacent"], "preferred_zone": ZONES.get(filters.zone),
+                              "preferred_zone_count": suggestion["preferred_seat_count"],
                               "unmet_preferences": unmet, "fares": self._fares(show["fares"]), "fare_type": filters.fare_type,
                               "currency": "CNY", "price_basis": "per_ticket_before_coupons",
                               "checked_at": result["as_of"].replace(tzinfo=BEIJING).isoformat()})

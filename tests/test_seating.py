@@ -49,3 +49,22 @@ def test_recommend_again_keeps_neighbors_and_cycles_through_available_blocks():
     assert next_adjacent_seat_ids(seats, 2, {4, 5}) == [3, 4]
     assert next_adjacent_seat_ids(seats, 3, {3, 4, 5}) == [3, 4, 5]
     assert next_adjacent_seat_ids(seats, 4, {3, 4, 5}) == []
+
+
+def test_recommend_again_cycles_in_preferred_zone_and_preserves_surviving_choices():
+    seats = [
+        dict(id=row * 10 + n, row_no=row, seat_no=n, aisle_segment=1, segment_position=n,
+             zone=zone, state="AVAILABLE", held_by_me=False)
+        for row, zone in [(1, "FRONT"), (2, "MIDDLE"), (3, "REAR")] for n in (1, 2, 3)
+    ]
+    def recommend(*selected):
+        return next_adjacent_seat_ids(seats, 2, set(selected), "REAR")
+
+    assert recommend() == recommend(11, 12) == [31, 32]
+    assert recommend(31, 32) == [32, 33]
+    assert recommend(32, 33) == [31, 32]
+    assert recommend(22) == [21, 22]
+    seats[-1]["state"] = "HELD"
+    assert recommend(31, 32) == [31, 32]
+    seats[-2]["state"] = "SOLD"
+    assert recommend(31, 32) == [11, 12]

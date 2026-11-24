@@ -346,6 +346,7 @@ try {
       const bookingLink = await page.locator('.ai-widget-results a[href*="from=assistant"]').first().getAttribute("href");
       assert.match(bookingLink, /^#\/seats\/\d+\?/);
       assert.equal(new URLSearchParams(bookingLink.split("?")[1]).get("fare_type"), "student");
+      assert.equal(new URLSearchParams(bookingLink.split("?")[1]).get("zone"), "MIDDLE");
       await page.locator("#ai-message").fill("Keep this draft");
       await page.locator("#ai-close").click();
       await page.locator('.main-nav a[href="#/cinemas"]').click();
@@ -355,6 +356,16 @@ try {
       await page.locator('.ai-widget-results a[href*="from=assistant"]').first().click();
       await page.locator('.seat-grid').waitFor();
       assert.ok((await page.locator('.summary-total strong').innerText()).includes((card.fares.student * 2 / 100).toFixed(2)));
+      const selected = page.locator('[data-seat][aria-pressed="true"]');
+      for (const id of await selected.evaluateAll(buttons => buttons.map(b => b.dataset.seat))) {
+        await page.locator(`[data-seat="${id}"]`).click();
+        await page.locator(`[data-seat="${id}"][aria-pressed="false"]`).waitFor();
+      }
+      await page.locator('#recommend-adjacent').click();
+      await selected.first().waitFor();
+      const ids = await selected.evaluateAll(buttons => buttons.map(b => b.dataset.seat));
+      const map = await api(`/screenings/${card.screening_id}/seats`);
+      assert.deepEqual(ids.map(id => map.seats.find(s => s.id === id).zone), ["MIDDLE", "MIDDLE"]);
       assert.equal(await page.locator('#assistant-panel').isVisible(), false);
       await page.locator('.ai-launcher').click();
       assert.equal(await page.locator("#ai-message").inputValue(), "Keep this draft");

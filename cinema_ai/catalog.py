@@ -4,6 +4,8 @@ from datetime import datetime
 
 from .domain import CinemaRepository, Filters, Seat
 
+ZONES = {"front": "FRONT", "middle": "MIDDLE", "back": "REAR"}
+
 DISTRICTS = {
     "chaoyang": ("朝阳区", "Chaoyang"), "haidian": ("海淀区", "Haidian"),
     "dongcheng": ("东城区", "Dongcheng"), "xicheng": ("西城区", "Xicheng"),
@@ -112,7 +114,8 @@ class CatalogService:
                 "cinema": self.cinema_data(cinema, locale), "starts_at": screening.starts_at.isoformat(),
                 "hall_type": screening.hall_type, "hall_label": HALL_LABELS[screening.hall_type][locale],
                 "suggested_seats": [self.seat_data(s) for s in selected], "contiguous": contiguous,
-                "preferred_zone_count": score, "unmet_preferences": unmet, "fares": screening.fares, "fare_type": filters.fare_type,
+                "preferred_zone": ZONES.get(filters.zone), "preferred_zone_count": score,
+                "unmet_preferences": unmet, "fares": screening.fares, "fare_type": filters.fare_type,
                 "currency": "CNY", "price_basis": "per_ticket_before_coupons", "reserved": False,
                 "checked_at": now.isoformat(), "version": screening.version}
 

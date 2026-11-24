@@ -68,17 +68,24 @@ def contiguous_blocks(seats, size):
                 yield block
 
 
-def next_adjacent_seat_ids(seats, size, selected_ids):
+def next_adjacent_seat_ids(seats, size, selected_ids, zone=None):
     selectable = (seat for seat in seats if seat["state"] == "AVAILABLE" or seat["held_by_me"])
     blocks = sorted(contiguous_blocks(selectable, size),
                     key=lambda block: (block[0]["row_no"], block[0]["seat_no"]))
     if not blocks:
         return []
-    options = [[seat["id"] for seat in block] for block in blocks]
+    preferred, others = [], []
+    for block in blocks:
+        group = preferred if zone and block[0]["zone"] == zone else others
+        group.append([seat["id"] for seat in block])
+    options = preferred + others
+    cycle = preferred or others
     for i, option in enumerate(options):
         if selected_ids == set(option):
-            return options[(i + 1) % len(options)]
-    # After a conflict, keep as many of the customer's remaining choices as possible.
+            if i >= len(cycle):
+                return cycle[0]
+            return cycle[(i + 1) % len(cycle)]
+    # Keep surviving choices after a conflict. For equal overlap, the preferred zone wins.
     return max(options, key=lambda option: len(selected_ids.intersection(option)))
 
 

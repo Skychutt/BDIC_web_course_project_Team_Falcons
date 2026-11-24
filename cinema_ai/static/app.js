@@ -344,6 +344,7 @@ async function openPreview(card) {
       const params = new URLSearchParams({ party_size: String(card.suggested_seats.length),
         seat_ids: card.suggested_seats.map((s) => s.id).join(','), from: 'assistant' });
       if (card.fare_type === 'student') params.set('fare_type', 'student');
+      if (card.preferred_zone) params.set('zone', card.preferred_zone);
       const link = element('a', 'primary-button', language === 'zh' ? '进入正式选座 →' : 'Continue to seat selection →');
       link.href = `/#/seats/${encodeURIComponent(data.screening_id)}?${params}`;
       content.append(link);
