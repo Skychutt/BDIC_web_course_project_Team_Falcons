@@ -3,6 +3,7 @@ import { esc, money, dateTime, empty, notice, screenName } from "./ui.js";
 import { openTicketCard } from "./ticket-card.js";
 import { tx } from "./locale.js";
 import { filmTitle } from "./film-locale.js";
+import { rescheduleDeadline } from "./rescheduling.js";
 
 const PAGE_SIZE = 8;
 const TABS = [
@@ -113,7 +114,7 @@ function bookingActionDisabledReason(booking, current = Date.now()) {
     return tx("This screening has ended. Rescheduling and refunds are closed.", "场次已结束，无法改签或退票。");
   if (start <= current)
     return tx("This screening has already started. Rescheduling and refunds are closed.", "场次已开始，无法改签或退票。");
-  if (start - current < 30 * 60 * 1000)
+  if (current > rescheduleDeadline(booking.starts_at))
     return tx("Less than 30 minutes to showtime. Rescheduling and refunds are closed.", "距开场不足 30 分钟，无法改签或退票。");
   return "";
 }

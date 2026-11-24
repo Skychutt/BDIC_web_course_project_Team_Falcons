@@ -6,7 +6,7 @@ from threading import Barrier
 import pytest
 
 from cinema import booking, cancellations, management
-from cinema.catalog import booking_detail
+from cinema.catalog import booking_detail, seatmap
 from cinema.core import Problem, db, get, one, rows, wire
 from backend_tests.test_frontend_api import actor, client, key
 
@@ -139,6 +139,41 @@ def test_pending_reschedule_hold_released_and_previous_fees_kept(env):
         assert count(c, 'tickets') == 4
         assert one(c, 'SELECT SUM(amount_minor) n FROM settlement_entries')['n'] == changed['cumulative_fee_minor'] + result['fee_minor']
         assert one(c, 'SELECT balance_minor FROM wallets WHERE customer_id=:u', u=actor(env)['id'])['balance_minor'] == 100000 - changed['cumulative_fee_minor'] - result['fee_minor']
+
+
+@pytest.mark.parametrize("past_cutoff", [False, True])
+def test_reschedule_hold_at_original_screening_cutoff(env, past_cutoff):
+    original, first_hold = buy(env, index=0)
+    buyer = actor(env)
+    target = env["ids"]["screenings"][1]
+    seats = first_hold["seat_ids"]
+    with db().connect() as c:
+        cutoff = get(c, "screenings", first_hold["screening_id"])["starts_at"] - timedelta(minutes=30)
+    env["clock"][0] = cutoff - timedelta(seconds=15)
+    hold = booking.create_hold(buyer, dict(screening_id=target, seat_ids=seats,
+                                            source_booking_id=original["booking_id"]), key())
+    env["clock"][0] = cutoff
+    quote = booking.quote(buyer, hold["hold_id"], dict(tickets=[dict(seat_id=s, fare_type="STANDARD") for s in seats]))
+    if not past_cutoff:
+        changed = booking.checkout(buyer, dict(quote_token=quote["quote_token"]), key())
+        with db().connect() as c:
+            assert get(c, "bookings", changed["booking_id"])["predecessor_id"] == original["booking_id"]
+        return
+
+    env["clock"][0] += timedelta(microseconds=1)
+    assert booking.payment_result(buyer, hold["hold_id"])["status"] == "EXPIRED"
+    with db().connect() as c:
+        available = {s["id"] for s in seatmap(c, target)["seats"] if s["state"] == "AVAILABLE"}
+        assert set(seats) <= available
+    with pytest.raises(Problem) as error:
+        booking.checkout(buyer, dict(quote_token=quote["quote_token"]), key())
+    assert error.value.code == "HOLD_EXPIRED"
+    rival = booking.create_hold(actor(env, "customer2"), dict(screening_id=target, seat_ids=seats), key())
+    assert set(rival["seat_ids"]) == set(seats)
+    assert rival["expires_at"] == env["clock"][0] + timedelta(minutes=5)
+    with db().connect() as c:
+        assert get(c, "bookings", original["booking_id"])["status"] == "CONFIRMED"
+        assert one(c, "SELECT balance_minor FROM wallets WHERE customer_id=:u", u=buyer["id"])["balance_minor"] == original["balance_minor"]
 
 
 def test_failure_rolls_back_money_seats_and_order(env, monkeypatch):

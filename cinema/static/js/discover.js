@@ -7,6 +7,7 @@ import { filmTitle, filmSynopsis, genreName } from "./film-locale.js";
 import { renderCinemaMap } from "./cinema-map.js";
 import { tx } from "./locale.js";
 import { showtimeFilters } from "./showtime-filters.js";
+import { rescheduleDeadline, closedReschedule } from "./rescheduling.js";
 import {
   esc,
   money,
@@ -207,8 +208,14 @@ export async function renderDiscover(ctx) {
   ]
     .sort()
     .slice(0, 6);
-  let disposeCarousel;
+  const serverOffset = Date.parse(data.as_of) - Date.now();
+  const deadline = source ? rescheduleDeadline(source.starts_at) - serverOffset : Infinity;
+  let disposeCarousel, deadlineTimer;
   function render() {
+    if (Date.now() > deadline) {
+      root.innerHTML = closedReschedule(source.id);
+      return;
+    }
     const previous = root.querySelector("#search-form");
     const draft = previous ? Object.fromEntries(new FormData(previous)) : null;
     const advancedOpen = previous?.querySelector(".search-advanced").open;
@@ -260,7 +267,21 @@ export async function renderDiscover(ctx) {
   }
   ctx.updateLanguage = render;
   render();
-  return () => disposeCarousel?.();
+  function checkDeadline() {
+    clearTimeout(deadlineTimer);
+    const delay = deadline - Date.now() + 1;
+    if (delay <= 0) render();
+    else deadlineTimer = setTimeout(checkDeadline, Math.min(delay, 2147483647));
+  }
+  if (source && Number.isFinite(deadline)) {
+    checkDeadline();
+    document.addEventListener("visibilitychange", checkDeadline);
+  }
+  return () => {
+    clearTimeout(deadlineTimer);
+    document.removeEventListener("visibilitychange", checkDeadline);
+    disposeCarousel?.();
+  };
 }
 export const renderCinemas = renderCinemaMap;
 export async function renderFilm(ctx, fid) {

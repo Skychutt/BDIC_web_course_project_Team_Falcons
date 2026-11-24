@@ -3,6 +3,7 @@ import { seatGrid, seatLabel } from "./seat-grid.js";
 import { openTicketCard } from "./ticket-card.js";
 import { tx } from "./locale.js";
 import { showtimeFilters } from "./showtime-filters.js";
+import { rescheduleDeadline, closedReschedule } from "./rescheduling.js";
 import { filmTitle } from "./film-locale.js";
 import { apiMessage } from "./api.js";
 import {
@@ -44,7 +45,7 @@ export async function renderSeats(ctx, sid) {
   const { root, api, user, bootstrap, params, navigate, toast } = ctx;
   let pageHash = location.hash;
   let alive = true,
-    interval, saleTimer, renderedOnSale;
+    interval, saleTimer, renderedOnSale, renderedChangeClosed;
   let saleCheck, mapRefresh, holdRefresh, closeTicket;
   let locatedSeatId, locateTimer;
   let pendingLanguage = false;
@@ -139,6 +140,10 @@ export async function renderSeats(ctx, sid) {
       "/ui/bookings/" + encodeURIComponent(sourceId),
     );
     state.target = state.source.tickets.length;
+  }
+  const changeDeadline = state.source ? rescheduleDeadline(state.source.starts_at) : Infinity;
+  function changeClosed() {
+    return Boolean(state.source) && (Date.now() + offset > changeDeadline || state.error?.code === "RESCHEDULE_CLOSED");
   }
   function validateQuote(q) {
     if (
@@ -265,12 +270,11 @@ export async function renderSeats(ctx, sid) {
       );
   }
   function remaining() {
-    return state.hold
-      ? Math.max(
-          0,
-          new Date(state.hold.expires_at).getTime() - Date.now() - offset,
-        )
-      : 0;
+    if (!state.hold) return 0;
+    const expires = state.hold.expires_at;
+    // MySQL stores microseconds; round the exclusive expiry up to the next browser tick.
+    const subMillis = expires.match(/\.\d{3}(\d+)/)?.[1];
+    return Math.max(0, Date.parse(expires) + Number(Number(subMillis) > 0) - Date.now() - offset);
   }
   function payPending() {
     return state.hold && api.pending?.("pay:" + state.hold.id);
@@ -320,6 +324,7 @@ export async function renderSeats(ctx, sid) {
   }
   function checkVisibleSale() {
     if (document.hidden || state.working || !onSale() || state.phase === "complete") return;
+    if (changeClosed() && !canSyncHold()) return;
     let check;
     if (state.phase === "choose") check = refreshMap();
     else if (canSyncHold()) check = refreshHold();
@@ -443,8 +448,20 @@ export async function renderSeats(ctx, sid) {
     const s = map.screening;
     discardStaleQuote(s.revision_no);
     renderedOnSale = onSale();
+    renderedChangeClosed = changeClosed();
+    if (renderedChangeClosed) {
+      state.allowPaymentRetry = false;
+      if (["choose", "held", "quoted", "expired"].includes(state.phase)) {
+        if (payPending()) state.phase = "recover";
+        else {
+          root.innerHTML = closedReschedule(state.source.id);
+          return;
+        }
+      }
+    }
     if (renderedOnSale) {
-      const untilStart = Date.parse(s.starts_at) - Date.now() - offset;
+      const nextBoundary = Math.min(Date.parse(s.starts_at), renderedChangeClosed ? Infinity : changeDeadline + 1);
+      const untilStart = nextBoundary - Date.now() - offset;
       if (untilStart <= 2147483647) saleTimer = setTimeout(tick, untilStart);
     }
     if (!renderedOnSale && ["choose", "held", "quoted", "expired"].includes(state.phase)) {
@@ -641,6 +658,7 @@ export async function renderSeats(ctx, sid) {
   }
   function tick() {
     if (!alive || state.phase === "complete") return;
+    if (renderedChangeClosed !== changeClosed()) return render();
     if (renderedOnSale && !onSale() && (!state.working || state.phase === "choose"))
       return render();
     if (!state.hold) return;
@@ -663,7 +681,7 @@ export async function renderSeats(ctx, sid) {
       void lockWhile(checkPaymentResult);
   }
   async function createHold() {
-    if (!onSale()) return render();
+    if (!onSale() || changeClosed()) return render();
     const initialHash = location.hash;
     try {
       state.error = null;
@@ -705,6 +723,7 @@ export async function renderSeats(ctx, sid) {
     }
   }
   async function requestQuote() {
+    if (changeClosed()) return render();
     try {
       state.error = null;
       const q = await api.request("/holds/" + state.hold.id + "/quote", {
@@ -806,6 +825,7 @@ export async function renderSeats(ctx, sid) {
     }
   }
   async function pay() {
+    if (changeClosed()) return render();
     if (!state.quote) return;
     save();
     try {

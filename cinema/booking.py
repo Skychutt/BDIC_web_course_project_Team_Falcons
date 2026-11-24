@@ -24,10 +24,13 @@ def decode(token, salt, max_age=300):
         )
 
 
+RESCHEDULE_NOTICE = timedelta(minutes=30)
+
+
 def fee_rate(starts_at, current):
     remaining = (starts_at - current).total_seconds()
     require(
-        remaining >= 1800,
+        starts_at - current >= RESCHEDULE_NOTICE,
         "RESCHEDULE_CLOSED",
         "Rescheduling closes 30 minutes before the current screening",
         409,
@@ -45,7 +48,7 @@ def salable(c, s):
         raise Problem("SALE_CLOSED", reason, 409)
 
 
-def source_ok(c, h, source):
+def reschedule_source_start(c, h, source):
     require(
         source["status"] == "CONFIRMED",
         "BOOKING_STATE",
@@ -61,7 +64,11 @@ def source_ok(c, h, source):
         "Choose a different screening of the same film at the same cinema",
         409,
     )
-    return fee_rate(get(c, "screenings", source["screening_id"])["starts_at"], now())
+    return get(c, "screenings", source["screening_id"])["starts_at"]
+
+
+def source_ok(c, h, source):
+    return fee_rate(reschedule_source_start(c, h, source), now())
 
 
 def hold_selection(body):
@@ -161,7 +168,8 @@ def create_hold(actor, body, key):
                 "Original booking belongs to another customer",
                 403,
             )
-            source_ok(c, context, source)
+            source_start = reschedule_source_start(c, context, source)
+            fee_rate(source_start, now())
             count = one(
                 c, "SELECT COUNT(*) AS n FROM tickets WHERE booking_id=:b", b=source_id
             )["n"]
@@ -202,6 +210,10 @@ def create_hold(actor, body, key):
         )
         created = now()
         expiry = min(created + timedelta(minutes=5), s["starts_at"])
+        if source_id:
+            fee_rate(source_start, created)
+            # Holds end exclusively; rescheduling is allowed at the exact cutoff.
+            expiry = min(expiry, source_start - RESCHEDULE_NOTICE + timedelta(microseconds=1))
         hid = ins(
             c,
             "seat_holds",

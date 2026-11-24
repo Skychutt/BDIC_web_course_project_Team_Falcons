@@ -194,6 +194,62 @@ try {
       await shot("purchase-success");
     },
   );
+  await check("Open reschedule checkout closes at the original screening cutoff", async () => {
+    const probe = await context.newPage();
+    const map = await api(`/screenings/${target.id}/seats`);
+    const seats = map.seats.filter(s => s.state === "AVAILABLE").slice(0, 2);
+    const start = Date.parse(map.as_of);
+    const original = `/api/ui/bookings/${receipt.booking_id}`;
+    const query = new URLSearchParams({ source_booking_id: receipt.booking_id, seat_ids: seats.map(s => s.id).join(",") });
+    let holdId;
+    try {
+      await probe.clock.install({ time: new Date(start - 60000) });
+      await probe.clock.pauseAt(new Date(start));
+      // Move only the displayed original start time close to the cutoff. The target,
+      // hold, quote and wallet still use the real isolated server.
+      await probe.route("**" + original, async route => {
+        const response = await route.fetch();
+        const payload = await response.json();
+        payload.data.starts_at = new Date(start + 30 * 60000 + 2000).toISOString();
+        await route.fulfill({ response, json: payload });
+      });
+      await probe.route(/\/api\/screenings(?:\?|\/\d+\/seats(?:\?|$))/, async route => {
+        const response = await route.fetch();
+        const payload = await response.json();
+        payload.data.as_of = await probe.evaluate(() => new Date().toISOString());
+        await route.fulfill({ response, json: payload });
+      });
+      const seatsUrl = `${base}/#/seats/${target.id}?${query}`;
+      await probe.goto(seatsUrl);
+      await probe.locator("#create-hold").click();
+      await probe.locator("#quote-form button[type=submit]").click();
+      await probe.locator("#pay-now").waitFor();
+      holdId = new URLSearchParams(new URL(probe.url()).hash.split("?")[1]).get("hold_id");
+      await probe.clock.runFor(2000);
+      assert.ok(await probe.locator("#pay-now").isEnabled(), "Exactly 30 minutes remains eligible");
+      await probe.clock.runFor(1);
+      const originalOrder = probe.getByRole("link", { name: "View original order" });
+      await originalOrder.waitFor();
+      assert.equal(await probe.locator("#pay-now, #reselect").count(), 0);
+      assert.equal(await originalOrder.getAttribute("href"), `#/account?tab=orders&booking=${receipt.booking_id}`);
+      for (const url of [seatsUrl, `${base}/#/discover?source_booking_id=${receipt.booking_id}`]) {
+        await probe.goto(url);
+        await originalOrder.waitFor();
+        assert.equal(await probe.locator("#create-hold, .session-button").count(), 0);
+      }
+      await probe.goto(`${base}/#/seats/${target.id}?seat_ids=${seats[0].id}`);
+      await probe.locator("#create-hold").waitFor();
+      assert.ok(await probe.locator("#create-hold").isEnabled());
+      assert.equal((await api(original.slice(4))).status, "CONFIRMED");
+      assert.equal((await api("/me/wallet")).balance_minor, receipt.balance_minor);
+    } finally {
+      if (holdId) {
+        const { csrf_token } = await api("/auth/csrf");
+        await context.request.delete(`${base}/api/holds/${holdId}`, { headers: { "X-CSRF-Token": csrf_token } });
+      }
+      await probe.close();
+    }
+  });
   await check(
     "Whole-booking reschedule keeps fare mix and replaces old tickets atomically",
     async () => {
