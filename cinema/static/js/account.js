@@ -511,6 +511,7 @@ export async function renderAccount(ctx) {
     let busy = false;
     let needsPreview = true;
     let deadline = Infinity;
+    let feeDeadline = Infinity;
     let retryPending = false;
     keep.addEventListener("click", () => d.close());
     d.addEventListener("cancel", (event) => { if (busy) event.preventDefault(); });
@@ -534,11 +535,25 @@ export async function renderAccount(ctx) {
       d.querySelector("[data-refund-content]").replaceChildren();
       showError({message: apiMessage("REFUND_CLOSED")});
     }
+    function showFeeChange() {
+      needsPreview = true;
+      d.querySelector("[data-refund-content]").replaceChildren();
+      showError({message: tx("The cancellation fee changed. Review the new refund amount before confirming.", "退票手续费已变化，请核对新的退款金额后再确认。")});
+      confirm.disabled = false;
+      confirm.textContent = tx("Review updated refund", "查看更新的退款明细");
+    }
     function expirePreview() {
       // A request with an unknown outcome can still recover its original receipt.
-      if (!active() || !preview || busy || retryPending || Date.now() <= deadline) return false;
-      showClosed();
-      return true;
+      if (!active() || !preview || busy || retryPending) return false;
+      if (Date.now() > deadline) {
+        showClosed();
+        return true;
+      }
+      if (!needsPreview && Date.now() > feeDeadline) {
+        showFeeChange();
+        return true;
+      }
+      return false;
     }
     checkRefundDeadline = expirePreview;
     async function review() {
@@ -553,8 +568,9 @@ export async function renderAccount(ctx) {
         const serverTime = Date.parse(preview.server_time);
         const localSample = Math.max(requestedAt, Math.min(serverTime, Date.now()));
         deadline = rescheduleDeadline(preview.starts_at) + (localSample - serverTime);
-        if (expirePreview()) return;
+        feeDeadline = Date.parse(preview.fee_valid_through) + (localSample - serverTime);
         needsPreview = false;
+        if (expirePreview()) return;
         const feeRate = Number(preview.fee_rate_bps) / 100;
         const previousFees = money(preview.previous_fees_minor);
         d.querySelector("[data-refund-content]").outerHTML = `<div data-refund-content class="stack">
@@ -603,8 +619,9 @@ export async function renderAccount(ctx) {
         if (!active()) return;
         retryPending = api.pending(`refund:${id}`);
         if (error.code === "REFUND_CLOSED") return showClosed();
+        if (error.code === "PREVIEW_CHANGED") return showFeeChange();
         showError(error);
-        needsPreview = ["TOKEN_EXPIRED", "PREVIEW_CHANGED"].includes(error.code);
+        needsPreview = error.code === "TOKEN_EXPIRED";
         confirm.disabled = ["BOOKING_STATE", "FORBIDDEN", "NOT_FOUND"].includes(error.code);
         confirm.textContent = needsPreview
           ? tx("Review updated refund", "查看更新的退款明细")

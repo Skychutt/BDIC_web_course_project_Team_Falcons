@@ -42,6 +42,7 @@ def test_refund_amount_release_and_resale(env, minutes, rate):
     env['clock'][0] = start - timedelta(minutes=minutes)
     preview = cancellations.refund_preview(actor(env), bid)
     assert preview['fee_rate_bps'] == rate
+    assert preview['fee_valid_through'] == start - timedelta(minutes={0: 720, 500: 360, 2000: 30}[rate])
     result = refund(env, bid, preview=preview)
     fee = booking.rounded(purchase['net_ticket_minor'], rate)
     assert result['refund_minor'] == purchase['net_ticket_minor'] - fee

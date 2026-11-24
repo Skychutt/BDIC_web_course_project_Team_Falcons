@@ -1,4 +1,5 @@
 """Customer ticket refunds: one atomic wallet credit and whole-party seat release."""
+from datetime import timedelta
 from importlib.resources import files
 
 from .core import *
@@ -35,10 +36,14 @@ def initialize_cancellations(engine):
                 c.exec_driver_sql(statement)
 
 
+REFUND_NOTICE_BY_RATE = {0: timedelta(hours=12), 500: timedelta(hours=6), 2000: timedelta(minutes=30)}
+
+
 def refund_rate(starts_at, current):
-    seconds = (starts_at - current).total_seconds()
-    require(seconds >= 1800, 'REFUND_CLOSED', 'Refunds close 30 minutes before the screening.', 409)
-    return 0 if seconds >= 43200 else 500 if seconds >= 21600 else 2000
+    for rate, notice in REFUND_NOTICE_BY_RATE.items():
+        if starts_at - current >= notice:
+            return rate
+    raise Problem('REFUND_CLOSED', 'Refunds close 30 minutes before the screening.', 409)
 
 
 def preview_value(c, b, at):
@@ -68,7 +73,9 @@ def refund_preview(actor, bid):
             JOIN screens sc ON sc.id=s.screen_id WHERE s.id=:id""", id=b['screening_id'])
         tickets = rows(c, """SELECT s.row_no,s.seat_no FROM tickets t JOIN seats s ON s.id=t.seat_id
             WHERE t.booking_id=:id ORDER BY s.row_no,s.seat_no""", id=bid)
-        return dict(**value, **labels, seats=tickets, preview_token=token, server_time=at)
+        valid_through = value['starts_at'] - REFUND_NOTICE_BY_RATE[value['fee_rate_bps']]
+        return dict(**value, **labels, seats=tickets, preview_token=token, server_time=at,
+                    fee_valid_through=valid_through)
     return transaction(work)
 
 
