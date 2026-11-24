@@ -1,7 +1,7 @@
 from collections import defaultdict
 import pytest
 from cinema.seating import auditorium_layout
-from cinema.catalog import choose_seats
+from cinema.catalog import choose_seats, next_adjacent_seat_ids
 
 
 @pytest.mark.parametrize("kind,nrows,total,counts", [
@@ -34,3 +34,18 @@ def test_adjacent_seat_suggestions_cannot_jump_across_an_aisle(kind):
     edge = next(i for i in range(1, len(row)) if row[i]["aisle_segment"] != row[i-1]["aisle_segment"])
     result = choose_seats(row[edge-1:edge+1], 2, plan["row_count"])
     assert result["adjacent"] is False
+
+
+def test_recommend_again_keeps_neighbors_and_cycles_through_available_blocks():
+    seats = [
+        dict(seat, id=i, state="AVAILABLE", held_by_me=False)
+        for i, seat in enumerate(auditorium_layout("STANDARD")["seats"], 1)
+        if seat["row_no"] == 1 and seat["seat_no"] <= 7
+    ]
+    seats[0]["state"] = "HELD"  # 2 and 3 are on opposite sides of an aisle.
+    seats[3].update(state="HELD", held_by_me=True)
+    seats[5]["state"] = "SOLD"
+    assert next_adjacent_seat_ids(seats, 2, {5}) == [4, 5]
+    assert next_adjacent_seat_ids(seats, 2, {4, 5}) == [3, 4]
+    assert next_adjacent_seat_ids(seats, 3, {3, 4, 5}) == [3, 4, 5]
+    assert next_adjacent_seat_ids(seats, 4, {3, 4, 5}) == []

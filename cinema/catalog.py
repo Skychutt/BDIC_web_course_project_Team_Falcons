@@ -56,20 +56,37 @@ def available_seats(c, s):
     return available_seats_by_screening(c, [s])[s["id"]]
 
 
-def choose_seats(seats, size, row_count, preference=None):
-    preferred = lambda st: int(
-        preference is not None and seat_zone(st["row_no"], row_count) == preference
-    )
+def contiguous_blocks(seats, size):
     groups = defaultdict(list)
     for st in seats:
         groups[(st["row_no"], st["aisle_segment"])].append(st)
-    blocks = []
     for group in groups.values():
         group.sort(key=lambda st: st["segment_position"])
         for i in range(len(group) - size + 1):
             block = group[i : i + size]
             if block[-1]["segment_position"] - block[0]["segment_position"] == size - 1:
-                blocks.append(block)
+                yield block
+
+
+def next_adjacent_seat_ids(seats, size, selected_ids):
+    selectable = (seat for seat in seats if seat["state"] == "AVAILABLE" or seat["held_by_me"])
+    blocks = sorted(contiguous_blocks(selectable, size),
+                    key=lambda block: (block[0]["row_no"], block[0]["seat_no"]))
+    if not blocks:
+        return []
+    options = [[seat["id"] for seat in block] for block in blocks]
+    for i, option in enumerate(options):
+        if selected_ids == set(option):
+            return options[(i + 1) % len(options)]
+    # After a conflict, keep as many of the customer's remaining choices as possible.
+    return max(options, key=lambda option: len(selected_ids.intersection(option)))
+
+
+def choose_seats(seats, size, row_count, preference=None):
+    preferred = lambda st: int(
+        preference is not None and seat_zone(st["row_no"], row_count) == preference
+    )
+    blocks = list(contiguous_blocks(seats, size))
     if blocks:
         chosen = min(
             blocks,

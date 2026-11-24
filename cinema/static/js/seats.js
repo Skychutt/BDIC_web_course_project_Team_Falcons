@@ -190,6 +190,10 @@ export async function renderSeats(ctx, sid) {
       state.seatConflict = lost;
     }
   }
+  function adjacentButton() {
+    if (!onSale() || state.target < 2 || (user && !customer)) return "";
+    return `<button type="button" class="button secondary small" id="recommend-adjacent">${tx("Suggest adjacent seats", "一键重新推荐连座")}</button>`;
+  }
   function seatConflictNotice() {
     if (!state.seatConflict || state.phase !== "choose" || !onSale()) return "";
     const needed = state.target - state.selected.size;
@@ -201,7 +205,7 @@ export async function renderSeats(ctx, sid) {
       return notice(tx(
         `${prefix} Choose ${needed} more ${needed === 1 ? "seat" : "seats"} to continue.`,
         `${prefix} 请再选 ${needed} 个座位。`,
-      ), "warning");
+      ), "warning") + adjacentButton();
     }
     const search = new URLSearchParams({
       film_id: map.screening.film_id,
@@ -298,6 +302,38 @@ export async function renderSeats(ctx, sid) {
     if (document.hidden || state.working || !onSale() || state.phase === "complete") return;
     const check = state.phase === "choose" ? refreshMap() : checkSale();
     void check.catch(() => {}); // Keep the last good map and retry on the next poll.
+  }
+  async function recommendAdjacent() {
+    if (state.phase !== "choose" || !onSale()) return;
+    const hash = location.hash;
+    const query = new URLSearchParams({ party_size: String(state.target) });
+    for (const id of state.selected) query.append("selected_id", id);
+    try {
+      const next = await api.request(`/screenings/${sid}/seats?${query}`, { signal: AbortSignal.timeout(8000) });
+      if (!alive || location.hash !== hash || state.phase !== "choose" || !onSale()) return;
+      map = next;
+      offset = Date.parse(map.as_of) - Date.now();
+      if (!onSale()) return render();
+      keepAvailableSelection();
+      const ids = next.adjacent_seat_ids;
+      if (ids.length === state.target) {
+        const sameSeats = ids.every(id => state.selected.has(id));
+        state.selected = new Set(ids);
+        state.error = null;
+        state.seatConflict = null;
+        toast(sameSeats
+          ? tx("Your selection is the only adjacent group available.", "当前已选座位是本场唯一可用的连座。")
+          : tx("Adjacent seats selected. Confirm your selection to hold them.", "已选好连座，确认后可占座。"));
+      } else {
+        toast(tx(`No group of ${state.target} adjacent seats is available. You can choose seats separately or try another showtime.`,
+          `本场暂无 ${state.target} 个连座，可手动选择分散座位或更换场次。`), "warning");
+      }
+      render();
+      root.querySelector("#recommend-adjacent")?.focus({ preventScroll: true });
+    } catch {
+      if (alive && location.hash === hash)
+        toast(tx("Could not refresh seat availability. Please try again.", "暂时无法刷新座位，请重试。"), "error");
+    }
   }
   function paymentSummary() {
     const q = state.quote;
@@ -400,6 +436,9 @@ export async function renderSeats(ctx, sid) {
         state.selected.delete([...state.selected].pop());
       render();
     });
+    root.querySelector("#recommend-adjacent")?.addEventListener("click", (e) =>
+      busy(e.currentTarget, () => lockWhile(recommendAdjacent), tx("Finding seats…", "正在查找连座…")),
+    );
     root.querySelector("#refresh-map").onclick = (e) =>
       busy(
         e.currentTarget,
@@ -492,7 +531,8 @@ export async function renderSeats(ctx, sid) {
             0),
         0,
       );
-      return `<div class="summary-line"><span>${tx("Selected", "已选")}</span><strong>${tx(`${selected} / ${state.target} seats`, `${selected} / ${state.target} 座`)}</strong></div><div class="summary-line summary-total"><span>${tx("Face price estimate", "预计票款")}</span><strong>${money(ticketTotal)}</strong></div><p class="fine-print">${tx("Choose ticket types and an eligible coupon at the next step. Any change fee is quoted before confirmation.", "下一步可以选择票种及可用优惠券。改签费会在确认前列明。")}</p>${!onSale() ? `<button class="button wide" id="create-hold" disabled>${tx("Booking closed", "已停止售票")}</button>` : !user ? `<a class="button wide" href="#/login?next=${encodeURIComponent("#/seats/" + sid + "?" + new URLSearchParams({ party_size: String(state.target), seat_ids: [...state.selected].join(","), ...(state.source ? { source_booking_id: state.source.id } : {}), ...(searchFare === "STUDENT" ? { fare_type: "student" } : {}), ...(params.get("from") === "assistant" ? { from: "assistant" } : {}) }))}">${tx("Sign in to hold seats", "登录并占座")} ${icon("arrow")}</a>` : !customer ? `<p class="notice">${tx("Customer accounts book here. For assisted sales, open the cinema workspace.", "顾客可在此购票，员工请进入影院工作台办理柜台售票。")}</p><a class="button wide" href="${counterSalesUrl}">${tx("Open counter sales", "进入柜台售票")}</a>` : `<button class="button wide" id="create-hold" ${selected !== state.target ? "disabled" : ""}>${tx(`Hold ${selected || "your"} ${selected === 1 ? "seat" : "seats"}`, selected ? `保留 ${selected} 个座位` : "保留座位")} ${icon("arrow")}</button>`}<p class="fine-print">${tx("A hold lasts up to 5 minutes. Browsing and selecting do not reserve a seat.", "座位最多保留 5 分钟。点击占座后才会保留座位。")}</p>`;
+      const recommend = state.seatConflict && selected < state.target ? "" : adjacentButton();
+      return `${recommend}<div class="summary-line"><span>${tx("Selected", "已选")}</span><strong>${tx(`${selected} / ${state.target} seats`, `${selected} / ${state.target} 座`)}</strong></div><div class="summary-line summary-total"><span>${tx("Face price estimate", "预计票款")}</span><strong>${money(ticketTotal)}</strong></div><p class="fine-print">${tx("Choose ticket types and an eligible coupon at the next step. Any change fee is quoted before confirmation.", "下一步可以选择票种及可用优惠券。改签费会在确认前列明。")}</p>${!onSale() ? `<button class="button wide" id="create-hold" disabled>${tx("Booking closed", "已停止售票")}</button>` : !user ? `<a class="button wide" href="#/login?next=${encodeURIComponent("#/seats/" + sid + "?" + new URLSearchParams({ party_size: String(state.target), seat_ids: [...state.selected].join(","), ...(state.source ? { source_booking_id: state.source.id } : {}), ...(searchFare === "STUDENT" ? { fare_type: "student" } : {}), ...(params.get("from") === "assistant" ? { from: "assistant" } : {}) }))}">${tx("Sign in to hold seats", "登录并占座")} ${icon("arrow")}</a>` : !customer ? `<p class="notice">${tx("Customer accounts book here. For assisted sales, open the cinema workspace.", "顾客可在此购票，员工请进入影院工作台办理柜台售票。")}</p><a class="button wide" href="${counterSalesUrl}">${tx("Open counter sales", "进入柜台售票")}</a>` : `<button class="button wide" id="create-hold" ${selected !== state.target ? "disabled" : ""}>${tx(`Hold ${selected || "your"} ${selected === 1 ? "seat" : "seats"}`, selected ? `保留 ${selected} 个座位` : "保留座位")} ${icon("arrow")}</button>`}<p class="fine-print">${tx("A hold lasts up to 5 minutes. Browsing and selecting do not reserve a seat.", "座位最多保留 5 分钟。点击占座后才会保留座位。")}</p>`;
     }
     return `<form id="quote-form"><div class="fare-choices">${tickets()
       .map((t) => {

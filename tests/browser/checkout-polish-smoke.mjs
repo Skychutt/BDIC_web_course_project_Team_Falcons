@@ -75,7 +75,8 @@ try {
   console.log("PASS language switch preserves draft search; AI reply keeps the page language");
 
   const map = await api(context, `/screenings/${sid}/seats`);
-  const [first, second, third] = map.seats.filter((seat) => seat.state === "AVAILABLE");
+  const [first, second, third] = map.seats.filter((seat) =>
+    seat.row_no === 1 && seat.aisle_segment === 2 && seat.state === "AVAILABLE");
   await page.goto(`${base}/#/seats/${sid}`);
   await page.locator("#party-size").selectOption("2");
   await page.locator(`[data-seat="${first.id}"]`).click();
@@ -93,8 +94,20 @@ try {
   assert.equal(await page.locator(`[data-seat="${second.id}"]`).getAttribute("aria-pressed"), "true");
   assert.equal(await page.locator(`[data-seat="${first.id}"]`).getAttribute("aria-pressed"), "false");
 
-  // The competing hold is real. Restrict the refreshed seat map to exercise the sold-out UI.
-  await page.locator(`[data-seat="${third.id}"]`).click();
+  const recommend = page.getByRole("button", { name: "一键重新推荐连座" });
+  const chosenIds = () => page.locator('[data-seat][aria-pressed="true"]').evaluateAll(
+    buttons => buttons.map(button => button.dataset.seat));
+  await recommend.click();
+  await page.getByText("已选好连座，确认后可占座。", { exact: true }).waitFor();
+  assert.deepEqual(await chosenIds(), [second.id, third.id]);
+  assert.equal((await api(context, "/me/holds")).items.length, 0);
+  // This auditorium has enough individual seats, but no block of twelve.
+  await page.locator("#party-size").selectOption("12");
+  await recommend.click();
+  await page.getByText("本场暂无 12 个连座，可手动选择分散座位或更换场次。", { exact: true }).waitFor();
+  assert.deepEqual(await chosenIds(), [second.id, third.id]);
+  assert.ok(await page.locator("#create-hold").isDisabled());
+  await page.locator("#party-size").selectOption("2");
   await api(rival, `/holds/${rivalHold.hold_id}`, "DELETE", undefined, rivalCsrf);
   const refreshed = page.waitForResponse(res => new URL(res.url()).pathname === `/api/screenings/${sid}/seats`);
   await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
@@ -131,9 +144,10 @@ try {
   await page.unroute(mapUrl);
   console.log("PASS real seat conflicts preserve remaining seats and provide a filtered fallback");
 
-  await page.goto(`${base}/#/seats/${sid}?party_size=2`);
-  await page.locator(`[data-seat="${first.id}"]`).click();
-  await page.locator(`[data-seat="${second.id}"]`).click();
+  await page.goto(`${base}/#/seats/${sid}?party_size=2&seat_ids=${first.id}`);
+  await recommend.click();
+  await page.locator(`[data-seat="${second.id}"][aria-pressed="true"]`).waitFor();
+  assert.deepEqual(await chosenIds(), [first.id, second.id]);
   await page.locator("#create-hold").click();
   await page.locator("#quote-form").waitFor();
   await page.locator("[data-fare]").first().selectOption("STUDENT");

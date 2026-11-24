@@ -165,8 +165,20 @@ def screenings():
 
 @api.get("/screenings/<int:sid>/seats")
 def seatmap(sid):
+    size = request.args.get("party_size")
+    if size is not None:
+        size = integer(size, "party_size", 1, 12)
+        selected = request.args.getlist("selected_id")
+        require(len(selected) <= size, "VALIDATION", "Too many selected seats")
+        selected_ids = {integer(value, "selected_id") for value in selected}
     with db().connect() as c:
-        return output(catalog.seatmap(c, sid, g.actor))
+        result = catalog.seatmap(c, sid, g.actor)
+        if size is not None:
+            result["adjacent_seat_ids"] = (
+                catalog.next_adjacent_seat_ids(result["seats"], size, selected_ids)
+                if result["saleable"] else []
+            )
+        return output(result)
 
 
 @api.get("/screenings/<int:sid>/sale-status")
