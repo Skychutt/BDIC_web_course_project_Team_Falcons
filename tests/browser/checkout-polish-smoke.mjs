@@ -11,8 +11,10 @@ assert.equal(fixture.base_url, "http://127.0.0.1:5002");
 assert.match(fixture.schema, /^cinema_browser_[a-f0-9]{16}$/);
 
 const base = fixture.base_url;
-const sid = fixture.ids.screenings[2];
-const screening = fixture.screenings.find((s) => s.id === sid);
+// Leave room for a minute-precision upper time limit on the fixture's screening date.
+const screening = [fixture.ids.screenings[2], fixture.ids.screenings[0]]
+  .map(id => fixture.screenings.find(s => s.id === id)).find(s => s.starts_at.slice(11, 16) !== "23:59");
+const sid = screening.id;
 const date = screening.starts_at.slice(0, 10);
 const browser = await chromium.launch({
   headless: true,
@@ -160,8 +162,25 @@ try {
   }
   const [first, second, third] = map.seats.filter((seat) =>
     seat.row_no === 1 && seat.aisle_segment === 2 && seat.state === "AVAILABLE");
-  await page.goto(`${base}/#/seats/${sid}`);
-  await page.locator("#party-size").selectOption("2");
+  const budgetMinor = map.fares.find(f => f.fare_type === "STUDENT").price_minor + 1;
+  const startFrom = screening.starts_at.slice(11, 16);
+  const upperMinute = Math.min(1439, Number(startFrom.slice(0, 2)) * 60 + Number(startFrom.slice(3)) + 15);
+  const startTo = [Math.floor(upperMinute / 60), upperMinute % 60].map(v => String(v).padStart(2, "0")).join(":");
+  const criteria = { fare_type: "student", budget_minor: String(budgetMinor), budget_scope: "per_ticket",
+    start_from: startFrom, start_to: startTo, require_contiguous: "true" };
+  const search = page.locator("#search-form");
+  await search.locator('[name="budget_yuan"]').fill((budgetMinor / 100).toFixed(2));
+  for (const key of ["fare_type", "budget_scope", "require_contiguous"])
+    await search.locator(`[name="${key}"]`).selectOption(criteria[key]);
+  await search.locator('[name="start_from"]').fill(startFrom);
+  await search.locator('[name="start_to"]').fill(startTo);
+  await search.locator('[type="submit"]').click();
+  await page.locator(`.session-button[href^="#/seats/${sid}?"]`).click();
+  await page.locator("#party-size").waitFor();
+  await page.reload();
+  await page.locator("#party-size").waitFor();
+  const selected = page.locator('[data-seat][aria-pressed="true"]');
+  while (await selected.count()) await selected.first().click();
   await page.locator(`[data-seat="${first.id}"]`).click();
   await page.locator(`[data-seat="${second.id}"]`).click();
   await language("zh", "请选择座位");
@@ -220,8 +239,24 @@ try {
   assert.equal(filters.get("film_id"), screening.film_id);
   assert.equal(filters.get("date"), date);
   assert.equal(filters.get("party_size"), "2");
+  const results = page.waitForResponse(res => new URL(res.url()).pathname === "/api/screenings" && res.ok());
   await alternatives.click();
+  const response = await results;
+  const applied = new URL(response.url()).searchParams;
   await page.getByRole("button", { name: "查找场次", exact: true }).waitFor();
+  for (const [key, value] of Object.entries(criteria)) {
+    assert.equal(filters.get(key), value, key);
+    assert.equal(applied.get(key), value, key);
+    if (key !== "budget_minor") assert.equal(await search.locator(`[name="${key}"]`).inputValue(), value, key);
+  }
+  assert.equal(await search.locator('[name="budget_yuan"]').inputValue(), (budgetMinor / 100).toFixed(2));
+  const matches = (await response.json()).data.items;
+  assert.ok(matches.some(s => s.id !== sid), "There is a matching screening at another cinema");
+  for (const show of matches) {
+    assert.ok(show.suggestion.adjacent && show.suggestion.seat_ids.length === 2);
+    assert.ok(show.fares.find(f => f.fare_type === "STUDENT").price_minor <= budgetMinor);
+    assert.ok(show.starts_at.slice(11, 16) >= startFrom && show.starts_at.slice(11, 16) <= startTo);
+  }
   assert.equal(await page.locator('input[name="date"]').inputValue(), date);
   assert.equal(await page.locator('select[name="party_size"]').inputValue(), "2");
   await page.unroute(mapUrl);

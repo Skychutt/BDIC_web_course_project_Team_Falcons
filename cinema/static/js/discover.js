@@ -6,6 +6,7 @@ import { filmRating } from "./film-rating.js";
 import { filmTitle, filmSynopsis, genreName } from "./film-locale.js";
 import { renderCinemaMap } from "./cinema-map.js";
 import { tx } from "./locale.js";
+import { showtimeFilters } from "./showtime-filters.js";
 import {
   esc,
   money,
@@ -21,25 +22,9 @@ import {
   busy,
   showError,
 } from "./ui.js";
-const allowed = [
-  "district_id",
-  "cinema_id",
-  "film_id",
-  "genre_id",
-  "date",
-  "start_from",
-  "start_to",
-  "party_size",
-  "screen_type",
-  "zone",
-  "page",
-  "page_size",
-];
-const comparisonFilters = ["fare_type", "budget_minor", "budget_scope", "require_contiguous"];
 function filtersFrom(params) {
-  const f = { date: beijingDate(), party_size: "1" };
-  const names = params.get("source_booking_id") ? allowed : [...allowed, ...comparisonFilters];
-  for (const name of names) if (params.get(name)) f[name] = params.get(name);
+  const f = { date: beijingDate(), party_size: "1", ...showtimeFilters(params, params.get("source_booking_id")) };
+  for (const name of ["page", "page_size"]) if (params.get(name)) f[name] = params.get(name);
   return f;
 }
 const shortDate = (value) =>
@@ -117,25 +102,23 @@ function bindCinemaFilter(form, bootstrap, source) {
     );
   });
 }
-function formFilters(form) {
-  const result = {};
-  for (const [key, value] of new FormData(form))
-    if (value && (allowed.includes(key) || comparisonFilters.includes(key))) result[key] = String(value);
+function formFilters(form, source) {
+  const result = showtimeFilters(new FormData(form), source);
   const budget = form.elements.budget_yuan;
   if (budget && budget.value !== "") result.budget_minor = String(Math.round(budget.valueAsNumber * 100));
   return result;
 }
-function seatLink(screening, source, fareType) {
+function seatLink(screening, source, filters) {
   const params = new URLSearchParams({
+    ...filters,
     party_size: String(screening.suggestion.seat_ids.length),
     seat_ids: screening.suggestion.seat_ids.join(","),
   });
   if (source) params.set("source_booking_id", source.id);
-  else if (fareType === "student") params.set("fare_type", "student");
   return `#/seats/${screening.id}?${params}`;
 }
-function sessionCard(s, cinema, source, fareType) {
-  const student = !source && fareType === "student";
+function sessionCard(s, cinema, source, filters) {
+  const student = !source && filters.fare_type === "student";
   const price = s.fares.find((fare) => fare.fare_type === (student ? "STUDENT" : "STANDARD"))?.price_minor;
   const count = s.suggestion.seat_ids.length;
   const total = price == null
@@ -146,12 +129,12 @@ function sessionCard(s, cinema, source, fareType) {
     `${count} 张${student ? "学生票" : "标准票"}`,
   );
   const comparison = source ? "" : `<span class="session-total">${ticketLabel} · ${total}</span>`;
-  return `<a class="session-button" href="${seatLink(s, source, fareType)}" aria-label="${esc(timeOnly(s.starts_at))} ${tx("at", "·")} ${esc(venueName(cinema?.name || s.cinema_name))}${source ? "" : `, ${ticketLabel}, ${total}`}, ${tx("choose seats", "选座")}">
+  return `<a class="session-button" href="${esc(seatLink(s, source, filters))}" aria-label="${esc(timeOnly(s.starts_at))} ${tx("at", "·")} ${esc(venueName(cinema?.name || s.cinema_name))}${source ? "" : `, ${ticketLabel}, ${total}`}, ${tx("choose seats", "选座")}">
     <span class="session-time">${timeOnly(s.starts_at)}</span><span class="session-price">${price == null ? "—" : money(price)}${source ? "" : " " + tx("each", "每张")}</span>
     <span class="session-end">${tx("Ends", "散场")} ${timeOnly(s.ends_at)}</span><span class="session-screen">${esc(screenName(s.screen_type))} · ${esc(auditoriumName(s.screen_name))}</span>
     ${comparison}<span class="session-availability">${icon("check")}${s.suggestion.adjacent ? tx("Seats together available", "有连座") : tx("Separate seats suggested", "建议分开坐")} · ${s.available_count} ${tx("left", "座可选")}</span></a>`;
 }
-function renderGroups(items, bootstrap, source, fareType) {
+function renderGroups(items, bootstrap, source, filters) {
   const groups = new Map();
   for (const s of items) {
     if (!groups.has(s.film_id)) groups.set(s.film_id, []);
@@ -174,7 +157,7 @@ function renderGroups(items, bootstrap, source, fareType) {
       ]
         .map(([cid, list]) => {
           const cinema = bootstrap.cinemas.find((c) => c.id === cid);
-          return `<div class="cinema-session"><div class="cinema-title"><h3>${esc(venueName(cinema?.name || list[0].cinema_name))}</h3><span class="badge">${esc(screenName(list[0].screen_type))}</span></div><div class="cinema-address">${icon("pin")}${esc(venueAddress(cinema?.name, cinema?.address) || tx("Beijing", "北京"))}</div><div class="session-list">${list.map((s) => sessionCard(s, cinema, source, fareType)).join("")}</div></div>`;
+          return `<div class="cinema-session"><div class="cinema-title"><h3>${esc(venueName(cinema?.name || list[0].cinema_name))}</h3><span class="badge">${esc(screenName(list[0].screen_type))}</span></div><div class="cinema-address">${icon("pin")}${esc(venueAddress(cinema?.name, cinema?.address) || tx("Beijing", "北京"))}</div><div class="session-list">${list.map((s) => sessionCard(s, cinema, source, filters)).join("")}</div></div>`;
         })
         .join("")}</section>`;
     })
@@ -210,6 +193,7 @@ export async function renderDiscover(ctx) {
     delete f.genre_id;
   }
   const query = new URLSearchParams(f);
+  const seatFilters = showtimeFilters(query, source);
   if (source) query.set("exclude_screening_id", source.screening_id);
   const data = await api.request("/screenings?" + query);
   const { items } = data;
@@ -241,7 +225,7 @@ export async function renderDiscover(ctx) {
           `${data.total} 场${source ? "可选" : ""}`,
         )
       : tx("No matches", "没有匹配");
-    root.innerHTML = `${catalogue}<div class="page-heading showtimes-heading"><div><p class="eyebrow">${source ? tx("A CHANGE OF PLANS", "改签") : tx("ON THE BIG SCREEN · BEIJING", "大银幕 · 北京")}</p><${headingTag}>${source ? tx("Find your next screening.", "找到下一场。") : tx("Find your next screening", "找到下一场")}</${headingTag}><p class="muted">${source ? tx("Choose a new time. Your current tickets stay valid until the change is confirmed.", "选择新的时间。在改签确认之前，原来的票仍然有效。") : tx("The right film. Your favourite cinema. A seat for everyone.", "合适的影片。熟悉的影院。每个人都有座位。")}</p></div><span class="live-note"><span class="live-dot"></span>${tx("Live seat availability · Beijing time", "座位实时可售 · 北京时间")}</span></div>${source ? notice(tx(`Rescheduling ${sourceTitle} at ${source.cinema_name} · ${source.tickets.length} ticket(s). Same film, cinema and fare mix; fees are confirmed before payment.`, `正在改签 ${source.cinema_name} 的《${sourceTitle}》· ${source.tickets.length} 张票。影片、影院和票种保持不变，费用在付款前确认。`)) : ""}<form id="search-form" class="search-panel">${fields(bootstrap, draft ? { ...f, ...draft } : f, source)}</form><div class="quick-dates" aria-label="${tx("Choose screening date", "选择放映日期")}">${dates.map((d) => `<button type="button" class="date-chip ${d === f.date ? "active" : ""}" data-date="${esc(d)}" aria-pressed="${d === f.date}">${dateLabel(d)}${dateLabel(d) !== shortDate(d) ? ` <span class="muted">${shortDate(d)}</span>` : ""}</button>`).join("")}</div><div class="results-heading"><h2>${source ? tx("Choose a new time", "选择新的场次") : tx("Find your screening", "查找场次")}</h2><p>${resultCount} · ${shortDate(f.date)} · ${peopleLabel(f.party_size)}</p></div><div class="browse-grid"><div class="screening-results">${items.length ? renderGroups(items, bootstrap, source, f.fare_type) : empty(tx("No screenings match these plans.", "没有符合这些条件的场次。"), tx("Try another date or adjust your filters. We keep your chosen film, cinema and group size exactly as requested.", "换个日期，或调整筛选。影片、影院和人数会按你的选择保留。"))}${
+    root.innerHTML = `${catalogue}<div class="page-heading showtimes-heading"><div><p class="eyebrow">${source ? tx("A CHANGE OF PLANS", "改签") : tx("ON THE BIG SCREEN · BEIJING", "大银幕 · 北京")}</p><${headingTag}>${source ? tx("Find your next screening.", "找到下一场。") : tx("Find your next screening", "找到下一场")}</${headingTag}><p class="muted">${source ? tx("Choose a new time. Your current tickets stay valid until the change is confirmed.", "选择新的时间。在改签确认之前，原来的票仍然有效。") : tx("The right film. Your favourite cinema. A seat for everyone.", "合适的影片。熟悉的影院。每个人都有座位。")}</p></div><span class="live-note"><span class="live-dot"></span>${tx("Live seat availability · Beijing time", "座位实时可售 · 北京时间")}</span></div>${source ? notice(tx(`Rescheduling ${sourceTitle} at ${source.cinema_name} · ${source.tickets.length} ticket(s). Same film, cinema and fare mix; fees are confirmed before payment.`, `正在改签 ${source.cinema_name} 的《${sourceTitle}》· ${source.tickets.length} 张票。影片、影院和票种保持不变，费用在付款前确认。`)) : ""}<form id="search-form" class="search-panel">${fields(bootstrap, draft ? { ...f, ...draft } : f, source)}</form><div class="quick-dates" aria-label="${tx("Choose screening date", "选择放映日期")}">${dates.map((d) => `<button type="button" class="date-chip ${d === f.date ? "active" : ""}" data-date="${esc(d)}" aria-pressed="${d === f.date}">${dateLabel(d)}${dateLabel(d) !== shortDate(d) ? ` <span class="muted">${shortDate(d)}</span>` : ""}</button>`).join("")}</div><div class="results-heading"><h2>${source ? tx("Choose a new time", "选择新的场次") : tx("Find your screening", "查找场次")}</h2><p>${resultCount} · ${shortDate(f.date)} · ${peopleLabel(f.party_size)}</p></div><div class="browse-grid"><div class="screening-results">${items.length ? renderGroups(items, bootstrap, source, seatFilters) : empty(tx("No screenings match these plans.", "没有符合这些条件的场次。"), tx("Try another date or adjust your filters. We keep your chosen film, cinema and group size exactly as requested.", "换个日期，或调整筛选。影片、影院和人数会按你的选择保留。"))}${
       !items.length && bootstrap.available_dates.length
         ? `<div class="notice">${tx("Upcoming screening dates:", "即将放映的日期：")} <div class="chips" style="margin-top:10px">${bootstrap.available_dates
             .slice(0, 6)
@@ -257,7 +241,7 @@ export async function renderDiscover(ctx) {
     bindCinemaFilter(form, bootstrap, source);
     const go = (changes = {}) => {
       if (!form.reportValidity()) return;
-      const next = { ...formFilters(form), ...changes };
+      const next = { ...formFilters(form, source), ...changes };
       if (f.page_size) next.page_size = f.page_size;
       if (source) next.source_booking_id = source.id;
       navigate("#/discover?" + new URLSearchParams(next));
