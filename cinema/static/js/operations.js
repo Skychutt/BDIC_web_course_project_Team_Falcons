@@ -217,7 +217,7 @@ export async function renderOperations(ctx) {
     cinemas = rowsOf(values[0]);
     staff = rowsOf(values[1]);
   }
-  let renderPanel, bindPanel, pendingLanguage = false;
+  let renderPanel, bindPanel, disposePanel, pendingLanguage = false;
   const results = new Map();
   const loading = () => `<div class="panel"><p class="muted">${tx("Loading…", "加载中…")}</p></div>`;
   function showResult(selector, render) {
@@ -234,6 +234,8 @@ export async function renderOperations(ctx) {
     for (const [selector, render] of results) showResult(selector, render);
   };
   async function showTab(tab, page = 1) {
+    disposePanel?.();
+    disposePanel = null;
     pendingLanguage = false;
     results.clear();
     renderPanel = null;
@@ -268,6 +270,7 @@ export async function renderOperations(ctx) {
       }
       if (!alive || token !== revision) return;
       renderPanel = render;
+      disposePanel = counterView?.dispose;
       bindPanel = counterView ? () => counterView.bind(content) : () => bindCurrent(tab, page);
       content.innerHTML = renderPanel();
       bindPanel();
@@ -1142,6 +1145,7 @@ export async function renderOperations(ctx) {
   root.querySelector("[data-workspace-heading]").innerHTML = heading();
   return () => {
     alive = false;
+    disposePanel?.();
     revision++;
     dialogs.forEach((d) => d.close());
     root.classList.remove("operations-view");

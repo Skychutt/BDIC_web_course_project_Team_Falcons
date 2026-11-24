@@ -9,7 +9,8 @@ export async function createCounterSales(api, user, openBooking, statusText) {
   let pending = JSON.parse(sessionStorage.getItem(key) || "null");
   let receipt, map, current, root, view, loading = false;
   let email = "", source = "", useCoupon = false;
-  let selected = new Map();
+  const selected = new Map();
+  let lostSeats = [], mapVersion = 0, pollTimer, polling = false;
   const shows = await api.request("/counter/screenings");
   const showText = s => `${dateTime(s.starts_at)} · ${filmTitle(s.film_title)} · ${auditoriumName(s.screen_name)}`;
   const fareText = type => type === "STUDENT" ? tx("Student", "学生票") : tx("Standard", "标准票");
@@ -38,8 +39,8 @@ export async function createCounterSales(api, user, openBooking, statusText) {
         <select name="screening" required><option value="">${tx("Select a screening", "请选择场次")}</option>
         ${shows.map(s => `<option value="${esc(s.id)}" ${s.id === current?.id ? "selected" : ""}>${esc(showText(s))}</option>`).join("")}</select></label>
         ${loading ? `<p role="status">${tx("Loading seats…", "正在加载座位…")}</p>` : ""}
-        ${map ? seatGrid(map, selected, map.saleable) : ""}
-        ${map && !map.saleable ? `<p>${tx("This screening is closed.", "本场次已停止售票。")}</p>` : ""}
+        <div data-counter-map>${map ? seatGrid(map, selected, map.saleable) : ""}</div>
+        <p data-seat-update role="status" ${map && (!map.saleable || lostSeats.length) ? "" : "hidden"}>${esc(seatUpdate())}</p>
         <div data-fares>${fares()}</div>
         <label class="field"><span>${tx("Customer’s registered email", "顾客注册邮箱")}</span><input name="email" type="email" maxlength="254" autocomplete="off" value="${esc(email)}" required></label>
         <details><summary>${tx("Coupon or booking change", "使用优惠券或办理改签")}</summary>
@@ -65,35 +66,102 @@ export async function createCounterSales(api, user, openBooking, statusText) {
     bind(root);
   }
 
-  async function loadSeats(id) {
+  function seatUpdate() {
+    if (map && !map.saleable) return tx("This screening is closed.", "本场次已停止售票。");
+    if (!lostSeats.length) return "";
+    const names = lostSeats.map(seatLabel).join(tx(", ", "、"));
+    return tx(`Removed from this sale because of a seat conflict: ${names}. Please review the remaining seats.`,
+      `${names} 刚被占用，已从本单移除，请核对剩余座位。`);
+  }
+
+  function dropUnavailable(next, previousSeats) {
+    const available = new Set(next.seats.filter(s => next.saleable && s.state === "AVAILABLE").map(s => s.id));
+    const lost = previousSeats.filter(s => selected.has(s.id) && !available.has(s.id));
+    for (const seat of lost) selected.delete(seat.id);
+    if (lost.length) lostSeats = lost;
+    return lost;
+  }
+
+  async function refreshSeats(form) {
+    const version = ++mapVersion;
+    const next = await api.request(`/screenings/${current.id}/seats`, { signal: AbortSignal.timeout(8000) });
+    if (version !== mapVersion || !form.isConnected || form.dataset.busy) return;
+    const revised = next.screening.revision_no !== map.screening.revision_no;
+    if (!revised && next.saleable === map.saleable && next.seats.length === map.seats.length &&
+        next.seats.every((seat, i) => seat.id === map.seats[i].id && seat.state === map.seats[i].state)) return;
+
+    const lost = dropUnavailable(next, map.seats);
+    map = next;
+
+    const grid = form.querySelector("[data-counter-map]");
+    const scroll = grid.querySelector(".seat-scroll");
+    const left = scroll.scrollLeft, top = scroll.scrollTop;
+    const focusId = document.activeElement?.dataset.seat;
+    grid.innerHTML = seatGrid(map, selected, map.saleable);
+    const nextScroll = grid.querySelector(".seat-scroll");
+    nextScroll.scrollTo(left, top);
+    if (focusId) (grid.querySelector(`[data-seat="${CSS.escape(focusId)}"]:enabled`) || nextScroll).focus({ preventScroll: true });
+    if (revised) form.querySelector("[data-fares]").innerHTML = fares();
+    else for (const seat of lost) form.querySelector(`[data-fare="${CSS.escape(seat.id)}"]`)?.closest("label").remove();
+    const status = form.querySelector("[data-seat-update]");
+    status.textContent = seatUpdate();
+    status.hidden = !status.textContent;
+    form.querySelector('[type="submit"]').disabled = !map.saleable || !selected.size;
+  }
+
+  async function pollSeats() {
+    const form = view?.querySelector("[data-sale]");
+    if (document.hidden || polling || !form?.isConnected || form.dataset.busy || !map?.saleable) return;
+    polling = true;
+    try {
+      await refreshSeats(form);
+    } catch {
+      // Keep the cashier's draft and retry on the next visible poll.
+    } finally {
+      polling = false;
+    }
+  }
+
+  async function loadSeats(id, previousSeats = []) {
+    const version = ++mapVersion;
     current = shows.find(s => s.id === id);
     map = null;
     selected.clear();
+    lostSeats = [];
     loading = Boolean(current);
     redraw();
     if (!current) return;
-    const target = current;
     try {
       const result = await api.request(`/screenings/${id}/seats`);
-      if (current === target) map = result;
+      if (version !== mapVersion) return;
+      map = result;
+      for (const seat of previousSeats) {
+        if (seat.id && seat.fare_type) selected.set(seat.id, seat.fare_type);
+      }
+      dropUnavailable(map, previousSeats);
     } catch (error) {
-      if (current !== target) return;
+      if (version !== mapVersion) return;
       current = null;
       loading = false;
       redraw();
       if (view?.isConnected) showError(view.querySelector("[data-error]"), error, true);
       return;
     }
-    if (current === target) { loading = false; redraw(); }
+    loading = false;
+    redraw();
   }
 
   function bind(container) {
+    if (pollTimer === undefined) {
+      pollTimer = setInterval(pollSeats, 5000);
+      document.addEventListener("visibilitychange", pollSeats);
+    }
     root = container;
     view = root.querySelector("[data-counter-sale]");
     const form = view.querySelector("form");
     if (receipt) {
       view.querySelector("[data-next]").onclick = () => {
-        receipt = null; current = null; map = null; selected.clear(); email = ""; source = ""; useCoupon = false;
+        receipt = null; current = null; map = null; selected.clear(); lostSeats = []; email = ""; source = ""; useCoupon = false;
         redraw();
       };
       view.querySelector("[data-booking]").onclick = () => openBooking(receipt.booking_id);
@@ -107,10 +175,12 @@ export async function createCounterSales(api, user, openBooking, statusText) {
     });
     const edit = form.querySelector("[data-edit]");
     if (edit) edit.onclick = () => {
+      const sale = pending;
       pending = null;
       sessionStorage.removeItem(key);
-      if (current) loadSeats(current.id);
-      else redraw();
+      source = sale.source_booking_id ?? source;
+      useCoupon = sale.use_coupon ?? useCoupon;
+      loadSeats(sale.screening.id, sale.seats);
     };
     form.oninput = () => {
       if (form.elements.email) {
@@ -134,6 +204,8 @@ export async function createCounterSales(api, user, openBooking, statusText) {
         return;
       }
       form.querySelector("[data-error]").hidden = true;
+      lostSeats = [];
+      form.querySelector("[data-seat-update]").hidden = true;
       seat.setAttribute("aria-pressed", String(selected.has(id)));
       form.querySelector("[data-fares]").innerHTML = fares();
       form.querySelector('[type="submit"]').disabled = !selected.size;
@@ -152,8 +224,10 @@ export async function createCounterSales(api, user, openBooking, statusText) {
             email: email.trim(), screening_id: current.id, source_booking_id: source.trim() || null,
             use_coupon: useCoupon, tickets: [...selected].map(([seat_id, fare_type]) => ({ seat_id, fare_type })),
           } });
-          pending = { ...result, screening: current, seats: map.seats.filter(s => selected.has(s.id))
-            .map(({ row_no, seat_no }) => ({ row_no, seat_no })), recipient: email.replace(/^(.).*@/, "$1…@") };
+          pending = { ...result, screening: current, source_booking_id: source, use_coupon: useCoupon,
+            seats: map.seats.filter(s => selected.has(s.id))
+              .map(({ id, row_no, seat_no }) => ({ id, row_no, seat_no, fare_type: selected.get(id) })),
+            recipient: email.replace(/^(.).*@/, "$1…@") };
           sessionStorage.setItem(key, JSON.stringify(pending));
         }
       });
@@ -162,6 +236,8 @@ export async function createCounterSales(api, user, openBooking, statusText) {
 
   async function submit(form, action) {
     if (form.dataset.busy) return;
+    ++mapVersion;
+    let refreshAfterFailure = false;
     form.dataset.busy = "1";
     form.setAttribute("aria-busy", "true");
     const controls = [...form.elements].filter(el => !el.disabled);
@@ -170,13 +246,21 @@ export async function createCounterSales(api, user, openBooking, statusText) {
       await action();
       redraw();
     } catch (err) {
-      if (!pending && err.code === "SEAT_UNAVAILABLE") await loadSeats(current.id);
-      if (view.isConnected) showError(view.querySelector("[data-error]"), err, true);
+      refreshAfterFailure = !pending && ["SEAT_UNAVAILABLE", "SALE_CLOSED"].includes(err.code);
+      if (form.isConnected) showError(form.querySelector("[data-error]"), err, true);
     } finally {
       delete form.dataset.busy;
       form.removeAttribute("aria-busy");
       controls.forEach(el => { el.disabled = false; });
     }
+    if (refreshAfterFailure && form.isConnected) {
+      try { await refreshSeats(form); } catch { /* The sale error stays visible until the next poll. */ }
+    }
   }
-  return { html, bind };
+  function dispose() {
+    ++mapVersion;
+    clearInterval(pollTimer);
+    document.removeEventListener("visibilitychange", pollSeats);
+  }
+  return { html, bind, dispose };
 }
