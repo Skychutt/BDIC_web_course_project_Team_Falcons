@@ -106,15 +106,15 @@ async function overflowCheck() {
     JSON.stringify(dimensions),
   );
 }
-async function holdSeats(screeningId, minRow = 10, partySize = 2) {
+async function holdSeats(screeningId, partySize = 2) {
   const map = await api(`/screenings/${screeningId}/seats`);
   const seats = map.seats
-    .filter((s) => s.state === "AVAILABLE" && Number(s.row_no) >= minRow)
+    .filter((s) => s.state === "AVAILABLE")
     .slice(-partySize);
   assert.equal(
     seats.length,
     partySize,
-    "Fixture requires available seats in the permitted rows.",
+    "Fixture requires enough available seats.",
   );
   const hold = await api(
     "/holds",
@@ -130,8 +130,8 @@ async function holdSeats(screeningId, minRow = 10, partySize = 2) {
   });
   return hold;
 }
-async function purchaseFixture(screeningId, minRow = 10, partySize = 2) {
-  const hold = await holdSeats(screeningId, minRow, partySize);
+async function purchaseFixture(screeningId, partySize = 2) {
+  const hold = await holdSeats(screeningId, partySize);
   const quote = await api(`/holds/${hold.hold_id}/quote`, "POST", {
     tickets: hold.seat_ids.map((seat_id, i) => ({
       seat_id,
@@ -266,6 +266,33 @@ try {
         .waitFor();
     },
   );
+  await check("Rescheduling closes on an open order at the 30-minute boundary", async () => {
+    const cutoff = Date.parse(booking.starts_at) - 30 * 60 * 1000;
+    const url = `${base}/#/account?tab=orders&booking=${booking.id}`;
+    const storageState = await context.storageState();
+    for (const trigger of ["timer", "keyboard", "visibility"]) {
+      const probe = await browser.newPage({ storageState, timezoneId: "Asia/Shanghai" });
+      try {
+        await probe.clock.install({ time: new Date(cutoff - 60000) });
+        await probe.clock.pauseAt(new Date(cutoff - 1000));
+        await probe.goto(url);
+        const card = probe.locator(`[data-booking="${booking.id}"]`);
+        const link = card.getByRole("link", { name: "Reschedule party" });
+        await link.waitFor();
+        await probe.clock.runFor(1000); // Exactly 30 minutes remaining, still eligible.
+        assert.equal(await link.getAttribute("href"), `#/discover?source_booking_id=${booking.id}`);
+        await probe.clock.runFor(trigger === "timer" ? 1000 : 1);
+        if (trigger === "keyboard") await link.press("Enter");
+        if (trigger === "visibility") await probe.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+        await link.waitFor({ state: "detached" });
+        assert.equal(probe.url(), url);
+        assert.match(await card.locator("[data-refund-reason]").innerText(), /Less than 30 minutes.*Rescheduling/);
+        assert.ok(await card.getByRole("button", { name: "Refund tickets" }).isDisabled());
+      } finally {
+        await probe.close();
+      }
+    }
+  });
   await check(
     "Order status tabs use server-side status filtering",
     async () => {
@@ -314,7 +341,7 @@ try {
     },
   );
 
-  const activeHold = await holdSeats(booking.screening_id, 10);
+  const activeHold = await holdSeats(booking.screening_id);
   await check(
     "Hold list resumes the exact existing hold and keeps its deadline",
     async () => {
@@ -401,7 +428,7 @@ try {
         booking_id: affected.id,
         run_id: fixture.run_id,
       });
-    } else affected = await purchaseFixture(fixture.screening_id, 1, 1);
+    } else affected = await purchaseFixture(fixture.screening_id, 1);
     assert.equal(affected.net_ticket_minor, 6500);
     await fs.writeFile(
       path.join(out, "account-booked.json"),
@@ -521,6 +548,7 @@ try {
         element.blur();
       });
       await screenshot("account-wallet-mobile-390.png");
+      await page.setViewportSize({ width: 1380, height: 1000 });
     },
   );
   await check(

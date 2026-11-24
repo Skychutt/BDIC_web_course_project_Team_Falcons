@@ -96,7 +96,7 @@ function refundSummary(refunds = []) {
     .join("");
 }
 
-function refundDisabledReason(booking, current = Date.now()) {
+function bookingActionDisabledReason(booking, current = Date.now()) {
   if (booking.status === "CUSTOMER_CANCELLED")
     return tx("This booking has already been refunded.", "该订单已退款。");
   if (booking.status === "CINEMA_CANCELLED")
@@ -108,13 +108,13 @@ function refundDisabledReason(booking, current = Date.now()) {
   const start = Date.parse(booking.starts_at);
   const end = Date.parse(booking.ends_at);
   if (!Number.isFinite(start))
-    return tx("Screening time is unavailable. Refresh to check refund eligibility.", "暂时无法获取放映时间，请刷新后查看是否可以退票。");
+    return tx("Screening time is unavailable. Refresh to check rescheduling and refunds.", "暂时无法获取放映时间，请刷新后查看是否可以改签或退票。");
   if (Number.isFinite(end) && end <= current)
-    return tx("This screening has ended. Refunds are closed.", "场次已结束，无法退票。");
+    return tx("This screening has ended. Rescheduling and refunds are closed.", "场次已结束，无法改签或退票。");
   if (start <= current)
-    return tx("This screening has already started. Refunds are closed.", "场次已开始，无法退票。");
+    return tx("This screening has already started. Rescheduling and refunds are closed.", "场次已开始，无法改签或退票。");
   if (start - current < 30 * 60 * 1000)
-    return tx("Less than 30 minutes to showtime. Refunds are closed.", "距开场不足 30 分钟，无法退票。");
+    return tx("Less than 30 minutes to showtime. Rescheduling and refunds are closed.", "距开场不足 30 分钟，无法改签或退票。");
   return "";
 }
 
@@ -226,13 +226,9 @@ export async function renderAccount(ctx) {
 
   function bookCard(b) {
     const start = b.starts_at ? Date.parse(b.starts_at) : NaN;
-    const mayChange =
-      b.status === "CONFIRMED" &&
-      Number.isFinite(start) &&
-      start - Date.now() >= 30 * 60 * 1000;
     const ended =
       b.status === "CONFIRMED" && Number.isFinite(start) && start <= Date.now();
-    const refundReason = refundDisabledReason(b);
+    const reason = bookingActionDisabledReason(b);
     const open = String(selectedBooking || "") === String(b.id);
     const partySize = Number(b.ticket_count ?? b.tickets?.length ?? 0);
     return `<article class="panel" data-booking="${esc(b.id)}">
@@ -246,9 +242,9 @@ export async function renderAccount(ctx) {
       <div class="toolbar"><span class="muted">${tx("Booking", "订单")} · ${esc(shortId(b.id))}${Number(b.change_no) ? tx(` · ${Number(b.change_no)} ${Number(b.change_no) === 1 ? "change" : "changes"}`, ` · 已改签 ${Number(b.change_no)} 次`) : ""}</span>
         <div class="account-refund-actions"><div class="actions">
           <button type="button" class="button" data-action="view-ticket" data-id="${esc(b.id)}">${tx("View ticket", "查看电子票")}</button>
-          ${mayChange ? `<a class="button secondary" href="#/discover?source_booking_id=${encodeURIComponent(b.id)}">${tx("Reschedule party", "整单改签")}</a>` : ""}
-          <button type="button" class="button secondary" data-action="refund-booking" data-id="${esc(b.id)}" data-booking-status="${esc(b.status)}" data-starts-at="${esc(b.starts_at || "")}" data-ends-at="${esc(b.ends_at || "")}" aria-describedby="refund-reason-${esc(b.id)}" ${refundReason ? "disabled" : ""}>${tx("Refund tickets", "退票")}</button>
-        </div><p id="refund-reason-${esc(b.id)}" class="muted account-refund-reason" data-refund-reason aria-live="polite" ${refundReason ? "" : "hidden"}>${esc(refundReason)}</p></div>
+          ${reason ? "" : `<a class="button secondary" data-reschedule href="#/discover?source_booking_id=${encodeURIComponent(b.id)}">${tx("Reschedule party", "整单改签")}</a>`}
+          <button type="button" class="button secondary" data-action="refund-booking" data-id="${esc(b.id)}" data-booking-status="${esc(b.status)}" data-starts-at="${esc(b.starts_at || "")}" data-ends-at="${esc(b.ends_at || "")}" aria-describedby="refund-reason-${esc(b.id)}" ${reason ? "disabled" : ""}>${tx("Refund tickets", "退票")}</button>
+        </div><p id="refund-reason-${esc(b.id)}" class="muted account-refund-reason" data-refund-reason aria-live="polite" ${reason ? "" : "hidden"}>${esc(reason)}</p></div>
       </div>
       <details ${open ? "open" : ""} data-order-details="${esc(b.id)}"><summary class="button ghost">${tx("Seats, fees & compensation", "座位、费用与补偿")}</summary><div class="stack" data-detail-content="${esc(b.id)}">${b.tickets ? bookingDetails(b) : `<p class="muted">${tx("Open to load full booking details.", "展开查看完整订单详情。")}</p>`}</div></details>
     </article>`;
@@ -388,19 +384,24 @@ export async function renderAccount(ctx) {
       ${pagination(data, "notices")}`;
   }
 
+  function updateBookingActions(actions) {
+    const button = actions.querySelector('[data-action="refund-booking"]');
+    const reason = bookingActionDisabledReason({
+      status: button.dataset.bookingStatus,
+      starts_at: button.dataset.startsAt,
+      ends_at: button.dataset.endsAt,
+    });
+    button.disabled = Boolean(reason);
+    if (reason) actions.querySelector("[data-reschedule]")?.remove();
+    const hint = actions.querySelector("[data-refund-reason]");
+    if (hint.textContent !== reason) hint.textContent = reason;
+    hint.hidden = !reason;
+    return reason;
+  }
+
   function tick() {
     if (!alive) return;
-    root.querySelectorAll('[data-action="refund-booking"]').forEach((button) => {
-      const reason = refundDisabledReason({
-        status: button.dataset.bookingStatus,
-        starts_at: button.dataset.startsAt,
-        ends_at: button.dataset.endsAt,
-      });
-      button.disabled = Boolean(reason);
-      const hint = button.closest(".account-refund-actions").querySelector("[data-refund-reason]");
-      if (hint.textContent !== reason) hint.textContent = reason;
-      hint.hidden = !reason;
-    });
+    root.querySelectorAll(".account-refund-actions").forEach(updateBookingActions);
     root.querySelectorAll("[data-expires]").forEach((card) => {
       const remain = Math.max(
         0,
@@ -734,6 +735,14 @@ export async function renderAccount(ctx) {
     { capture: true, signal: lifecycle.signal },
   );
 
+  // Recheck at activation as the cutoff can pass between two timer ticks.
+  function guardReschedule(event) {
+    const link = event.target.closest("[data-reschedule]");
+    if (link && updateBookingActions(link.closest(".account-refund-actions"))) event.preventDefault();
+  }
+  root.addEventListener("click", guardReschedule, { signal: lifecycle.signal });
+  root.addEventListener("auxclick", guardReschedule, { signal: lifecycle.signal });
+  document.addEventListener("visibilitychange", tick, { signal: lifecycle.signal });
   await load();
   if (alive) timer = setInterval(tick, 1000);
   return cleanup;
