@@ -86,7 +86,7 @@ try {
       await page.locator("input[name=budget_yuan]").fill("1000");
       await page.locator("select[name=require_contiguous]").selectOption("true");
       await page.getByRole("button", { name: "Find showtimes" }).click();
-      const card = page.locator(`.session-button[href^="#/seats/${first.id}?"]`);
+      const card = page.locator(`.session-button[href^="#/seats/${first.id}?"][href*="fare_type=student"]`);
       assert.match(await card.innerText(), /2 student tickets · .* total before coupons/);
       await noOverflow();
       await shot("discovery-desktop");

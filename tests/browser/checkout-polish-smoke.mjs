@@ -78,6 +78,15 @@ async function checkExpiredReselection(bookingId) {
       assert.ok(!currentQuery().has("hold_id") && !currentQuery().has("seat_ids"));
       assert.equal(await retry.locator('[data-seat][aria-pressed="true"]').count(), 0);
       for (const seat of seats.slice(3, 3 + size)) await retry.locator(`[data-seat="${seat.id}"]`).click();
+      if (changing) {
+        await retry.locator(`[data-seat="${seats[3 + size - 1].id}"][aria-pressed="true"]`).waitFor();
+        await retry.reload();
+        await retry.locator("#party-size").waitFor();
+        assert.ok(await retry.locator("#party-size").isDisabled());
+        assert.equal(currentQuery().get("source_booking_id"), bookingId);
+        assert.deepEqual(await retry.locator('[data-seat][aria-pressed="true"]').evaluateAll(
+          buttons => buttons.map(button => button.dataset.seat)), seats.slice(3, 3 + size).map(seat => seat.id));
+      }
       await retry.locator("#create-hold").click();
       await retry.locator("#quote-form").waitFor();
       assert.deepEqual(await fares(), expected);
@@ -180,9 +189,23 @@ try {
   await page.reload();
   await page.locator("#party-size").waitFor();
   const selected = page.locator('[data-seat][aria-pressed="true"]');
+  const chosenIds = () => selected.evaluateAll(buttons => buttons.map(button => button.dataset.seat));
+  const historyLength = await page.evaluate(() => history.length);
   while (await selected.count()) await selected.first().click();
+  await page.locator("#party-size").selectOption("3");
+  await page.reload();
+  await page.locator("#party-size").waitFor();
+  assert.equal(await page.locator("#party-size").inputValue(), "3");
+  assert.deepEqual(await chosenIds(), []);
   await page.locator(`[data-seat="${first.id}"]`).click();
   await page.locator(`[data-seat="${second.id}"]`).click();
+  await page.locator(`[data-seat="${second.id}"][aria-pressed="true"]`).waitFor();
+  await page.locator("#party-size").selectOption("2");
+  await page.reload();
+  await page.locator("#party-size").waitFor();
+  assert.deepEqual(await chosenIds(), [first.id, second.id]);
+  assert.equal(await page.evaluate(() => history.length), historyLength);
+  const editedUrl = page.url();
   await language("zh", "请选择座位");
   assert.equal(await page.locator("#party-size").inputValue(), "2");
   assert.equal(await page.locator('[data-seat][aria-pressed="true"]').count(), 2);
@@ -196,11 +219,23 @@ try {
   assert.equal(await page.locator(`[data-seat="${second.id}"]`).getAttribute("aria-pressed"), "true");
   assert.equal(await page.locator(`[data-seat="${first.id}"]`).getAttribute("aria-pressed"), "false");
 
+  // Reload a saved choice after its first seat was taken. Only the surviving seat should return.
+  const reopened = await context.newPage();
+  try {
+    await reopened.goto(editedUrl);
+    await reopened.locator("#party-size").waitFor();
+    assert.equal(await reopened.locator('[data-seat][aria-pressed="true"]').count(), 1);
+    assert.equal(await reopened.locator(`[data-seat="${second.id}"]`).getAttribute("aria-pressed"), "true");
+    assert.ok(await reopened.locator("#create-hold").isDisabled());
+    assert.equal(new URLSearchParams(new URL(reopened.url()).hash.split("?")[1]).get("seat_ids"), second.id);
+  } finally {
+    await reopened.close();
+  }
   const recommend = page.getByRole("button", { name: "一键重新推荐连座" });
-  const chosenIds = () => page.locator('[data-seat][aria-pressed="true"]').evaluateAll(
-    buttons => buttons.map(button => button.dataset.seat));
   await recommend.click();
   await page.getByText("已选好连座，确认后可占座。", { exact: true }).waitFor();
+  await page.reload();
+  await page.locator("#party-size").waitFor();
   assert.deepEqual(await chosenIds(), [second.id, third.id]);
   assert.equal((await api(context, "/me/holds")).items.length, 0);
   // This auditorium has enough individual seats, but no block of twelve.
@@ -335,6 +370,52 @@ try {
   assert.equal(afterRelease.seats.find(seat => seat.id === first.id).state, "AVAILABLE");
   assert.deepEqual(errors, []);
   console.log("PASS releasing seats completes without redirecting a customer who has opened reviews");
+
+  const checkout = await context.newPage();
+  const charges = async () => (await api(context, "/me/wallet-entries")).items.filter(e => e.entry_type === "PAYMENT");
+  try {
+    const writes = [];
+    page.on("request", req => {
+      if (req.method() === "POST" && new URL(req.url()).pathname === "/api/bookings") writes.push(req.url());
+    });
+    const before = await charges();
+    await page.goto(`${base}/#/seats/${sid}?seat_ids=${first.id}`);
+    await page.locator("#create-hold").click();
+    await page.locator("#quote-form [type=submit]").click();
+    await page.locator("#pay-now").waitFor();
+
+    await checkout.goto(`${base}/#/seats/${sid}?seat_ids=${second.id}`);
+    await checkout.locator("#create-hold").click();
+    await checkout.locator("#quote-form").waitFor();
+    await page.locator("#reselect").waitFor();
+    assert.equal(await page.getByRole("link", { name: "查看我的占座" }).getAttribute("href"), "#/account?tab=holds");
+    assert.equal(await page.locator("#pay-now, #countdown").count(), 0);
+    const newHold = new URLSearchParams(new URL(checkout.url()).hash.split("?")[1]).get("hold_id");
+    assert.equal((await api(context, `/holds/${newHold}/payment-result`)).status, "ACTIVE");
+    assert.deepEqual(await charges(), before);
+
+    await page.clock.install();
+    await page.goto(checkout.url());
+    await page.locator("#quote-form [type=submit]").click();
+    await page.locator("#pay-now").waitFor();
+    await page.clock.pauseAt(new Date(await page.evaluate(() => Date.now()) + 1000));
+    await checkout.locator("#quote-form [type=submit]").click();
+    await checkout.locator("#pay-now").click();
+    const receipt = ".success-panel a[href*='booking=']";
+    await checkout.locator(receipt).waitFor();
+    // Resume this tab after its local countdown has elapsed.
+    await page.clock.fastForward(301000);
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await page.locator(receipt).waitFor();
+    assert.equal(await page.locator(receipt).getAttribute("href"), await checkout.locator(receipt).getAttribute("href"));
+    assert.equal(await page.locator("#pay-now, #countdown").count(), 0);
+    assert.equal((await charges()).length, before.length + 1);
+    assert.deepEqual(writes, []);
+    assert.deepEqual(errors, []);
+    console.log("PASS a second checkout tab replaces a hold or pays once and the first tab updates automatically");
+  } finally {
+    await checkout.close();
+  }
 } finally {
   await browser.close();
 }

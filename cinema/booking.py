@@ -272,7 +272,7 @@ def release_hold(actor, hid):
     return transaction(work)
 
 
-def payment_result(actor, hid):
+def payment_result(actor, hid, *, include_sale_status=False):
     def read(c):
         # Wait for a checkout already holding this row before interpreting the deadline.
         h = get(c, "seat_holds", hid, lock=True)
@@ -289,7 +289,10 @@ def payment_result(actor, hid):
             return dict(status="CONFIRMED", receipt=receipt)
         if status == "ACTIVE" and h["expires_at"] <= now():
             status = "EXPIRED"
-        return dict(status=status)
+        result = dict(status=status)
+        if include_sale_status:
+            result["saleable"] = sale_closed_reason(c, h["screening_id"]) is None
+        return result
 
     return transaction(read)
 

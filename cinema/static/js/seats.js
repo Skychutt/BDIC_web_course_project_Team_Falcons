@@ -42,9 +42,10 @@ async function allRows(api, path) {
 
 export async function renderSeats(ctx, sid) {
   const { root, api, user, bootstrap, params, navigate, toast } = ctx;
+  let pageHash = location.hash;
   let alive = true,
     interval, saleTimer, renderedOnSale;
-  let saleCheck, mapRefresh, closeTicket;
+  let saleCheck, mapRefresh, holdRefresh, closeTicket;
   let locatedSeatId, locateTimer;
   let pendingLanguage = false;
   let map = await api.request(
@@ -151,20 +152,33 @@ export async function renderSeats(ctx, sid) {
       );
   }
   if (state.quote) validateQuote(state.quote);
-  if (state.phase === "choose")
-    for (const id of (params.get("seat_ids") || "").split(",")) {
+  const canSelect = (seat) => seat.state === "AVAILABLE" || seat.held_by_me;
+  if (state.phase === "choose") {
+    const requested = (params.get("seat_ids") || "").split(",").filter(Boolean);
+    for (const id of requested) {
       const seat = map.seats.find((v) => v.id === id);
-      if (
-        seat &&
-        (seat.state === "AVAILABLE" || seat.held_by_me) &&
-        state.selected.size < state.target
-      )
+      if (seat && canSelect(seat) && state.selected.size < state.target)
         state.selected.add(id);
     }
-  if (params.get("from") === "assistant" && state.phase === "choose") {
-    const suggested = (params.get("seat_ids") || "").split(",").filter(Boolean);
-    if (suggested.some((id) => !state.selected.has(id)))
-      state.error = () => tx("Some suggested seats are no longer available. Please review the latest map and complete your selection. No new seats have been held.", "部分推荐座位已不可选。请根据最新座位图完成选座，目前尚未占座。");
+    if (requested.some(id => !state.selected.has(id))) {
+      const taken = map.seats.filter(seat => requested.includes(seat.id) && !canSelect(seat));
+      if (params.get("from") === "assistant")
+        state.error = () => tx("Some selected seats are no longer available. Please review the latest map. No new seats have been held.", "部分所选座位已不可选，请按最新座位图补选，目前尚未占座。");
+      else if (taken.length) state.seatConflict = taken;
+      else state.error = () => tx("Please check your selection against the latest seat map.", "请按最新座位图核对已选座位。");
+      saveSelectionUrl();
+    }
+  }
+  function saveSelectionUrl() {
+    if (!alive || location.hash !== pageHash) return;
+    params.set("party_size", String(state.target));
+    if (state.selected.size) params.set("seat_ids", [...state.selected].join(","));
+    else params.delete("seat_ids");
+    const next = "#/seats/" + sid + "?" + params;
+    if (next !== pageHash) {
+      history.replaceState(history.state, "", next);
+      pageHash = location.hash;
+    }
   }
   async function lockWhile(action) {
     if (state.working) return;
@@ -184,12 +198,12 @@ export async function renderSeats(ctx, sid) {
       else tick();
     }
   }
-  const canSelect = (seat) => seat.state === "AVAILABLE" || seat.held_by_me;
   function keepAvailableSelection() {
     const lost = map.seats.filter(seat => state.selected.has(seat.id) && !canSelect(seat));
     if (lost.length) {
       for (const seat of lost) state.selected.delete(seat.id);
       state.seatConflict = lost;
+      saveSelectionUrl();
     }
   }
   function adjacentButton() {
@@ -306,8 +320,28 @@ export async function renderSeats(ctx, sid) {
   }
   function checkVisibleSale() {
     if (document.hidden || state.working || !onSale() || state.phase === "complete") return;
-    const check = state.phase === "choose" ? refreshMap() : checkSale();
-    void check.catch(() => {}); // Keep the last good map and retry on the next poll.
+    let check;
+    if (state.phase === "choose") check = refreshMap();
+    else if (canSyncHold()) check = refreshHold();
+    else check = checkSale();
+    void check.catch(() => {}); // Keep the last known state and retry on the next poll.
+  }
+  function canSyncHold() {
+    // A suspended tab can reach its local deadline after another tab has already paid.
+    return state.hold?.status === "ACTIVE" && ["held", "quoted", "expired"].includes(state.phase);
+  }
+  function refreshHold() {
+    if (holdRefresh) return holdRefresh;
+    const hold = state.hold;
+    const hash = location.hash;
+    holdRefresh = api.request(`/holds/${hold.id}/payment-result?include_sale_status=1`, { signal: AbortSignal.timeout(8000) })
+      .then(result => {
+        if (!alive || location.hash !== hash || state.hold !== hold || state.working || !canSyncHold()) return;
+        if (result.saleable === false) map.saleable = false;
+        if (applyTerminalResult(result) || !onSale()) render();
+      })
+      .finally(() => { holdRefresh = null; });
+    return holdRefresh;
   }
   async function recommendAdjacent() {
     if (state.phase !== "choose" || !onSale()) return;
@@ -325,6 +359,7 @@ export async function renderSeats(ctx, sid) {
       if (ids.length === state.target) {
         const sameSeats = ids.every(id => state.selected.has(id));
         state.selected = new Set(ids);
+        saveSelectionUrl();
         state.error = null;
         state.seatConflict = null;
         toast(sameSeats
@@ -404,7 +439,9 @@ export async function renderSeats(ctx, sid) {
         state.phase = "recover";
         state.allowPaymentRetry = false;
       } else {
+        const hadSelection = state.phase === "choose" && state.selected.size > 0;
         state.selected.clear();
+        if (hadSelection) saveSelectionUrl();
         state.hold = null;
         state.quote = null;
         state.phase = "choose";
@@ -454,6 +491,7 @@ export async function renderSeats(ctx, sid) {
           }
           state.error = null;
           if (state.selected.size === state.target) state.seatConflict = null;
+          saveSelectionUrl();
           render();
           root
             .querySelector(`[data-seat="${id}"]`)
@@ -464,6 +502,7 @@ export async function renderSeats(ctx, sid) {
       state.target = Number(e.target.value);
       while (state.selected.size > state.target)
         state.selected.delete([...state.selected].pop());
+      saveSelectionUrl();
       render();
     });
     root.querySelector("#recommend-adjacent")?.addEventListener("click", (e) =>
@@ -474,6 +513,10 @@ export async function renderSeats(ctx, sid) {
         e.currentTarget,
         async () => {
           try {
+            if (canSyncHold()) {
+              await refreshHold();
+              if (!alive || !["held", "quoted"].includes(state.phase)) return;
+            }
             await refreshMap();
           } catch (err) {
             if (alive && root.querySelector("#seat-errors")) showError(root.querySelector("#seat-errors"), err);
@@ -559,7 +602,9 @@ export async function renderSeats(ctx, sid) {
     if (state.phase === "converted")
       return `${notice(tx("This hold has already been purchased. Your issued tickets are in your account.", "该占座已完成购买，影票可在「我的影票」查看。"))}<a class="button wide" href="#/account">${tx("View my tickets", "查看我的影票")} ${icon("arrow")}</a>`;
     if (state.phase === "expired")
-      return `${notice(tx("This seat hold has ended. Your earlier confirmed tickets, if any, remain unchanged.", "本次占座已结束。此前已确认的影票仍按原订单状态处理。"), "warning")}<button class="button wide" id="reselect">${tx("Choose seats again", "重新选座")}</button>`;
+      return `${notice(state.hold?.status === "CANCELLED"
+        ? tx("This hold has been released. Check My holds for your current reservation.", "本次占座已释放，可在「我的占座」查看当前保留的座位。")
+        : tx("This seat hold has ended. Your earlier confirmed tickets, if any, remain unchanged.", "本次占座已结束。此前已确认的影票仍按原订单状态处理。"), "warning")}<button class="button wide" id="reselect">${tx("Choose seats again", "重新选座")}</button>${state.hold?.status === "CANCELLED" ? `<a class="button ghost wide" href="#/account?tab=holds">${tx("View my holds", "查看我的占座")}</a>` : ""}`;
     if (state.phase === "choose") {
       const selected = state.selected.size;
       const ticketTotal = tickets().reduce(
@@ -622,8 +667,7 @@ export async function renderSeats(ctx, sid) {
       state.quote = null;
       save();
       params.set("hold_id", h.hold_id);
-      params.set("party_size", String(state.target));
-      history.replaceState(null, "", "#/seats/" + sid + "?" + params);
+      saveSelectionUrl();
       map = await api.request("/screenings/" + sid + "/seats");
       if (!alive) return;
       render();
@@ -665,7 +709,11 @@ export async function renderSeats(ctx, sid) {
     } catch (e) {
       state.error = e;
       if (e.code === "SALE_CLOSED") map.saleable = false;
-      if (["HOLD_EXPIRED", "TOKEN_EXPIRED"].includes(e.code))
+      if (e.code === "HOLD_EXPIRED") {
+        state.phase = "expired";
+        return checkPaymentResult();
+      }
+      if (e.code === "TOKEN_EXPIRED")
         state.phase = "expired";
       render();
     }
@@ -674,7 +722,12 @@ export async function renderSeats(ctx, sid) {
     const holdId = state.hold.id;
     let expectedHash = location.hash;
     try {
-      await api.request("/holds/" + holdId, { method: "DELETE" });
+      const result = await api.request("/holds/" + holdId, { method: "DELETE" });
+      if (result.status === "CONVERTED") {
+        if (!alive || location.hash !== expectedHash) return;
+        state.phase = "converted";
+        return checkPaymentResult();
+      }
       if (readDraft(draftKey)?.hold_id === holdId) sessionStorage.removeItem(draftKey);
       if (!alive || location.hash !== expectedHash) return;
       state.hold = null;
@@ -684,17 +737,33 @@ export async function renderSeats(ctx, sid) {
       params.delete("hold_id");
       if (state.source) params.set("source_booking_id", state.source.id);
       else params.delete("source_booking_id");
-      history.replaceState(null, "", "#/seats/" + sid + "?" + params);
+      saveSelectionUrl();
       expectedHash = location.hash;
       const nextMap = await api.request("/screenings/" + sid + "/seats");
       if (!alive || location.hash !== expectedHash) return;
       map = nextMap;
+      keepAvailableSelection();
       render();
     } catch (e) {
       if (!alive || location.hash !== expectedHash) return;
       state.error = e;
       render();
     }
+  }
+  function applyTerminalResult(result) {
+    if (!["CONFIRMED", "EXPIRED", "CANCELLED"].includes(result.status)) return false;
+    api.clearPending("pay:" + state.hold.id);
+    state.quote = null;
+    state.error = null;
+    if (result.status === "CONFIRMED") {
+      if (readDraft(draftKey)?.hold_id === state.hold.id) sessionStorage.removeItem(draftKey);
+      state.receipt = result.receipt;
+      state.phase = "complete";
+    } else {
+      state.hold.status = result.status;
+      state.phase = "expired";
+    }
+    return true;
   }
   async function checkPaymentResult() {
     try {
@@ -705,12 +774,7 @@ export async function renderSeats(ctx, sid) {
       state.error = null;
       if (result.status === "ACTIVE") {
         state.allowPaymentRetry = true;
-      } else if (["CONFIRMED", "EXPIRED", "CANCELLED"].includes(result.status)) {
-        api.clearPending("pay:" + state.hold.id);
-        sessionStorage.removeItem(draftKey);
-        state.receipt = result.receipt;
-        state.phase = result.status === "CONFIRMED" ? "complete" : "expired";
-      }
+      } else applyTerminalResult(result);
     } catch (e) {
       state.error = e;
       state.allowPaymentRetry = false;
@@ -744,7 +808,10 @@ export async function renderSeats(ctx, sid) {
         state.allowPaymentRetry = false;
         checkDelay = 2000;
         nextResultCheck = Date.now() + checkDelay;
-      } else if (["HOLD_EXPIRED", "TOKEN_EXPIRED"].includes(e.code))
+      } else if (e.code === "HOLD_EXPIRED") {
+        state.phase = "expired";
+        return checkPaymentResult();
+      } else if (e.code === "TOKEN_EXPIRED")
         state.phase = "expired";
       else if (e.code === "QUOTE_CHANGED") {
         state.phase = "held";

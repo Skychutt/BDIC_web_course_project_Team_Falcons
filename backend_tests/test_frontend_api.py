@@ -145,6 +145,9 @@ def test_archiving_film_closes_existing_screenings_and_quotes(env):
     with db().begin() as c:
         upd(c, "films", env["ids"]["film_id"], archived=True)
 
+    status_path = f"/api/holds/{hid}/payment-result?include_sale_status=1"
+    assert client(env, "customer").get(status_path).json["data"] == {"status": "ACTIVE", "saleable": False}
+    assert client(env, "customer2").get(status_path).status_code == 403
     for show in (sid, env["ids"]["screenings"][3]):
         assert public.get(f"/api/screenings/{show}/sale-status").json["data"]["saleable"] is False
         assert public.get(f"/api/screenings/{show}/seats").json["data"]["saleable"] is False

@@ -238,7 +238,8 @@ def quote(hid):
 @api.get("/holds/<int:hid>/payment-result")
 @logged
 def payment_result(hid):
-    response, status = output(booking.payment_result(g.actor, hid))
+    result = booking.payment_result(g.actor, hid, include_sale_status=request.args.get("include_sale_status") == "1")
+    response, status = output(result)
     response.cache_control.no_store = True
     return response, status
 
