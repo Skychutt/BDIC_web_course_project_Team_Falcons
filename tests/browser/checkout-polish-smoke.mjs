@@ -77,6 +77,50 @@ async function checkFareMixAfterChangingSeats() {
   }
 }
 
+async function checkQuoteReplacedInAnotherTab() {
+  const checkout = await browser.newContext({ storageState: await context.storageState() });
+  try {
+    const first = await checkout.newPage(), second = await checkout.newPage();
+    const show = fixture.ids.screenings[1];
+    const map = await api(checkout, `/screenings/${show}/seats`);
+    const seat = map.seats.find(s => s.state === "AVAILABLE");
+    const wallet = async () => (await api(checkout, "/me/wallet")).balance_minor;
+    const before = await wallet();
+    const review = tab => tab.locator("#quote-form [type=submit]");
+    await first.goto(`${base}/#/seats/${show}?seat_ids=${seat.id}`);
+    await first.locator("#create-hold").click();
+    await review(first).click();
+    await first.locator("#pay-now").waitFor();
+    const holdUrl = first.url();
+    await second.goto(holdUrl);
+    await second.locator("[data-fare]").selectOption("STUDENT");
+    await review(second).click();
+    await second.locator("#pay-now").waitFor();
+
+    await review(first).waitFor({ timeout: 8000 });
+    assert.equal(await first.locator("#pay-now").count(), 0);
+    assert.equal(first.url(), holdUrl);
+    assert.equal(await wallet(), before);
+    // The reload must check its saved quote even when live status polling is offline.
+    await second.route("**/payment-result?*", route => route.abort());
+    await review(first).click();
+    await first.locator("#pay-now").waitFor();
+    await second.reload();
+    await review(second).waitFor({ timeout: 4000 });
+    assert.equal(await second.locator("#pay-now").count(), 0);
+    assert.equal(await second.locator("[data-fare]").inputValue(), "STUDENT");
+    assert.equal(second.url(), holdUrl);
+    await review(second).click();
+    await second.locator("#pay-now").click();
+    await second.locator(".success-ticket").waitFor();
+    const price = map.fares.find(f => f.fare_type === "STUDENT").price_minor;
+    assert.equal(await wallet(), before - price);
+    console.log("PASS a quote replaced in another tab requires a fresh review on the same hold, live and after reload");
+  } finally {
+    await checkout.close();
+  }
+}
+
 async function checkCheckoutDeadlines() {
   const manager = await browser.newContext();
   // Earlier expiry checks advance the main context's clock. Use real time for the fee change.
@@ -466,7 +510,7 @@ try {
       const updated = await api(manager, `/staff/screenings/${sid}/fares`, "PUT",
         { revision_no: revision, fares }, session.csrf_token);
       revision = updated.revision_no;
-      const liveStatus = "**/payment-result?include_sale_status=1";
+      const liveStatus = "**/payment-result?include_sale_status=1*";
       if (reload) {
         await page.route(liveStatus, route => route.abort());
         await page.reload();
@@ -600,6 +644,7 @@ try {
   }
   await checkCheckoutDeadlines();
   await checkFareMixAfterChangingSeats();
+  await checkQuoteReplacedInAnotherTab();
 } finally {
   await browser.close();
 }

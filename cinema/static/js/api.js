@@ -13,6 +13,10 @@ const messages = {
     "This confirmation has expired. Review the latest amount before confirming again.",
     "确认已过期，请核对最新金额后重新确认。",
   ],
+  QUOTE_REPLACED: [
+    "This hold has a newer quote. Check your ticket choices and review the price again before paying.",
+    "这笔占座已有新报价，请核对本页的票种和优惠，再重新核价付款。",
+  ],
   QUOTE_CHANGED: [
     "The price or rescheduling fee has changed. Review a new quote before confirming.",
     "票价或改签费已变化，请核对最新报价。",

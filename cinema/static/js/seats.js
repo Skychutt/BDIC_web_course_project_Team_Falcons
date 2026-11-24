@@ -109,7 +109,11 @@ export async function renderSeats(ctx, sid) {
     let h;
     if (holdId) {
       try {
-        if (/^\d{1,19}$/.test(holdId)) h = await api.request("/me/holds/" + holdId);
+        if (/^\d{1,19}$/.test(holdId)) {
+          const expected = draft?.hold_id === holdId && draft.quote?.quote_hash;
+          const query = expected ? "?expected_quote=" + encodeURIComponent(expected) : "";
+          h = await api.request("/me/holds/" + holdId + query);
+        }
       } catch (error) {
         if (error.status !== 404) throw error;
       }
@@ -374,12 +378,12 @@ export async function renderSeats(ctx, sid) {
     const until = state.source?.reschedule_fee_valid_through?.[state.quote?.fee_rate_bps];
     return until ? Date.parse(until) : Infinity;
   }
-  function discardStaleQuote(revision) {
+  function discardStaleQuote(revision, quoteMatches = true) {
     if (state.phase !== "quoted" || payPending()) return false;
-    if (state.quote.revision_no >= revision && Date.now() + offset <= quotedFeeDeadline()) return false;
+    if (quoteMatches && state.quote.revision_no >= revision && Date.now() + offset <= quotedFeeDeadline()) return false;
     state.quote = null;
     state.phase = "held";
-    state.error = { code: "QUOTE_CHANGED" };
+    state.error = { code: quoteMatches ? "QUOTE_CHANGED" : "QUOTE_REPLACED" };
     save();
     return true;
   }
@@ -387,15 +391,18 @@ export async function renderSeats(ctx, sid) {
     if (holdRefresh) return holdRefresh;
     const hold = state.hold;
     const hash = location.hash;
-    holdRefresh = api.request(`/holds/${hold.id}/payment-result?include_sale_status=1`, { signal: AbortSignal.timeout(8000) })
+    const quote = state.quote;
+    const query = new URLSearchParams({ include_sale_status: "1" });
+    if (quote?.quote_hash) query.set("expected_quote", quote.quote_hash);
+    holdRefresh = api.request(`/holds/${hold.id}/payment-result?${query}`, { signal: AbortSignal.timeout(8000) })
       .then(result => {
         if (!alive || location.hash !== hash || state.hold !== hold || state.working || !canSyncHold()) return;
         if (result.saleable === false) map.saleable = false;
         if (applyTerminalResult(result) || !onSale()) return render();
-        if (result.revision_no > map.screening.revision_no) {
-          if (discardStaleQuote(result.revision_no)) render();
-          return refreshMap();
-        }
+        // A delayed status read must not invalidate a quote issued after it started.
+        const replaced = state.quote === quote && result.quote_matches === false;
+        if (discardStaleQuote(result.revision_no ?? map.screening.revision_no, !replaced)) render();
+        if (result.revision_no > map.screening.revision_no) return refreshMap();
       })
       .finally(() => { holdRefresh = null; });
     return holdRefresh;
@@ -965,6 +972,7 @@ export async function renderSeats(ctx, sid) {
     }
   }
   ctx.updateLanguage = requestRender;
+  if (state.hold?.quote_matches === false) discardStaleQuote(map.screening.revision_no, false);
   render();
   interval = setInterval(tick, 1000);
   const salePoll = setInterval(checkVisibleSale, 5000);

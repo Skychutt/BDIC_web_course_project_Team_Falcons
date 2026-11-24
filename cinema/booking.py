@@ -287,7 +287,7 @@ def release_hold(actor, hid):
     return transaction(work)
 
 
-def payment_result(actor, hid, *, include_sale_status=False):
+def payment_result(actor, hid, *, include_sale_status=False, expected_quote=None):
     def read(c):
         # Wait for a checkout already holding this row before interpreting the deadline.
         h = get(c, "seat_holds", hid, lock=True)
@@ -314,6 +314,8 @@ def payment_result(actor, hid, *, include_sale_status=False):
             result["saleable"] = reason is None
             if status == "ACTIVE" and reason is None:
                 result["revision_no"] = revision
+                if expected_quote is not None:
+                    result["quote_matches"] = h["quote_hash"] == expected_quote
         return result
 
     return transaction(read)

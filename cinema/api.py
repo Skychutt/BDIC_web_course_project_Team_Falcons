@@ -248,7 +248,8 @@ def quote(hid):
 @api.get("/holds/<int:hid>/payment-result")
 @logged
 def payment_result(hid):
-    result = booking.payment_result(g.actor, hid, include_sale_status=request.args.get("include_sale_status") == "1")
+    result = booking.payment_result(g.actor, hid, include_sale_status=request.args.get("include_sale_status") == "1",
+                                    expected_quote=request.args.get("expected_quote"))
     response, status = output(result)
     response.cache_control.no_store = True
     return response, status
@@ -330,6 +331,9 @@ def customer_hold(hid):
     with db().connect() as c:
         h = one(c, "SELECT * FROM seat_holds WHERE id=:h AND owner_id=:u", h=hid, u=g.actor["id"])
         require(h is not None, "NOT_FOUND", "Seat hold not found", 404)
+        expected = request.args.get("expected_quote")
+        if expected is not None:
+            h["quote_matches"] = h["quote_hash"] == expected
         return output(hold_details(c, h))
 
 
