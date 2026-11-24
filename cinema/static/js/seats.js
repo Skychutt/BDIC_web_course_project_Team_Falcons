@@ -105,7 +105,7 @@ export async function renderSeats(ctx, sid) {
           ? (draft?.tickets || []).map((t) => t.seat_id)
           : h.seat_ids,
       );
-      state.target = h.seat_ids.length || draft?.tickets?.length || 1;
+      state.target = h.seat_ids.length || (draft?.hold_id === h.id && draft.tickets?.length) || state.target;
       if (state.phase !== "recover")
         state.phase =
           h.effective_status === "ACTIVE"
@@ -225,11 +225,14 @@ export async function renderSeats(ctx, sid) {
     return map.seats.filter((seat) => state.selected.has(seat.id));
   }
   const searchFare = !state.source && params.get("fare_type") === "student" ? "STUDENT" : "STANDARD";
+  const fareMix = (params.get("fare_mix") || "").split(",");
+  const retryFares = !state.source && fareMix.length <= 12 && fareMix.every(f => f === "STANDARD" || f === "STUDENT")
+    ? fareMix : [];
   function tickets() {
     const original = state.source?.tickets || [];
     return selectedSeats().map((seat, i) => ({
       seat_id: seat.id,
-      fare_type: state.fares[seat.id] || original[i]?.fare_type || searchFare,
+      fare_type: state.fares[seat.id] || original[i]?.fare_type || retryFares[i] || searchFare,
     }));
   }
   function save() {
@@ -525,10 +528,19 @@ export async function renderSeats(ctx, sid) {
         busy(e.currentTarget, () => lockWhile(release), tx("Releasing…", "正在释放…")),
       );
     root.querySelector("#reselect")?.addEventListener("click", () => {
+      const next = new URLSearchParams({ party_size: String(state.target) });
+      if (source) {
+        next.set("source_booking_id", source.id);
+      } else {
+        if (searchFare === "STUDENT") next.set("fare_type", "student");
+        // Expiry cleanup can remove the seat allocations before this page is reopened.
+        const savedTickets = draft?.hold_id === state.hold.id ? draft.tickets : [];
+        const previous = state.selected.size ? tickets() : savedTickets;
+        const fares = previous?.length ? previous.map(ticket => ticket.fare_type) : retryFares;
+        if (fares.some(fare => fare !== searchFare)) next.set("fare_mix", fares.join(","));
+      }
       sessionStorage.removeItem(draftKey);
-      navigate(
-        "#/seats/" + sid + (source ? "?source_booking_id=" + source.id : ""),
-      );
+      navigate("#/seats/" + sid + "?" + next);
     });
     tick();
   }
@@ -609,6 +621,7 @@ export async function renderSeats(ctx, sid) {
       state.quote = null;
       save();
       params.set("hold_id", h.hold_id);
+      params.set("party_size", String(state.target));
       history.replaceState(null, "", "#/seats/" + sid + "?" + params);
       map = await api.request("/screenings/" + sid + "/seats");
       if (!alive) return;

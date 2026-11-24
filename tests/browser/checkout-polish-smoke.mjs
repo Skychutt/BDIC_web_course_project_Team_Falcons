@@ -40,6 +40,55 @@ async function language(code, label) {
   await page.getByRole("heading", { name: label, exact: true }).waitFor();
 }
 
+async function checkExpiredReselection(bookingId) {
+  const retry = await context.newPage();
+  const otherShow = fixture.ids.screenings[1];
+  const seats = (await api(context, `/screenings/${otherShow}/seats`)).seats.filter(s => s.state === "AVAILABLE");
+  const csrf = (await api(context, "/auth/csrf")).csrf_token;
+  const fares = () => retry.locator("[data-fare]").evaluateAll(inputs => inputs.map(input => input.value));
+  const currentQuery = () => new URLSearchParams(new URL(retry.url()).hash.split("?")[1]);
+  try {
+    await retry.clock.install();
+    for (const mode of ["student", "mixed", "reschedule"]) {
+      const changing = mode === "reschedule";
+      const size = changing ? 2 : 3;
+      const query = new URLSearchParams({ party_size: String(size), seat_ids: seats.slice(0, size).map(s => s.id).join(",") });
+      if (changing) query.set("source_booking_id", bookingId);
+      else query.set("fare_type", "student");
+      await retry.goto(`${base}/#/seats/${otherShow}?${query}`);
+      await retry.locator("#create-hold").click();
+      await retry.locator("#quote-form").waitFor();
+      if (mode === "mixed") await retry.locator("[data-fare]").last().selectOption("STANDARD");
+      const expected = await fares();
+      assert.deepEqual([...expected].sort(), changing ? ["STANDARD", "STUDENT"] :
+        mode === "mixed" ? ["STANDARD", "STUDENT", "STUDENT"] : ["STUDENT", "STUDENT", "STUDENT"]);
+      const oldHold = currentQuery().get("hold_id");
+      await retry.clock.fastForward(301000);
+      await retry.locator("#reselect").waitFor();
+      // The browser clock advanced independently of MySQL. Remove the old allocations in the fixture too.
+      await api(context, `/holds/${oldHold}`, "DELETE", undefined, csrf);
+      if (mode === "mixed") await retry.reload();
+      await retry.locator("#reselect").click();
+      await retry.locator("#party-size").waitFor();
+      assert.equal(await retry.locator("#party-size").inputValue(), String(size));
+      assert.equal(await retry.locator("#party-size").isDisabled(), changing);
+      assert.equal(currentQuery().get("source_booking_id"), changing ? bookingId : null);
+      assert.ok(!currentQuery().has("hold_id") && !currentQuery().has("seat_ids"));
+      assert.equal(await retry.locator('[data-seat][aria-pressed="true"]').count(), 0);
+      for (const seat of seats.slice(3, 3 + size)) await retry.locator(`[data-seat="${seat.id}"]`).click();
+      await retry.locator("#create-hold").click();
+      await retry.locator("#quote-form").waitFor();
+      assert.deepEqual(await fares(), expected);
+      assert.notEqual(currentQuery().get("hold_id"), oldHold);
+      await api(context, `/holds/${currentQuery().get("hold_id")}`, "DELETE", undefined, csrf);
+    }
+    assert.equal((await api(context, `/ui/bookings/${bookingId}`)).status, "CONFIRMED");
+    console.log("PASS expired holds reselect fresh seats with the same party, fares and reschedule source");
+  } finally {
+    await retry.close();
+  }
+}
+
 try {
   const rivalInitial = await api(rival, "/auth/csrf");
   const rivalSession = await api(rival, "/auth/login", "POST", {
@@ -210,8 +259,9 @@ try {
   await page.locator('.success-panel a[href^="#/account"]').click();
   const order = page.locator("[data-booking]").first();
   await order.getByRole("button", { name: "查看电子票" }).waitFor();
-  await order.locator('[data-action="refund-booking"]').click();
   const bookingId = await order.getAttribute("data-booking");
+  await checkExpiredReselection(bookingId);
+  await order.locator('[data-action="refund-booking"]').click();
   await page.getByRole("button", { name: /^确认退票/ }).click();
   await page.locator("dialog").waitFor({ state: "detached" });
   const refunded = await api(context, `/ui/bookings/${bookingId}`);
