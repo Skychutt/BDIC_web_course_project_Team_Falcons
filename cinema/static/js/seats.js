@@ -44,6 +44,7 @@ export async function renderSeats(ctx, sid) {
   let alive = true,
     interval, saleTimer, renderedOnSale;
   let saleCheck, mapRefresh, closeTicket;
+  let locatedSeatId, locateTimer;
   let pendingLanguage = false;
   let map = await api.request(
     "/screenings/" + encodeURIComponent(sid) + "/seats",
@@ -341,15 +342,34 @@ export async function renderSeats(ctx, sid) {
     return `<div class="summary-line"><span>${tx("Full ticket price", "原票价")}</span><strong>${money(q.gross_ticket_minor)}</strong></div>${q.price_factor_bps === 5000 ? `<div class="summary-line"><span>${tx("50% ticket discount", "五折优惠")}</span><strong>−${money(q.gross_ticket_minor - q.net_ticket_minor)}</strong></div>` : ""}<div class="summary-line"><span>${tx("Net ticket value", "优惠后票价")}</span><strong>${money(q.net_ticket_minor)}</strong></div>${state.source ? `<div class="summary-line"><span>${tx("Previous ticket value", "原订单票款")}</span><strong>−${money(state.source.net_ticket_minor)}</strong></div><div class="summary-line"><span>${tx(`Change fee (${q.fee_rate_bps / 100}%)`, `改签费（${q.fee_rate_bps / 100}%）`)}</span><strong>${money(q.current_fee_minor)}</strong></div><div class="summary-line"><span>${tx("Fees across this booking chain", "累计改签费")}</span><strong>${money(q.cumulative_fee_minor)}</strong></div>` : ""}<div class="summary-line summary-total"><span>${q.amount_due_minor < 0 ? tx("Returned to your balance", "退回钱包") : q.amount_due_minor === 0 ? tx("No balance movement", "无需支付") : tx("Due now", "本次应付")}</span><strong>${money(Math.abs(q.amount_due_minor))}</strong></div>`;
   }
   function chosenTags() {
+    const canLocate = ["choose", "held", "quoted"].includes(state.phase);
     return `<div class="summary-seats">${
       selectedSeats()
-        .map(
-          (seat) =>
-            `<span class="seat-tag">${seatTag(seat)}</span>`,
-        )
+        .map(seat => {
+          if (!canLocate) return `<span class="seat-tag">${seatTag(seat)}</span>`;
+          const label = tx(`Show ${seatLabel(seat)} on the map`, `在座位图中定位 ${seatLabel(seat)}`);
+          return `<button type="button" class="seat-tag" data-locate-seat="${esc(seat.id)}" aria-label="${esc(label)}">${icon("pin")}${seatTag(seat)}</button>`;
+        })
         .join("") ||
       `<span class="muted" style="font-size:12px">${tx("No seats selected yet", "还未选座")}</span>`
     }</div>`;
+  }
+  function locateSeat(id) {
+    const seat = root.querySelector(`[data-seat="${CSS.escape(id)}"][aria-pressed="true"]`);
+    if (!seat) return;
+    clearTimeout(locateTimer);
+    root.querySelector(".seat-located")?.classList.remove("seat-located");
+    locatedSeatId = id;
+    seat.classList.add("seat-located");
+    (seat.disabled ? seat.closest(".seat-scroll") : seat).focus({ preventScroll: true });
+    seat.scrollIntoView({
+      block: "center", inline: "center",
+      behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+    });
+    locateTimer = setTimeout(() => {
+      locatedSeatId = null;
+      root.querySelector(".seat-located")?.classList.remove("seat-located");
+    }, 2000);
   }
   function updateLanguage() {
     if (!alive) return;
@@ -398,6 +418,11 @@ export async function renderSeats(ctx, sid) {
       currentMap.scrollLeft = mapScroll.left;
       currentMap.scrollTop = mapScroll.top;
     }
+    if (locatedSeatId && state.selected.has(locatedSeatId))
+      root.querySelector(`[data-seat="${CSS.escape(locatedSeatId)}"]`)?.classList.add("seat-located");
+    root.querySelectorAll("[data-locate-seat]").forEach(button => {
+      button.onclick = () => locateSeat(button.dataset.locateSeat);
+    });
     root.querySelectorAll("[data-seat]").forEach(
       (button) =>
         (button.onclick = async () => {
@@ -734,6 +759,7 @@ export async function renderSeats(ctx, sid) {
     alive = false;
     closeTicket?.();
     clearInterval(salePoll);
+    clearTimeout(locateTimer);
     document.removeEventListener("visibilitychange", checkVisibleSale);
     document.removeEventListener("visibilitychange", tick);
     clearTimeout(saleTimer);

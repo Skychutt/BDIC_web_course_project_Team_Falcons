@@ -75,6 +75,40 @@ try {
   console.log("PASS language switch preserves draft search; AI reply keeps the page language");
 
   const map = await api(context, `/screenings/${sid}/seats`);
+  const mobile = await browser.newContext({
+    viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true,
+  });
+  try {
+    const phone = await mobile.newPage();
+    const backRow = map.seats.filter(s => s.row_no === map.layout.row_count && s.state === "AVAILABLE");
+    const ends = [backRow[0].id, backRow.at(-1).id];
+    await phone.goto(`${base}/#/seats/${sid}?party_size=2&seat_ids=${ends.join(",")}`);
+    const scroller = phone.locator(".seat-scroll");
+    await scroller.waitFor();
+    assert.ok(await scroller.evaluate(el => el.scrollWidth > el.clientWidth));
+    for (const id of [...ends].reverse()) {
+      if (id === ends[0]) await phone.emulateMedia({ reducedMotion: "reduce" });
+      const chip = phone.locator(`[data-locate-seat="${id}"]`);
+      await chip.scrollIntoViewIfNeeded();
+      assert.ok(await chip.evaluate(el => el.getBoundingClientRect().height >= 44));
+      await chip.tap();
+      await phone.waitForFunction(seatId => {
+        const seat = document.querySelector(`[data-seat="${seatId}"].seat-located`);
+        if (!seat || getComputedStyle(seat).outlineStyle !== "solid") return false;
+        const box = seat.getBoundingClientRect();
+        const mapBox = seat.closest(".seat-scroll").getBoundingClientRect();
+        return box.left >= Math.max(0, mapBox.left) && box.right <= Math.min(innerWidth, mapBox.right) &&
+          box.top >= Math.max(0, mapBox.top) && box.bottom <= Math.min(innerHeight, mapBox.bottom);
+      }, id, { timeout: 4000 });
+      assert.equal(await phone.locator(".seat-located").count(), 1);
+      assert.deepEqual(await phone.locator('[data-seat][aria-pressed="true"]').evaluateAll(
+        seats => seats.map(seat => seat.dataset.seat)), ends);
+    }
+    await phone.locator(".seat-located").waitFor({ state: "detached", timeout: 4000 });
+    console.log("PASS tapping seat numbers on mobile reveals the correct seat without changing the selection");
+  } finally {
+    await mobile.close();
+  }
   const [first, second, third] = map.seats.filter((seat) =>
     seat.row_no === 1 && seat.aisle_segment === 2 && seat.state === "AVAILABLE");
   await page.goto(`${base}/#/seats/${sid}`);
@@ -162,6 +196,7 @@ try {
   assert.match(await page.locator("#pay-now").innerText(), /支付.*并购票/);
   await page.locator("#pay-now").click();
   await page.getByRole("heading", { name: "出票成功", exact: true }).waitFor();
+  assert.equal(await page.locator(".success-ticket [data-locate-seat]").count(), 0);
   await page.locator("[data-success-ticket]").click();
   const modal = page.getByRole("dialog", { name: "电子影票预览" });
   await modal.locator("canvas").waitFor();

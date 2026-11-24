@@ -1541,6 +1541,19 @@ table td {
   padding: 5px 8px;
   border-radius: 5px;
 }
+button[data-locate-seat] {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+button[data-locate-seat] .icon {
+  width: 14px;
+  height: 14px;
+}
+.seat-scroll .seat.seat-located {
+  outline: 3px solid #254665;
+  outline-offset: 2px;
+}
 .hold-clock {
   display: flex;
   align-items: center;
@@ -2202,6 +2215,7 @@ dialog::backdrop {
 .seat-scroll:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 @media (max-width:800px) {
   .seat-scroll, .seat-scroll.auditorium-imax, .seat-scroll.auditorium-dolby_cinema { --seat-size:44px; --seat-height:44px; --seat-gap:8px; }
+  button[data-locate-seat] { min-height:44px; min-width:44px; font-size:12px; }
   .auditorium-meta { font-size:10px; }
 }
 
