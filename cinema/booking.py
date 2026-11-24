@@ -25,17 +25,19 @@ def decode(token, salt, max_age=300):
 
 
 RESCHEDULE_NOTICE = timedelta(minutes=30)
+RESCHEDULE_FEE_BANDS = (
+    (timedelta(hours=12), 0),
+    (timedelta(hours=6), 500),
+    (RESCHEDULE_NOTICE, 2000),
+)
 
 
 def fee_rate(starts_at, current):
-    remaining = (starts_at - current).total_seconds()
-    require(
-        starts_at - current >= RESCHEDULE_NOTICE,
-        "RESCHEDULE_CLOSED",
-        "Rescheduling closes 30 minutes before the current screening",
-        409,
-    )
-    return 0 if remaining >= 43200 else 500 if remaining >= 21600 else 2000
+    remaining = starts_at - current
+    for minimum_notice, rate in RESCHEDULE_FEE_BANDS:
+        if remaining >= minimum_notice:
+            return rate
+    raise Problem("RESCHEDULE_CLOSED", "Rescheduling closes 30 minutes before the current screening", 409)
 
 
 def rounded(amount, bps):

@@ -127,6 +127,11 @@ def booking_detail(bid):
         labels = one(c, BOOKING_SELECT + BOOKING_JOIN + " WHERE b.id=:bid", bid=bid)
         for field in ("film_title", "cinema_name", "screen_name", "screen_type", "starts_at", "ends_at", "ticket_count"):
             result[field] = labels[field]
+        if result["status"] == "CONFIRMED":
+            result["reschedule_fee_valid_through"] = {
+                str(rate): result["starts_at"] - minimum_notice
+                for minimum_notice, rate in booking.RESCHEDULE_FEE_BANDS
+            }
         for ticket in result["tickets"]:
             ticket["seat_label"] = f'{ticket["row_no"]} 排 {ticket["seat_no"]} 座'
         return output(result)

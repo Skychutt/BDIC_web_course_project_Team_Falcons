@@ -42,6 +42,76 @@ async function language(code, label) {
   await page.getByRole("heading", { name: label, exact: true }).waitFor();
 }
 
+async function checkRescheduleFeeChange() {
+  const manager = await browser.newContext();
+  // Earlier expiry checks advance the main context's clock. Use real time for the fee change.
+  const customer = await browser.newContext({ storageState: await context.storageState() });
+  const checkout = await customer.newPage();
+  try {
+    const login = await api(manager, "/auth/login", "POST", {
+      email: "manager1@cinema.test", password: fixture.password,
+    }, (await api(manager, "/auth/csrf")).csrf_token);
+    const csrf = (await api(context, "/auth/csrf")).csrf_token;
+    const target = fixture.ids.screenings[2];
+    const screen = await api(manager, "/staff/screens", "POST", {
+      name: "Fee boundary " + crypto.randomUUID(), screen_type: "STANDARD",
+    }, login.csrf_token);
+    const layout = await api(manager, `/staff/screens/${screen.screen_id}/layouts`, "POST", {
+      row_count: 1, screen_direction: "TOP",
+      seats: [{ row_no: 1, seat_no: 1, aisle_segment: 1, segment_position: 1, map_x: 0, map_y: 0 }],
+    }, login.csrf_token);
+    const [sourceSeat] = (await api(manager, `/staff/layouts/${layout.layout_id}`)).seats;
+    for (const [hours, oldRate, newRate] of [[12, 0, 500], [6, 500, 2000]]) {
+      const map = await api(context, `/screenings/${target}/seats`);
+      const seat = map.seats.find(s => s.state === "AVAILABLE").id;
+      const fares = Object.fromEntries(map.fares.map(f => [f.fare_type, f.price_minor]));
+      const source = await api(manager, "/staff/screenings", "POST", {
+        layout_id: layout.layout_id, film_id: fixture.ids.film_id, fares,
+        starts_at: new Date(Date.parse(map.as_of) + hours * 3600000 + 20000).toISOString(),
+      }, login.csrf_token);
+      const hold = await api(context, "/holds", "POST", { screening_id: source.id, seat_ids: [sourceSeat.id] }, csrf);
+      const originalQuote = await api(context, `/holds/${hold.hold_id}/quote`, "POST", {
+        tickets: [{ seat_id: sourceSeat.id, fare_type: "STUDENT" }],
+      }, csrf);
+      const original = await api(context, "/bookings", "POST", { quote_token: originalQuote.quote_token }, csrf);
+      const balance = async () => (await api(context, "/me/wallet")).balance_minor;
+      const before = await balance();
+      await checkout.goto(`${base}/#/seats/${target}?source_booking_id=${original.booking_id}&seat_ids=${seat}`);
+      await checkout.locator("#create-hold").click();
+      const review = checkout.locator("#quote-form [type=submit]");
+      const quote = async () => {
+        const reply = checkout.waitForResponse(r => r.url().endsWith("/quote") && r.ok());
+        await review.click();
+        return (await (await reply).json()).data;
+      };
+      const first = await quote();
+      assert.equal(first.fee_rate_bps, oldRate);
+      await checkout.locator("#pay-now").waitFor();
+      const holdUrl = checkout.url();
+      await review.waitFor({ timeout: 30000 });
+      assert.equal(await checkout.locator("#pay-now").count(), 0);
+      assert.equal(checkout.url(), holdUrl);
+      assert.equal(await checkout.locator("[data-fare]").inputValue(), "STUDENT");
+      assert.equal((await api(context, `/ui/bookings/${original.booking_id}`)).status, "CONFIRMED");
+      assert.equal(await balance(), before);
+      const fresh = await quote();
+      const fee = Math.round(fares.STUDENT * newRate / 10000);
+      assert.equal(fresh.fee_rate_bps, newRate);
+      assert.equal(fresh.amount_due_minor, fee);
+      assert.equal(fresh.hold_id, first.hold_id);
+      assert.equal(fresh.expires_at, first.expires_at);
+      await checkout.locator("#pay-now").click();
+      await checkout.locator(".success-panel").waitFor();
+      assert.equal((await api(context, `/ui/bookings/${original.booking_id}`)).status, "RESCHEDULED");
+      assert.equal(await balance(), before - fee);
+    }
+    console.log("PASS both reschedule fee changes require a fresh quote on the same hold before charging");
+  } finally {
+    await customer.close();
+    await manager.close();
+  }
+}
+
 async function checkExpiredReselection(bookingId) {
   const retry = await context.newPage();
   const otherShow = fixture.ids.screenings[1];
@@ -460,6 +530,7 @@ try {
   } finally {
     await checkout.close();
   }
+  await checkRescheduleFeeChange();
 } finally {
   await browser.close();
 }

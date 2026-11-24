@@ -335,8 +335,13 @@ export async function renderSeats(ctx, sid) {
     // A suspended tab can reach its local deadline after another tab has already paid.
     return state.hold?.status === "ACTIVE" && ["held", "quoted", "expired"].includes(state.phase);
   }
+  function quotedFeeDeadline() {
+    const until = state.source?.reschedule_fee_valid_through?.[state.quote?.fee_rate_bps];
+    return until ? Date.parse(until) : Infinity;
+  }
   function discardStaleQuote(revision) {
-    if (state.phase !== "quoted" || state.quote.revision_no >= revision || payPending()) return false;
+    if (state.phase !== "quoted" || payPending()) return false;
+    if (state.quote.revision_no >= revision && Date.now() + offset <= quotedFeeDeadline()) return false;
     state.quote = null;
     state.phase = "held";
     state.error = { code: "QUOTE_CHANGED" };
@@ -460,7 +465,8 @@ export async function renderSeats(ctx, sid) {
       }
     }
     if (renderedOnSale) {
-      const nextBoundary = Math.min(Date.parse(s.starts_at), renderedChangeClosed ? Infinity : changeDeadline + 1);
+      const feeBoundary = state.phase === "quoted" && !payPending() ? quotedFeeDeadline() + 1 : Infinity;
+      const nextBoundary = Math.min(Date.parse(s.starts_at), renderedChangeClosed ? Infinity : changeDeadline + 1, feeBoundary);
       const untilStart = nextBoundary - Date.now() - offset;
       if (untilStart <= 2147483647) saleTimer = setTimeout(tick, untilStart);
     }
@@ -662,6 +668,7 @@ export async function renderSeats(ctx, sid) {
     if (renderedOnSale && !onSale() && (!state.working || state.phase === "choose"))
       return render();
     if (!state.hold) return;
+    if (!state.working && discardStaleQuote(map.screening.revision_no)) return render();
     const ms = remaining();
     const clock = root.querySelector("#countdown");
     if (clock)
@@ -825,7 +832,7 @@ export async function renderSeats(ctx, sid) {
     }
   }
   async function pay() {
-    if (changeClosed()) return render();
+    if (changeClosed() || discardStaleQuote(map.screening.revision_no)) return render();
     if (!state.quote) return;
     save();
     try {
