@@ -84,7 +84,7 @@ export async function renderSeats(ctx, sid) {
   let couponStatus = "idle";
   if (customer) {
     const pending = draft?.hold_id && api.pending?.("pay:" + draft.hold_id);
-    if (pending && draft.quote) {
+    if (pending && draft.quote && (!holdId || holdId === draft.hold_id)) {
       holdId = draft.hold_id;
       state.phase = "recover";
       state.quote = draft.quote;
@@ -106,19 +106,14 @@ export async function renderSeats(ctx, sid) {
       );
     if (h) {
       state.hold = h;
-      state.selected = new Set(
-        state.phase === "recover" && h.status === "CONVERTED"
-          ? (draft?.tickets || []).map((t) => t.seat_id)
-          : h.seat_ids,
-      );
+      state.selected = new Set(h.seat_ids);
       state.target = h.seat_ids.length || (draft?.hold_id === h.id && draft.tickets?.length) || state.target;
-      if (state.phase !== "recover")
-        state.phase =
-          h.effective_status === "ACTIVE"
-            ? "held"
-            : h.status === "CONVERTED"
-              ? "converted"
-              : "expired";
+      if (h.status === "CONVERTED") {
+        state.phase = "recover";
+        nextResultCheck = 0;
+      } else if (state.phase !== "recover") {
+        state.phase = h.effective_status === "ACTIVE" ? "held" : "expired";
+      }
       if (draft?.hold_id === h.id) {
         state.fares = Object.fromEntries(
           (draft.tickets || []).map((t) => [t.seat_id, t.fare_type]),
@@ -675,8 +670,6 @@ export async function renderSeats(ctx, sid) {
   function controls() {
     if (state.phase === "recover")
       return `${notice(state.allowPaymentRetry ? tx("No receipt yet. We’ll keep checking. You can also retry the same payment while the hold is active.", "暂未收到回执，系统会继续查询。占座有效期间，你也可以重试同一笔付款。") : tx("Checking your payment. You can find confirmed tickets in your account.", "正在查询付款结果，已确认的影票可在「我的影票」查看。"), "warning")}${paymentSummary()}<button class="button wide" id="check-result">${tx("Check payment result", "查询付款结果")}</button>${state.allowPaymentRetry && onSale() && remaining() > 0 ? `<button class="button ghost wide" id="pay-now">${tx("Retry the same payment", "重试同一笔付款")}</button>` : ""}<a class="button ghost wide" href="#/account">${tx("View my tickets", "查看我的影票")}</a>`;
-    if (state.phase === "converted")
-      return `${notice(tx("This hold has already been purchased. Your issued tickets are in your account.", "该占座已完成购买，影票可在「我的影票」查看。"))}<a class="button wide" href="#/account">${tx("View my tickets", "查看我的影票")} ${icon("arrow")}</a>`;
     if (state.phase === "expired")
       return `${notice(state.hold?.status === "CANCELLED"
         ? tx("This hold has been released. Check My holds for your current reservation.", "本次占座已释放，可在「我的占座」查看当前保留的座位。")
@@ -812,7 +805,8 @@ export async function renderSeats(ctx, sid) {
       const result = await api.request("/holds/" + holdId, { method: "DELETE" });
       if (result.status === "CONVERTED") {
         if (!alive || location.hash !== expectedHash) return;
-        state.phase = "converted";
+        state.hold.status = "CONVERTED";
+        state.phase = "recover";
         return checkPaymentResult();
       }
       if (readDraft(draftKey)?.hold_id === holdId) sessionStorage.removeItem(draftKey);
@@ -844,6 +838,7 @@ export async function renderSeats(ctx, sid) {
     state.error = null;
     if (result.status === "CONFIRMED") {
       if (readDraft(draftKey)?.hold_id === state.hold.id) sessionStorage.removeItem(draftKey);
+      state.selected = new Set(result.seat_ids);
       state.receipt = result.receipt;
       state.phase = "complete";
     } else {
@@ -860,7 +855,7 @@ export async function renderSeats(ctx, sid) {
       if (!alive) return;
       state.error = null;
       if (result.status === "ACTIVE") {
-        state.allowPaymentRetry = true;
+        state.allowPaymentRetry = Boolean(state.quote) && state.hold.status !== "CONVERTED";
       } else applyTerminalResult(result);
     } catch (e) {
       state.error = e;

@@ -210,6 +210,31 @@ try {
       await shot("purchase-success");
     },
   );
+  const paidHoldUrl = base + "/#/seats/" + first.id + "?hold_id=" + report.hold_id;
+  await check("Reload and reopen a paid hold with its original seat numbers and receipt", async () => {
+    const receiptText = await page.locator(".success-ticket").innerText();
+    const fresh = await context.newPage();
+    const paymentPosts = [];
+    const trackPayment = request => {
+      if (request.method() === "POST" && new URL(request.url()).pathname === "/api/bookings")
+        paymentPosts.push(request.url());
+    };
+    context.on("request", trackPayment);
+    try {
+      await page.reload();
+      await fresh.goto(paidHoldUrl);
+      for (const tab of [page, fresh]) {
+        await tab.locator(".success-ticket").waitFor({ timeout: 5000 });
+        assert.equal(await tab.locator(".success-ticket").innerText(), receiptText);
+        assert.equal(await tab.getByRole("link", { name: "View my tickets" }).getAttribute("href"),
+          "#/account?tab=orders&booking=" + receipt.booking_id);
+      }
+      assert.deepEqual(paymentPosts, []);
+    } finally {
+      context.off("request", trackPayment);
+      await fresh.close();
+    }
+  });
   await check("Open reschedule checkout closes at the original screening cutoff", async () => {
     const probe = await context.newPage();
     const map = await api(`/screenings/${target.id}/seats`);
@@ -329,6 +354,13 @@ try {
         "STANDARD",
         "STUDENT",
       ]);
+      await page.reload();
+      await page.getByRole("heading", { name: "Your booking is changed." }).waitFor();
+      assert.equal(await page.locator(".success-ticket .seat-tag").count(), 2);
+      await page.goto(paidHoldUrl);
+      await page.getByRole("heading", { name: "These tickets are no longer valid" }).waitFor();
+      assert.equal(await page.getByRole("link", { name: "View booking and refund" }).getAttribute("href"),
+        "#/account?tab=orders&booking=" + receipt.booking_id);
       report.rescheduled_booking_id = newId;
     },
   );

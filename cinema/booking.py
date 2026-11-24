@@ -300,7 +300,8 @@ def payment_result(actor, hid, *, include_sale_status=False):
             current = get(c, "bookings", integer(receipt["booking_id"], "booking_id"))
             # The payment succeeded historically, but the ticket may since have been refunded.
             receipt["status"] = current["status"]
-            return dict(status="CONFIRMED", receipt=receipt)
+            tickets = rows(c, "SELECT seat_id FROM tickets WHERE booking_id=:b ORDER BY seat_id", b=current["id"])
+            return dict(status="CONFIRMED", receipt=receipt, seat_ids=[t["seat_id"] for t in tickets])
         if status == "ACTIVE" and h["expires_at"] <= now():
             status = "EXPIRED"
         result = dict(status=status)
