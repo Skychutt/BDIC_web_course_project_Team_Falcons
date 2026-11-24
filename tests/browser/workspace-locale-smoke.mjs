@@ -20,6 +20,12 @@ const employee = { id: "7", display_name: "小李", role: "STAFF", staff_cinema_
 let user = employee;
 const thread = { id: "9", title: "My original title", body: "我的观后感", spoiler: true, author: employee, created_at: "2026-01-01T12:00:00Z" };
 const list = items => ({ items, total: items.length, page: 1, page_size: 20 });
+const moderation = { page: 1, has_next: false, items: [
+  { id: "11", kind: "reply", thread_title: thread.title, film_title: film.title,
+    body: "A different ending", display_name: "Anna", created_at: thread.created_at },
+  { id: thread.id, kind: "thread", thread_title: thread.title, film_title: film.title,
+    body: thread.body, display_name: employee.display_name, created_at: thread.created_at },
+] };
 const fixtures = {
   "/counter/screenings": [{ id: "8", film_title: film.title, screen_name: screen.name, starts_at: "2099-01-01T12:00:00Z" }],
   "/auth/csrf": { csrf_token: "test" },
@@ -37,11 +43,16 @@ const fixtures = {
   "/community/films": [film], "/community/films/2": { film, counts: { reviews: 0, threads: 1 } },
   "/community/films/2/reviews": list([]), "/community/films/2/threads": list([thread]),
   "/community/threads/9": { thread, film, replies: list([]) },
+  "/community/moderation/posts": moderation,
 };
 const requests = [];
 await page.route("**/api/**", async route => {
   const path = new URL(route.request().url()).pathname.slice(4);
   requests.push([route.request().method(), path]);
+  if (route.request().method() === "DELETE" && ["/community/replies/11", "/community/threads/9"].includes(path)) {
+    moderation.items = moderation.items.filter(post => post.id !== path.split("/").at(-1));
+    return route.fulfill({ json: { data: { removed: true } } });
+  }
   const data = path === "/ui/bootstrap" ? { user, films: [film], genres: [genre], cinemas: [cinema],
     districts: [{ id: "4", name: "Chaoyang", admin_code: "110105" }], available_dates: [] } : fixtures[path];
   if (data === undefined) errors.push("Unexpected request " + path);
@@ -60,6 +71,7 @@ async function openAs(person, path) {
 try {
   await page.goto(base + "/#/operations");
   await text(main, "Screenings");
+  assert.equal(await main.locator('[data-tab="community"]').count(), 0);
   const readCount = requests.length;
   await lang("zh");
   await text(main, "影院工作台");
@@ -97,13 +109,28 @@ try {
   await text(main, "Wanda Cinema (CBD Wanda Plaza)");
   assert.match(page.url(), /#\/operations\?tab=cinemas$/);
   assert.deepEqual(await page.locator("[data-operations-nav] button").evaluateAll(buttons => buttons.map(b => b.dataset.tab)),
-    ["cinemas", "films", "staff", "turnover"]);
+    ["cinemas", "films", "staff", "turnover", "community"]);
   assert.deepEqual(await page.locator(".wordmark").evaluateAll(links => links.map(a => a.hash)), ["#/operations", "#/operations"]);
   await page.getByRole("link", { name: "Platform console", exact: true }).waitFor();
   await lang("zh");
   await page.getByRole("link", { name: "平台控制台", exact: true }).waitFor();
   await text(main, "平台管理");
   await text(main, "朝阳区");
+  await tab("community");
+  await text(main, "讨论与回复");
+  await main.getByText("查看回复", { exact: true }).click();
+  await text(main, "A different ending");
+  await lang("en");
+  page.once("dialog", prompt => prompt.dismiss());
+  await main.getByRole("button", { name: "Remove reply" }).click();
+  assert.equal(moderation.items.length, 2);
+  page.once("dialog", prompt => prompt.accept());
+  await main.getByRole("button", { name: "Remove reply" }).click();
+  await main.getByRole("button", { name: "Remove reply" }).waitFor({ state: "detached" });
+  page.once("dialog", prompt => prompt.accept());
+  await main.getByRole("button", { name: "Remove discussion" }).click();
+  await text(main, "No discussions or replies");
+  await lang("zh");
   await tab("staff");
   await text(main, "调店");
   const branch = main.getByRole("region", { name: cinema.name, exact: true });

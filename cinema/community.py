@@ -205,6 +205,28 @@ def delete_post(table, ident):
     return output(transaction(work))
 
 
+@community.get("/moderation/posts")
+@logged
+def moderation_posts():
+    role(g.actor, "PLATFORM_ADMIN")
+    page, size, offset = pagination()
+    with db().connect() as c:
+        posts = rows(c, """
+            SELECT p.id,p.kind,t.title AS thread_title,p.body,p.created_at,u.display_name,f.title AS film_title
+            FROM (
+                SELECT id,'thread' AS kind,id AS thread_id,author_id,body,created_at
+                FROM film_threads WHERE deleted=0
+                UNION ALL
+                SELECT id,'reply' AS kind,thread_id,author_id,body,created_at
+                FROM film_replies WHERE deleted=0
+            ) p
+            JOIN film_threads t ON t.id=p.thread_id AND t.deleted=0
+            JOIN users u ON u.id=p.author_id JOIN films f ON f.id=t.film_id
+            ORDER BY p.created_at DESC,p.id DESC,p.kind LIMIT :n OFFSET :o
+        """, n=size + 1, o=offset)
+    return output(dict(items=posts[:size], page=page, has_next=len(posts) > size))
+
+
 @community.delete("/threads/<int:tid>")
 @logged
 def delete_thread(tid):

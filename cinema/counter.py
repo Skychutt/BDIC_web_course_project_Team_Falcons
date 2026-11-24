@@ -130,7 +130,18 @@ def issue_code(actor, data, previous=None):
         labels = "、".join(f'{s["row_no"]}排{s["seat_no"]}座' for s in seats)
         amount = quote["amount_due_minor"]
         action = "退回余额 / Wallet credit" if amount < 0 else "余额扣款 / Wallet charge"
-        message = (f'{get(c, "cinemas", h["cinema_id"])["name"]} · {get(c, "films", h["film_id"])["title"]}\n'
+        change_details = ""
+        if source:
+            old_show = get(c, "screenings", original["screening_id"])
+            change_details = (
+                f'改签 / Booking change\n原订单 / Original booking: {source}\n'
+                f'原场次 / Original screening: {old_show["starts_at"]:%Y-%m-%d %H:%M} (北京时间 / Beijing time)\n'
+                f'票价差额（新票减原票） / Fare difference (new minus original): CNY {quote["ticket_delta_minor"]/100:+.2f}\n'
+                f'本次改签手续费 / Change fee: ¥{quote["current_fee_minor"]/100:.2f}\n'
+                '改签成功后原票失效。Your original tickets become invalid when this change is completed.\n'
+                '新场次 / New screening:\n'
+            )
+        message = (f'{change_details}{get(c, "cinemas", h["cinema_id"])["name"]} · {get(c, "films", h["film_id"])["title"]}\n'
                    f'{get(c, "screens", screening["screen_id"])["name"]} · {screening["starts_at"]:%Y-%m-%d %H:%M} (北京时间)\n'
                    f'座位 / Seats: {labels}\n{action}: ¥{abs(amount)/100:.2f}\n'
                    f'验证码 / Code: {code}\n有效至 / Expires: {sale["expires_at"]:%H:%M:%S} (北京时间)\n'
@@ -167,7 +178,8 @@ def confirm(sale_id):
         correct = hmac.compare_digest(sale["code_hash"], code_hash(sale_id, code))
         if sale["booking_id"]:
             require(correct, "CODE_EXPIRED", "This sale is already complete", 409)
-            return dict(booking_id=sale["booking_id"], status="CONFIRMED")
+            booking_record = get(c, "bookings", sale["booking_id"])
+            return dict(booking_id=booking_record["id"], status=booking_record["status"])
         require(sale["expires_at"] > now() and sale["attempts_left"] > 0,
                 "CODE_EXPIRED", "Code expired or replaced. Request a new code", 409)
         if not correct:
@@ -178,7 +190,7 @@ def confirm(sale_id):
         require(digest(quote) == sale["quote_hash"], "QUOTE_CHANGED", "Sale details changed. Request a new code", 409)
         receipt = booking.settle_purchase(c, actor, f"counter-email-{sale_id}", {"sale_id": sale_id}, h, quote)
         upd(c, "counter_email_sales", sale_id, booking_id=receipt["booking_id"], attempts_left=0)
-        return dict(booking_id=receipt["booking_id"], status="CONFIRMED")
+        return dict(booking_id=receipt["booking_id"], status=receipt["status"])
 
     result = transaction(purchase)
     require(result is not None, "CODE_INVALID", "Incorrect verification code", 403)

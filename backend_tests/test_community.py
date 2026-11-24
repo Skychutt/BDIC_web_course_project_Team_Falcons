@@ -121,7 +121,25 @@ def test_pagination_film_isolation_and_admin_moderation(env):
     assert customer.get(f"/api/community/films/{other}/threads").json["data"]["total"] == 0
     assert customer.get(url + "?page_size=500").status_code == 400
     admin, admin_headers = client_for(env, "admin")
-    assert admin.delete(f"/api/community/threads/{next(iter(ids))}", headers=admin_headers).status_code == 200
+    tid = next(iter(ids))
+    thread_url = f"/api/community/threads/{tid}"
+    reply_ids = [customer.post(thread_url + "/replies", json={"body": f"Reply {i}"},
+                               headers={**headers, "Idempotency-Key": f"moderation-reply-{i}"}).json["data"]["id"]
+                 for i in range(2)]
+    moderation = "/api/community/moderation/posts"
+    assert env["app"].test_client().get(moderation).status_code == 401
+    for user in ("customer", "staff1", "manager1"):
+        viewer, _ = client_for(env, user)
+        assert viewer.get(moderation).status_code == 403
+    pages = [admin.get(moderation + f"?page_size=2&page={i}").json["data"] for i in (1, 2, 3)]
+    assert [p["has_next"] for p in pages] == [True, True, False]
+    posts = [post for page in pages for post in page["items"]]
+    assert {p["id"] for p in posts if p["kind"] == "thread"} == ids
+    assert {p["id"] for p in posts if p["kind"] == "reply"} == set(reply_ids)
+    assert admin.delete(f"/api/community/replies/{reply_ids[0]}", headers=admin_headers).status_code == 200
+    assert len(admin.get(moderation).json["data"]["items"]) == 4
+    assert admin.delete(thread_url, headers=admin_headers).status_code == 200
+    assert {p["id"] for p in admin.get(moderation).json["data"]["items"]} == ids - {tid}
     assert customer.get(url).json["data"]["total"] == 2
 
 
