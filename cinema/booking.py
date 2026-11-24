@@ -56,6 +56,7 @@ def reschedule_source_start(c, h, source):
         "BOOKING_STATE",
         "Original booking is not active",
         409,
+        source_booking_status=source["status"],
     )
     require(
         source["owner_id"] == h["owner_id"]
@@ -305,6 +306,9 @@ def payment_result(actor, hid, *, include_sale_status=False):
         if status == "ACTIVE" and h["expires_at"] <= now():
             status = "EXPIRED"
         result = dict(status=status)
+        if h["source_booking_id"] and (include_sale_status or status != "ACTIVE"):
+            result["source_booking_status"] = one(c, "SELECT status FROM bookings WHERE id=:b",
+                                                  b=h["source_booking_id"])["status"]
         if include_sale_status:
             reason, revision = screening_sale_status(c, h["screening_id"])
             result["saleable"] = reason is None

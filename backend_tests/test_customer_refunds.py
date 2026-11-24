@@ -75,10 +75,15 @@ def test_owner_csrf_preview_binding_and_history_api(env):
     with pytest.raises(Problem) as error:
         refund(env, bid, 'customer2', preview=preview)
     assert error.value.code == 'FORBIDDEN'
+    change_map = f"/api/screenings/{env['ids']['screenings'][1]}/seats?source_booking_id={bid}"
+    assert client(env).get(change_map).status_code == 401
+    assert client(env, 'customer2').get(change_map).status_code == 404
     customer = client(env, 'customer')
+    assert customer.get(change_map).json['data']['source_booking_status'] == 'CONFIRMED'
     response = customer.post(f'/api/bookings/{bid}/refund', json={'preview_token': preview['preview_token']},
                              headers={**headers, 'Idempotency-Key':key()})
     assert response.status_code == 200
+    assert customer.get(change_map).json['data']['source_booking_status'] == 'CUSTOMER_CANCELLED'
     history = customer.get('/api/ui/bookings?status=HISTORY').json['data']['items']
     assert history[0]['status'] == 'CUSTOMER_CANCELLED'
     assert customer.get('/api/ui/bookings?status=CONFIRMED').json['data']['total'] == 0

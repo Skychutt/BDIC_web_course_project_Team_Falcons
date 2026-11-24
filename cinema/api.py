@@ -175,6 +175,14 @@ def seatmap(sid):
         selected_ids = {integer(value, "selected_id") for value in selected}
     with db().connect() as c:
         result = catalog.seatmap(c, sid, g.actor)
+        if "source_booking_id" in request.args:
+            require(g.actor is not None, "LOGIN_REQUIRED", "Sign in to continue", 401)
+            role(g.actor, "CUSTOMER")
+            source_id = integer(request.args["source_booking_id"], "source_booking_id")
+            source = one(c, "SELECT status FROM bookings WHERE id=:b AND owner_id=:u",
+                         b=source_id, u=g.actor["id"])
+            require(source is not None, "NOT_FOUND", "Original booking is unavailable", 404)
+            result["source_booking_status"] = source["status"]
         if size is not None:
             result["adjacent_seat_ids"] = (
                 catalog.next_adjacent_seat_ids(result["seats"], size, selected_ids, zone)

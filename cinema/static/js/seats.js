@@ -158,7 +158,8 @@ export async function renderSeats(ctx, sid) {
   }
   const changeDeadline = state.source ? rescheduleDeadline(state.source.starts_at) : Infinity;
   function changeClosed() {
-    return Boolean(state.source) && (Date.now() + offset > changeDeadline || state.error?.code === "RESCHEDULE_CLOSED");
+    return Boolean(state.source) && (state.source.status !== "CONFIRMED" || Boolean(state.error?.details?.source_booking_status) ||
+      Date.now() + offset > changeDeadline || state.error?.code === "RESCHEDULE_CLOSED");
   }
   function validateQuote(q) {
     if (
@@ -317,9 +318,14 @@ export async function renderSeats(ctx, sid) {
     const previous = map;
     const phase = state.phase;
     const hash = location.hash;
-    mapRefresh = readSeatMap("", { signal: AbortSignal.timeout(8000) })
+    const query = state.source ? "?source_booking_id=" + encodeURIComponent(state.source.id) : "";
+    mapRefresh = readSeatMap(query, { signal: AbortSignal.timeout(8000) })
       .then(next => {
         if (!alive || location.hash !== hash || state.working || state.phase !== phase || map !== previous) return;
+        if (state.source && next.source_booking_status !== "CONFIRMED" && next.source_booking_status) {
+          state.source.status = next.source_booking_status;
+          return render();
+        }
         // A newer sale-status check may have closed the screening while this read was pending.
         if (!onSale() && next.saleable) return;
         const changed = next.saleable !== previous.saleable ||
@@ -342,6 +348,7 @@ export async function renderSeats(ctx, sid) {
     let check;
     if (state.phase === "choose") check = refreshMap();
     else if (canSyncHold()) check = refreshHold();
+    else if (state.source && state.phase === "expired") check = refreshMap();
     else check = checkSale();
     void check.catch(() => {}); // Keep the last known state and retry on the next poll.
   }
@@ -481,7 +488,7 @@ export async function renderSeats(ctx, sid) {
       if (["choose", "held", "quoted", "expired"].includes(state.phase)) {
         if (payPending()) state.phase = "recover";
         else {
-          root.innerHTML = closedReschedule(state.source.id);
+          root.innerHTML = closedReschedule(state.source.id, state.error?.details?.source_booking_status || state.source.status);
           return;
         }
       }
@@ -845,6 +852,7 @@ export async function renderSeats(ctx, sid) {
     }
   }
   function applyTerminalResult(result) {
+    if (result.source_booking_status && state.source) state.source.status = result.source_booking_status;
     if (!["CONFIRMED", "EXPIRED", "CANCELLED"].includes(result.status)) return false;
     api.clearPending("pay:" + state.hold.id);
     state.quote = null;

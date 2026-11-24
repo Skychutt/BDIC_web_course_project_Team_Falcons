@@ -84,6 +84,22 @@ try {
   assert.ok(await modal.evaluate(d=>d.scrollWidth<=d.clientWidth+1),'Refund dialog must not overflow horizontally');
   await page.screenshot({path:new URL('./results/refund-preview-mobile.png',import.meta.url).pathname});
   await page.setViewportSize({width:1380,height:1000});
+  // The refund and the open reschedule tabs belong to the same customer.
+  const changes = await browser.newContext({storageState: await context.storageState()});
+  const choosing = await changes.newPage();
+  const quoted = await changes.newPage();
+  const target = fixture.ids.screenings[1];
+  const targetSeats = (await api(`/screenings/${target}/seats`)).seats.filter(s => s.state === 'AVAILABLE').slice(0, 2);
+  const changeUrl = base + '/#/seats/' + target + '?' + new URLSearchParams({
+    source_booking_id: receipt.booking_id, seat_ids: targetSeats.map(s => s.id).join(','),
+  });
+  await choosing.goto(changeUrl);
+  await choosing.locator('#create-hold:enabled').waitFor();
+  await quoted.goto(changeUrl);
+  await quoted.locator('#create-hold').click();
+  await quoted.locator('#quote-form button[type=submit]').click();
+  await quoted.locator('#pay-now').waitFor();
+
   let requests = 0;
   const keys = [];
   await page.route(`**/api/bookings/${receipt.booking_id}/refund`, async route=>{
@@ -117,6 +133,22 @@ try {
   assert.equal(await page.locator(`[id="refund-reason-${receipt.booking_id}"]`).innerText(), 'This booking has already been refunded.');
   await page.screenshot({path:new URL('./results/refund-completed.png',import.meta.url).pathname});
   console.log('PASS lost response retries with same key, credits once, releases all seats and invalidates tickets');
+  for (const tab of [choosing, quoted]) {
+    const closed = tab.getByRole('heading',{name:'The original booking was refunded'});
+    await closed.waitFor({timeout:8000});
+    await tab.reload();
+    await closed.waitFor();
+    assert.equal(await tab.locator('#create-hold, #pay-now, #reselect, [data-seat]').count(),0);
+    assert.equal(await tab.getByRole('link',{name:'View original order'}).getAttribute('href'),
+      '#/account?tab=orders&booking=' + receipt.booking_id);
+  }
+  await choosing.goto(base + '/#/discover?source_booking_id=' + receipt.booking_id);
+  await choosing.getByRole('heading',{name:'The original booking was refunded'}).waitFor();
+  assert.equal(await choosing.locator('.session-button').count(), 0);
+  await choosing.goto(base + '/#/seats/' + target + '?seat_ids=' + targetSeats[0].id);
+  await choosing.locator('#create-hold:enabled').waitFor();
+  await changes.close();
+  console.log('PASS refunding in another tab closes both seat selection and quoted rescheduling, including after reload');
   await page.reload();
   await page.getByRole('heading',{name:'Tickets cancelled · seats released'}).waitFor();
   assert.ok(await refundButton.isDisabled());

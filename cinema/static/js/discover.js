@@ -176,13 +176,11 @@ export async function renderDiscover(ctx) {
     source = await api.request(
       "/ui/bookings/" + encodeURIComponent(params.get("source_booking_id")),
     );
-    if (source.status !== "CONFIRMED")
-      throw new Error(
-        tx(
-          "Only a currently confirmed order can be rescheduled.",
-          "只有当前已出票的订单可以改签。",
-        ),
-      );
+    if (source.status !== "CONFIRMED") {
+      ctx.updateLanguage = () => { root.innerHTML = closedReschedule(source.id, source.status); };
+      ctx.updateLanguage();
+      return;
+    }
     const cinema = bootstrap.cinemas.find((c) => c.id === source.cinema_id);
     f = {
       ...f,
