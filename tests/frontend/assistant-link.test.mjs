@@ -32,6 +32,13 @@ test('refuses unsafe numeric IDs instead of linking to rounded values', () => {
   assert.equal(recommendationLink({...card, suggested_seats:[{id:Number(card.suggested_seats[0].id)}]}), null);
 });
 
+test('only a student recommendation preselects student tickets at checkout', () => {
+  for (const fare of ["student", "regular", undefined]) {
+    const params = new URLSearchParams(recommendationLink({...card, fare_type: fare}).split("?")[1]);
+    assert.equal(params.get("fare_type"), fare === "student" ? "student" : null);
+  }
+});
+
 test('never uses arbitrary paths or URLs as a booking target', () => {
   for (const id of ['https://example.com', '../1', '1?hold_id=2', '1#other']) {
     assert.equal(recommendationLink({...card, screening_id:id}), null);

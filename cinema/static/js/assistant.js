@@ -69,6 +69,7 @@ export function recommendationLink(card) {
       || card.suggested_seats.some((s) => typeof s.id !== "string" || !/^\d+$/.test(s.id))) return null;
   const params = new URLSearchParams({ party_size: String(card.suggested_seats.length),
     seat_ids: card.suggested_seats.map((s) => s.id).join(","), from: "assistant" });
+  if (card.fare_type === "student") params.set("fare_type", "student");
   return `#/seats/${card.screening_id}?${params}`;
 }
 

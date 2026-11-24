@@ -244,11 +244,11 @@ class StubProvider:
         times = re.findall(r"(?<!\d)(\d{1,2}:\d{2})(?!\d)", text)
         if times:
             updates.update(time_start=times[0].zfill(5), time_end=times[1].zfill(5) if len(times) == 2 else None)
-        match = re.search(r"(\d+|[一两二三四五六七八九十])\s*(?:个)?(?:人|位)", text)
+        match = re.search(r"(\d+|[一两二三四五六七八九十])\s*(?:(?:个)?(?:人|位)|张学生票)", text)
         if match:
             updates["party_size"] = int(match.group(1)) if match.group(1).isdigit() else CHINESE_NUMBERS[match.group(1)]
         else:
-            match = re.search(r"\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s*(?:people|persons|tickets|of us)\b", text)
+            match = re.search(r"\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s*(?:people|persons|(?:student )?tickets?|of us)\b", text)
             if not match:
                 match = re.search(r"\b(?:for|party of|make (?:that|it)|change to)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b", text)
             if match:
@@ -284,6 +284,18 @@ class StubProvider:
             if re.search(pattern, text):
                 rule = topic
                 break
+        if rule == "student" and re.search(r"学生票|\bstudent (?:tickets?|fares?)\b", text):
+            policy_question = re.search(
+                r"规则|要求|资格|证件|学生证|条件|凭证|能否|能不能|可以买|谁能|怎么用|"
+                r"\b(?:rules?|require\w*|eligib\w*|qualify|proof|id)\b|\bcan (?:i|we) (?:use|buy|get)\b", text)
+            choosing_tickets = "party_size" in updates or re.search(
+                r"场次|找|推荐|想买|改成|换成|\b(?:showtimes?|screenings?|find|book|switch)\b", text)
+            if choosing_tickets and not policy_question and not re.search(r"普通票|标准票|\b(?:regular|standard) tickets?\b", text):
+                excludes_student = re.search(r"(?:不要|不用|不买|不选)学生票|\b(?:no|without) student (?:tickets?|fares?)\b", text)
+                updates["fare_type"] = "regular" if excludes_student else "student"
+                rule = None
+        if not rule and re.search(r"(?:改成|改为|换成)(?:普通|标准)票|\b(?:switch|change) to regular (?:tickets?|fares?)\b", text):
+            updates["fare_type"] = "regular"
         intent = "recommend" if updates or re.search(r"推荐|场次|看电影|screening|recommend|showtime", text) else "help"
         if rule:
             intent = "rules"

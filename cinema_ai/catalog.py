@@ -112,7 +112,7 @@ class CatalogService:
                 "cinema": self.cinema_data(cinema, locale), "starts_at": screening.starts_at.isoformat(),
                 "hall_type": screening.hall_type, "hall_label": HALL_LABELS[screening.hall_type][locale],
                 "suggested_seats": [self.seat_data(s) for s in selected], "contiguous": contiguous,
-                "preferred_zone_count": score, "unmet_preferences": unmet, "fares": screening.fares,
+                "preferred_zone_count": score, "unmet_preferences": unmet, "fares": screening.fares, "fare_type": filters.fare_type,
                 "currency": "CNY", "price_basis": "per_ticket_before_coupons", "reserved": False,
                 "checked_at": now.isoformat(), "version": screening.version}
 

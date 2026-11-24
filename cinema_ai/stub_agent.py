@@ -85,8 +85,6 @@ def turn(provider, messages, state, history, today, timeout, locale, context, **
         patch["budget_scope"] = "per_ticket"
     elif re.search(r"整单|总共|一共.*元|total|whole group", lowered):
         patch["budget_scope"] = "total"
-    if "学生票" in lowered and intent.intent != "rules":
-        patch["fare_type"] = "student"
     if re.search(r"必须.*连座|一定.*连座|must.*together", lowered):
         patch["require_contiguous"] = True
     if re.search(r"可以分开|不用连座|split is fine", lowered):

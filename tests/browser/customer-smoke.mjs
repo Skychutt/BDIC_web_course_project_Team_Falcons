@@ -335,13 +335,17 @@ try {
       await page.locator("#ai-message").waitFor();
       assert.ok(page.url().endsWith("#/discover"));
       assert.match(await page.locator("#ai-mode").innerText(), /offline parser/i);
-      await page.locator("#ai-message").fill(`${target.starts_at.slice(0, 10)} for two people, middle seats`);
+      await page.locator("#ai-message").fill(`Find two student tickets on ${target.starts_at.slice(0, 10)}, middle seats`);
+      const recommendation = page.waitForResponse(res => new URL(res.url()).pathname === "/api/assistant/chat" && res.ok());
       await page.locator("#ai-send").click();
+      const card = (await (await recommendation).json()).data.cards[0];
+      assert.equal(card.fare_type, "student");
       await page.locator('.ai-widget-results .recommendation').first().waitFor();
       await page.locator('.ai-widget-preferences summary').click();
       assert.match(await page.locator("#ai-conditions").innerText(), /2 people/i);
       const bookingLink = await page.locator('.ai-widget-results a[href*="from=assistant"]').first().getAttribute("href");
       assert.match(bookingLink, /^#\/seats\/\d+\?/);
+      assert.equal(new URLSearchParams(bookingLink.split("?")[1]).get("fare_type"), "student");
       await page.locator("#ai-message").fill("Keep this draft");
       await page.locator("#ai-close").click();
       await page.locator('.main-nav a[href="#/cinemas"]').click();
@@ -350,6 +354,7 @@ try {
       assert.ok((await page.locator('.ai-widget-results .recommendation').count()) > 0);
       await page.locator('.ai-widget-results a[href*="from=assistant"]').first().click();
       await page.locator('.seat-grid').waitFor();
+      assert.ok((await page.locator('.summary-total strong').innerText()).includes((card.fares.student * 2 / 100).toFixed(2)));
       assert.equal(await page.locator('#assistant-panel').isVisible(), false);
       await page.locator('.ai-launcher').click();
       assert.equal(await page.locator("#ai-message").inputValue(), "Keep this draft");

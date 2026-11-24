@@ -131,7 +131,7 @@ class BackendCatalog(CatalogService):
                 cards.append({**self._facts(c, show, locale),
                               "suggested_seats": [self._seat(seats[sid], show["row_count"]) for sid in suggestion["seat_ids"]],
                               "contiguous": suggestion["adjacent"], "preferred_zone_count": suggestion["preferred_seat_count"],
-                              "unmet_preferences": unmet, "fares": self._fares(show["fares"]),
+                              "unmet_preferences": unmet, "fares": self._fares(show["fares"]), "fare_type": filters.fare_type,
                               "currency": "CNY", "price_basis": "per_ticket_before_coupons",
                               "checked_at": result["as_of"].replace(tzinfo=BEIJING).isoformat()})
             return cards

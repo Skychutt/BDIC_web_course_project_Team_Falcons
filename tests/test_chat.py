@@ -74,6 +74,18 @@ def test_rules_are_versioned_and_authoritative(chat):
         assert not response["cards"]
 
 
+@pytest.mark.parametrize("message", ["今晚帮我找两张学生票", "Find two student tickets tonight"])
+def test_student_screening_requests_keep_the_fare_on_the_cards(chat, message):
+    result = chat(message)
+    assert result["filters"]["fare_type"] == "student"
+    assert result["filters"]["party_size"] == 2
+    assert result["cards"] and all(c["fare_type"] == "student" for c in result["cards"])
+    regular = chat("改成普通票，其他不变")
+    assert regular["cards"] and all(c["fare_type"] == "regular" for c in regular["cards"])
+    policy = chat("这两张学生票需要什么证件？")
+    assert policy["rules"][0]["topic"] == "student" and not policy["cards"]
+
+
 def test_ambiguous_time_keeps_confirmed_time(chat):
     first = chat("今晚朝阳区三个人看电影 A")
     second = chat("晚一点，两个人")
