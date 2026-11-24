@@ -60,14 +60,15 @@ def refund_preview(actor, bid):
         owner(actor, b)
         scope(c, booking_ids=[bid], customer_ids=[actor['id']])
         b = get(c, 'bookings', bid)
-        value = preview_value(c, b, now())
+        at = now()
+        value = preview_value(c, b, at)
         token = signer('customer-refund').dumps(dict(actor_id=actor['id'], booking_id=bid, fingerprint=digest(value)))
         labels = one(c, """SELECT f.title AS film_title,ci.name AS cinema_name,sc.name AS screen_name
             FROM screenings s JOIN films f ON f.id=s.film_id JOIN cinemas ci ON ci.id=s.cinema_id
             JOIN screens sc ON sc.id=s.screen_id WHERE s.id=:id""", id=b['screening_id'])
         tickets = rows(c, """SELECT s.row_no,s.seat_no FROM tickets t JOIN seats s ON s.id=t.seat_id
             WHERE t.booking_id=:id ORDER BY s.row_no,s.seat_no""", id=bid)
-        return dict(**value, **labels, seats=tickets, preview_token=token)
+        return dict(**value, **labels, seats=tickets, preview_token=token, server_time=at)
     return transaction(work)
 
 

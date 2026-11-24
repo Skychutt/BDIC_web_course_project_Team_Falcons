@@ -43,6 +43,34 @@ try {
   assert.equal((await api(`/ui/bookings/${receipt.booking_id}`)).status,'CONFIRMED');
   console.log('PASS preview cancellation preserves tickets and wallet');
 
+  const cutoff = Date.parse(map.screening.starts_at) - 30 * 60000;
+  for (const idle of [true, false]) {
+    const separate = await browser.newContext({storageState:await context.storageState()});
+    try {
+      const tab = await separate.newPage();
+      await tab.clock.install();
+      await tab.goto(base+path);
+      await tab.locator('[data-action="refund-booking"]').first().click();
+      const confirm = tab.locator('[data-confirm-refund]');
+      await tab.getByRole('button',{name:/Confirm refund ·/}).waitFor();
+      const writes = [];
+      tab.on('request', r => { if (r.url().endsWith('/refund')) writes.push(r.url()); });
+      if (idle) {
+        await tab.clock.fastForward(cutoff - await tab.evaluate(() => Date.now()) + 2000);
+      } else {
+        // A suspended tab can receive the click before its first timer callback.
+        await tab.clock.setSystemTime(new Date(cutoff + 2000));
+        await confirm.evaluate(button => button.click());
+      }
+      await tab.locator('[data-confirm-refund]:disabled').waitFor({timeout:3000});
+      await tab.getByRole('button',{name:'Refunds closed',exact:true}).waitFor({timeout:3000});
+      assert.deepEqual(writes,[]);
+      assert.equal((await api(`/ui/bookings/${receipt.booking_id}`)).status,'CONFIRMED');
+      assert.equal((await api('/me/wallet')).balance_minor,receipt.balance_minor);
+    } finally { await separate.close(); }
+  }
+  console.log('PASS an open refund preview closes at the cutoff without sending a refund');
+
   await refundButton.click();
   await page.getByRole('button',{name:/Confirm refund ·/}).waitFor();
   await page.setViewportSize({width:390,height:844});
@@ -63,8 +91,12 @@ try {
       await route.abort('failed');
     } else await route.continue();
   });
+  await page.clock.install();
   await page.getByRole('button',{name:/Confirm refund ·/}).click();
-  await page.getByRole('button',{name:'Retry this refund'}).click();
+  const retry = page.getByRole('button',{name:'Retry this refund'});
+  await retry.waitFor();
+  await page.clock.fastForward(cutoff - await page.evaluate(() => Date.now()) + 2000);
+  await retry.click();
   await page.locator('dialog').waitFor({state:'detached'});
   assert.equal(requests,2);
   assert.equal(keys[0],keys[1]);

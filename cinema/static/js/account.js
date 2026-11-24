@@ -4,6 +4,7 @@ import { openTicketCard } from "./ticket-card.js";
 import { tx } from "./locale.js";
 import { filmTitle } from "./film-locale.js";
 import { rescheduleDeadline } from "./rescheduling.js";
+import { apiMessage } from "./api.js";
 
 const PAGE_SIZE = 8;
 const TABS = [
@@ -170,6 +171,7 @@ export async function renderAccount(ctx) {
   let alive = true;
   let timer = null;
   let dialog = null;
+  let checkRefundDeadline = null;
   let closeTicket = null;
   let version = 0;
   function cleanup() {
@@ -402,6 +404,7 @@ export async function renderAccount(ctx) {
 
   function tick() {
     if (!alive) return;
+    checkRefundDeadline?.();
     root.querySelectorAll(".account-refund-actions").forEach(updateBookingActions);
     root.querySelectorAll("[data-expires]").forEach((card) => {
       const remain = Math.max(
@@ -507,11 +510,16 @@ export async function renderAccount(ctx) {
     let preview = null;
     let busy = false;
     let needsPreview = true;
+    let deadline = Infinity;
+    let retryPending = false;
     keep.addEventListener("click", () => d.close());
     d.addEventListener("cancel", (event) => { if (busy) event.preventDefault(); });
     d.addEventListener("close", () => {
       d.remove();
-      if (dialog === d) dialog = null;
+      if (dialog === d) {
+        dialog = null;
+        checkRefundDeadline = null;
+      }
       opener?.focus();
       if (alive) void load();
     }, { once: true });
@@ -519,12 +527,33 @@ export async function renderAccount(ctx) {
     const showError = (error) => {
       d.querySelector("[data-refund-error]").innerHTML = notice(error.userMessage || error.message || tx("Unable to confirm this refund.", "暂时无法确认退票。"), "error");
     };
+    function showClosed() {
+      preview = null;
+      confirm.disabled = true;
+      confirm.textContent = tx("Refunds closed", "退票已截止");
+      d.querySelector("[data-refund-content]").replaceChildren();
+      showError({message: apiMessage("REFUND_CLOSED")});
+    }
+    function expirePreview() {
+      // A request with an unknown outcome can still recover its original receipt.
+      if (!active() || !preview || busy || retryPending || Date.now() <= deadline) return false;
+      showClosed();
+      return true;
+    }
+    checkRefundDeadline = expirePreview;
     async function review() {
       confirm.disabled = true;
       d.querySelector("[data-refund-error]").innerHTML = "";
+      const requestedAt = Date.now();
       try {
         preview = await api.request(`/bookings/${encodeURIComponent(id)}/refund-preview`, { method: "POST", body: {}, signal: lifecycle.signal });
         if (!active()) return;
+        // The server sampled its clock between the request and response. A slow response
+        // alone must not move the deadline when the two clocks already agree.
+        const serverTime = Date.parse(preview.server_time);
+        const localSample = Math.max(requestedAt, Math.min(serverTime, Date.now()));
+        deadline = rescheduleDeadline(preview.starts_at) + (localSample - serverTime);
+        if (expirePreview()) return;
         needsPreview = false;
         const feeRate = Number(preview.fee_rate_bps) / 100;
         const previousFees = money(preview.previous_fees_minor);
@@ -546,13 +575,15 @@ export async function renderAccount(ctx) {
         confirm.textContent = `${tx("Confirm refund", "确认退票")} · ${money(preview.refund_minor)}`;
       } catch (error) {
         if (!active()) return;
+        if (error.code === "REFUND_CLOSED") return showClosed();
         showError(error);
         needsPreview = true;
-        confirm.disabled = ["BOOKING_STATE", "REFUND_CLOSED", "FORBIDDEN", "NOT_FOUND"].includes(error.code);
+        confirm.disabled = ["BOOKING_STATE", "FORBIDDEN", "NOT_FOUND"].includes(error.code);
         confirm.textContent = tx("Review refund again", "重新查看退款明细");
       }
     }
     confirm.addEventListener("click", async () => {
+      if (confirm.disabled || expirePreview()) return;
       if (needsPreview) { await review(); return; }
       busy = true;
       confirm.disabled = true;
@@ -570,9 +601,11 @@ export async function renderAccount(ctx) {
         ));
       } catch (error) {
         if (!active()) return;
+        retryPending = api.pending(`refund:${id}`);
+        if (error.code === "REFUND_CLOSED") return showClosed();
         showError(error);
         needsPreview = ["TOKEN_EXPIRED", "PREVIEW_CHANGED"].includes(error.code);
-        confirm.disabled = ["BOOKING_STATE", "REFUND_CLOSED", "FORBIDDEN", "NOT_FOUND"].includes(error.code);
+        confirm.disabled = ["BOOKING_STATE", "FORBIDDEN", "NOT_FOUND"].includes(error.code);
         confirm.textContent = needsPreview
           ? tx("Review updated refund", "查看更新的退款明细")
           : tx("Retry this refund", "重试退票");
