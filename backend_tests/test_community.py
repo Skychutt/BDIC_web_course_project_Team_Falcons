@@ -34,6 +34,7 @@ def test_repeatable_migration_preserves_ratings_and_catalogue(env):
     public = env["app"].test_client()
     review = public.get(url + "s").json["data"]["items"][0]
     assert set(review["author"]) == {"id", "display_name"}
+    assert review["is_demo_customer"] is True
     assert "email" not in str(review) and "password" not in str(review)
     assert public.get(f"/api/community/films/{fid}").json["data"]["own_rating"] is None
     assert client.delete(url, headers=headers).status_code == 200
@@ -92,6 +93,8 @@ def test_threads_replies_retry_ownership_and_removal(env):
     assert detail["replies"]["total"] == 1
     assert detail["thread"]["body"] == post["body"]  # Stored as text; browser must escape it.
     assert set(detail["thread"]["author"]) == {"id", "display_name"}
+    assert detail["thread"]["is_demo_customer"] and detail["replies"]["items"][0]["is_demo_customer"]
+    assert "name_source_email" not in str(detail)
     assert "payload_hash" not in detail["thread"] and "request_key" not in detail["thread"]
     assert second.delete(thread_url, headers=h2).status_code == 403
     assert first.delete(f"/api/community/replies/{rid}", headers=h1).status_code == 403

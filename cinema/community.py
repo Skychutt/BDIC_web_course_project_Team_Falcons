@@ -3,6 +3,7 @@ from importlib.resources import files
 from flask import Blueprint, g, request
 
 from . import catalog
+from .auth import mark_demo_customer
 from .rating_snapshots import get_snapshot
 from .api import body, key, logged, output
 from .core import db, digest, execute, get, ins, integer, new_id, now, one, require, role, rows, string, transaction
@@ -33,6 +34,7 @@ def spoiler_flag(data):
 
 def author(item):
     # Public conversations never expose email addresses or account/session fields.
+    mark_demo_customer(item, "display_name")
     item["author"] = {"id": item.pop("author_id"), "display_name": item.pop("display_name")}
     return item
 
@@ -79,7 +81,7 @@ def reviews(fid):
     with db().connect() as c:
         get(c, "films", fid)
         items = rows(c, """SELECT r.id,r.body,r.spoiler,r.created_at,r.updated_at,
-            r.customer_id AS author_id,u.display_name,v.stars
+            r.customer_id AS author_id,u.display_name,u.email_normalized AS name_source_email,v.stars
             FROM film_reviews r JOIN users u ON u.id=r.customer_id
             LEFT JOIN ratings v ON v.customer_id=r.customer_id AND v.film_id=r.film_id
             WHERE r.film_id=:f ORDER BY r.created_at DESC,r.id DESC LIMIT :n OFFSET :o""", f=fid, n=size, o=offset)
@@ -131,6 +133,7 @@ def threads(fid):
     with db().connect() as c:
         get(c, "films", fid)
         items = rows(c, """SELECT t.id,t.film_id,t.title,t.spoiler,t.created_at,t.author_id,u.display_name,
+            u.email_normalized AS name_source_email,
             (SELECT COUNT(*) FROM film_replies r WHERE r.thread_id=t.id AND r.deleted=0) AS reply_count
             FROM film_threads t JOIN users u ON u.id=t.author_id
             WHERE t.film_id=:f AND t.deleted=0 ORDER BY t.created_at DESC,t.id DESC LIMIT :n OFFSET :o""", f=fid, n=size, o=offset)
@@ -180,8 +183,10 @@ def thread_detail(tid):
     with db().connect() as c:
         thread = active_thread(c, tid)
         thread = {k: thread[k] for k in ("id", "film_id", "title", "body", "spoiler", "created_at", "author_id")}
-        thread["display_name"] = get(c, "users", thread["author_id"])["display_name"]
-        replies = rows(c, """SELECT r.id,r.body,r.created_at,r.author_id,u.display_name
+        user = get(c, "users", thread["author_id"])
+        thread.update(display_name=user["display_name"], name_source_email=user["email_normalized"])
+        replies = rows(c, """SELECT r.id,r.body,r.created_at,r.author_id,u.display_name,
+            u.email_normalized AS name_source_email
             FROM film_replies r JOIN users u ON u.id=r.author_id
             WHERE r.thread_id=:t AND r.deleted=0 ORDER BY r.created_at,r.id LIMIT :n OFFSET :o""", t=tid, n=size, o=offset)
         total = one(c, "SELECT COUNT(*) AS n FROM film_replies WHERE thread_id=:t AND deleted=0", t=tid)["n"]
@@ -212,7 +217,8 @@ def moderation_posts():
     page, size, offset = pagination()
     with db().connect() as c:
         posts = rows(c, """
-            SELECT p.id,p.kind,t.title AS thread_title,p.body,p.created_at,u.display_name,f.title AS film_title
+            SELECT p.id,p.kind,t.title AS thread_title,p.body,p.created_at,u.display_name,
+                u.email_normalized AS name_source_email,f.title AS film_title
             FROM (
                 SELECT id,'thread' AS kind,id AS thread_id,author_id,body,created_at
                 FROM film_threads WHERE deleted=0
@@ -224,6 +230,8 @@ def moderation_posts():
             JOIN users u ON u.id=p.author_id JOIN films f ON f.id=t.film_id
             ORDER BY p.created_at DESC,p.id DESC,p.kind LIMIT :n OFFSET :o
         """, n=size + 1, o=offset)
+    for post in posts:
+        mark_demo_customer(post, "display_name")
     return output(dict(items=posts[:size], page=page, has_next=len(posts) > size))
 
 

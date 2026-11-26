@@ -24,6 +24,13 @@ def public_user(user):
     }
 
 
+def mark_demo_customer(row, name_field):
+    """Replace the private lookup address with a public presentation hint."""
+    source = (row.pop("name_source_email"), row[name_field])
+    if source in {("customer@cinema.test", "Demo Customer"), ("customer2@cinema.test", "Second Customer")}:
+        row["is_demo_customer"] = True
+
+
 def register(data, key):
     email, password = credentials(data)
     name = string(data.get("display_name"), "display_name", 80)
