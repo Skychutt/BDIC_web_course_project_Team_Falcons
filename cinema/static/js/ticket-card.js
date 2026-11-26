@@ -3,6 +3,7 @@ import { esc, money, dateTime, timeOnly, screenName, notice } from "./ui.js";
 import { filmArtwork } from "./film-artwork.js";
 import { tx } from "./locale.js";
 import { filmTitle } from "./film-locale.js";
+import { accountName } from "./account-locale.js";
 
 // Original card copy; these are not quotations from the films.
 const LINES = {
@@ -113,7 +114,7 @@ function cover(ctx, img, x, y, w, h) {
 }
 
 /** One native canvas is both the preview and the downloaded PNG. No remote render service. */
-export async function renderTicketCanvas(data) {
+export async function renderTicketCanvas(data, holder) {
   const image = await loadPoster(filmArtwork({ title: data.film_title }) || "/static/assets/journey-city.svg");
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
@@ -127,7 +128,8 @@ export async function renderTicketCanvas(data) {
   ctx.font = font(25);
   const addressHeight = wrap(ctx, venueAddress(data.cinema_name, data.cinema_address), 936).length * 34;
   ctx.font = font(32, 700);
-  const holderHeight = Math.max(44, wrap(ctx, data.holder_name, 600).length * 42);
+  const holderName = accountName(data.holder_name, holder || data);
+  const holderHeight = Math.max(44, wrap(ctx, holderName, 600).length * 42);
   ctx.font = font(21, 700);
   const hallHeight = wrap(ctx, hallLabel, 936).length * 29;
   const seatHeight = Math.ceil(seats.length / 4) * 62;
@@ -180,7 +182,7 @@ export async function renderTicketCanvas(data) {
   const totalLabel = tx(`${seats.length} ${seats.length === 1 ? "TICKET" : "TICKETS"} · TOTAL`, `${seats.length} 张 · 合计`);
   text(ctx, totalLabel, 785, y, 19, "#8b8375", 700);
   y += 32;
-  paragraph(ctx, data.holder_name, 72, y, 600, 32, "#252b3d", 700, 42);
+  paragraph(ctx, holderName, 72, y, 600, 32, "#252b3d", 700, 42);
   text(ctx, money(data.net_ticket_minor), 785, y, 30, "#252b3d", 700);
   y += holderHeight + 24;
   // Hall names and row/seat values come from the actual booking, not the current layout.
@@ -209,7 +211,7 @@ export async function renderTicketCanvas(data) {
   return canvas;
 }
 
-function content(data) {
+function content(data, holder) {
   const state = stateFor(data);
   return `<div class="ticket-card-stage"><div class="ticket-card-art" data-ticket-art></div></div>
     <section class="ticket-card-info"><p class="eyebrow">${tx("YOUR DIGITAL TICKET", "电子影票")}</p><h2 id="ticket-card-title">${esc(state.heading)}</h2>
@@ -219,7 +221,7 @@ function content(data) {
         <div><dt>${tx("When", "场次时间")}</dt><dd>${esc(dateTime(data.starts_at))} · ${tx("Beijing", "北京时间")}</dd></div>
         <div><dt>${tx("Cinema", "影院")}</dt><dd>${esc(venueName(data.cinema_name))}<small>${esc(auditoriumName(data.screen_name))} · ${esc(screenName(data.screen_type))}</small></dd></div>
         <div><dt>${tx("Seats", "座位")}</dt><dd>${esc(seatText(data.seats))}</dd></div>
-        <div><dt>${tx("Ticket holder", "购票人")}</dt><dd>${esc(data.holder_name)}</dd></div>
+        <div><dt>${tx("Ticket holder", "购票人")}</dt><dd>${esc(accountName(data.holder_name, holder || data))}</dd></div>
       </dl>
       <button type="button" class="button wide" data-ticket-save><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg> ${tx("Save ticket image", "保存影票图片")}</button>
       <button type="button" class="button ghost wide" data-ticket-refresh>${tx("Refresh ticket status", "刷新影票状态")}</button>
@@ -239,7 +241,7 @@ function loadError(error) {
 }
 
 /** Shared lifecycle for the order dialog and the signed QR destination. */
-function mountTicket(host, api, endpoint) {
+function mountTicket(host, api, endpoint, holder) {
   const controller = new AbortController();
   let alive = true, canvas, ticket, loading = false;
   async function load() {
@@ -248,10 +250,10 @@ function mountTicket(host, api, endpoint) {
     host.querySelectorAll("button").forEach(b => { b.disabled = true; });
     try {
       const data = await api.request(endpoint, { signal: controller.signal });
-      const drawing = await renderTicketCanvas(data);
+      const drawing = await renderTicketCanvas(data, holder);
       if (!alive) return;
       ticket = data; canvas = drawing;
-      host.innerHTML = content(data);
+      host.innerHTML = content(data, holder);
       host.querySelector("[data-ticket-art]").append(canvas);
     } catch (error) {
       if (!alive) return;
@@ -293,13 +295,13 @@ function mountTicket(host, api, endpoint) {
   return () => { alive = false; controller.abort(); };
 }
 
-export function openTicketCard(api, bookingId, trigger) {
+export function openTicketCard(api, bookingId, trigger, holder) {
   const dialog = document.createElement("dialog");
   dialog.className = "ticket-card-dialog";
   dialog.setAttribute("aria-label", tx("Movie ticket preview", "电子影票预览"));
   dialog.innerHTML = `<button type="button" class="ticket-card-close" aria-label="${tx("Close ticket preview", "关闭影票预览")}">×</button><div class="ticket-card-layout" data-ticket-host></div>`;
   document.body.append(dialog);
-  const dispose = mountTicket(dialog.querySelector("[data-ticket-host]"), api, `/bookings/${encodeURIComponent(bookingId)}/ticket`);
+  const dispose = mountTicket(dialog.querySelector("[data-ticket-host]"), api, `/bookings/${encodeURIComponent(bookingId)}/ticket`, holder);
   let closed = false;
   const close = () => {
     if (closed) return;
@@ -318,5 +320,5 @@ export function renderTicketPage(ctx, token) {
   const customer = ctx.user.role === "CUSTOMER";
   const returnLabel = customer ? tx("My tickets", "我的影票") : tx("Cinema workspace", "影院工作台");
   ctx.root.innerHTML = `<div class="ticket-card-page"><a class="button ghost" href="${customer ? "#/account" : "#/operations"}">← ${returnLabel}</a><div class="ticket-card-layout" data-ticket-host></div></div>`;
-  return mountTicket(ctx.root.querySelector("[data-ticket-host]"), ctx.api, `/tickets/${encodeURIComponent(token)}`);
+  return mountTicket(ctx.root.querySelector("[data-ticket-host]"), ctx.api, `/tickets/${encodeURIComponent(token)}`, customer ? ctx.user : undefined);
 }

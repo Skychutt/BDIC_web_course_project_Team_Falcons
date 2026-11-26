@@ -26,6 +26,7 @@ def test_ticket_data_permissions_signature_and_read_only(env):
     card = issue(env, bid)
     assert card["booking_id"] == str(bid)
     assert card["holder_name"] == actor(env)["display_name"]
+    assert card["is_demo_customer"] and "name_source_email" not in card
     assert len(card["seats"]) == 2
     assert card["status"] == "CONFIRMED"
     assert card["qr_matrix"] and all(len(row) == len(card["qr_matrix"]) for row in card["qr_matrix"])

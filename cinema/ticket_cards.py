@@ -5,6 +5,7 @@ from itsdangerous import BadData, URLSafeSerializer
 import segno
 
 from .catalog import booking_detail
+from .auth import mark_demo_customer
 from .core import Problem, integer, now, one
 
 
@@ -30,11 +31,12 @@ def ticket_card(c, bid, actor, base_url):
     details = one(c, """SELECT f.title AS film_title,s.duration_minutes_snapshot AS duration_minutes,
         c.name AS cinema_name,c.address AS cinema_address,sc.name AS screen_name,
         sc.screen_type,s.starts_at,s.ends_at,s.status AS screening_status,
-        u.display_name AS holder_name
+        u.display_name AS holder_name,u.email_normalized AS name_source_email
         FROM bookings b JOIN films f ON f.id=b.film_id
         JOIN screenings s ON s.id=b.screening_id JOIN screens sc ON sc.id=s.screen_id
         JOIN cinemas c ON c.id=b.cinema_id JOIN users u ON u.id=b.owner_id
         WHERE b.id=:bid""", bid=bid)
+    mark_demo_customer(details, "holder_name")
     at = now()
     state = booking["status"]
     if details["screening_status"] == "CANCELLED" and state == "CONFIRMED":

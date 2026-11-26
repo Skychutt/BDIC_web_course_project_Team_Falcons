@@ -2,6 +2,7 @@ import { venueName, auditoriumName } from "./venue-locale.js";
 import { esc, money, dateTime, empty, notice, screenName } from "./ui.js";
 import { openTicketCard } from "./ticket-card.js";
 import { tx } from "./locale.js";
+import { accountName } from "./account-locale.js";
 import { filmTitle } from "./film-locale.js";
 import { rescheduleDeadline } from "./rescheduling.js";
 import { apiMessage } from "./api.js";
@@ -215,8 +216,9 @@ export async function renderAccount(ctx) {
 
   function shell() {
     const [, tabEn, tabZh] = TABS.find(([id]) => id === tab);
+    const name = esc(accountName(user.display_name, user));
     root.innerHTML = `<div class="account-page"><div class="page-heading">
-      <div><p class="eyebrow">${tx("YOUR CINEMA", "个人中心")}</p><h1>${tx("Your cinema journal", "我的观影记录")}</h1><p class="muted">${tx(`${esc(user.display_name)}, your next screening and every booking along the way.`, `${esc(user.display_name)}，在这里查看你的场次与订单。`)}</p></div>
+      <div><p class="eyebrow">${tx("YOUR CINEMA", "个人中心")}</p><h1>${tx("Your cinema journal", "我的观影记录")}</h1><p class="muted">${tx(`${name}, your next screening and every booking along the way.`, `${name}，在这里查看你的场次与订单。`)}</p></div>
       <a class="button secondary" href="#/discover">${tx("Find your next film", "查找场次")} <span aria-hidden="true">↗</span></a>
     </div>
     <section class="panel account-wallet" aria-label="${tx("My wallet", "我的钱包")}"><div class="toolbar">
@@ -698,7 +700,7 @@ export async function renderAccount(ctx) {
       if (!button || !root.contains(button) || button.disabled) return;
       if (button.dataset.action === "view-ticket") {
         closeTicket?.();
-        closeTicket = openTicketCard(api, button.dataset.id, button);
+        closeTicket = openTicketCard(api, button.dataset.id, button, user);
         return;
       }
       if (button.dataset.action === "refresh") {
