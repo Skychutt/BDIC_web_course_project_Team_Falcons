@@ -1,4 +1,5 @@
 import { venueName } from "./venue-locale.js";
+import { accountName } from "./account-locale.js";
 import { CinemaAPI } from "./api.js";
 import { esc, icon, toast, showError, busy, notice } from "./ui.js";
 import {
@@ -107,7 +108,7 @@ function header() {
     </nav>
     <div class="header-actions">
       <div class="lang-switch" role="group">${option("zh", "中文")}${option("en", "English")}</div>
-      ${user ? `<span class="user-label" title="${esc(user.display_name)}">${esc(user.display_name)}</span><button id="logout" class="button ghost"></button>`
+      ${user ? `<span class="user-label"></span><button id="logout" class="button ghost"></button>`
         : `<a class="button secondary" href="#/login"><span data-sign-in-label></span> ${icon("arrow")}</a>`}
     </div>`;
   updateHeaderLanguage();
@@ -176,6 +177,12 @@ function updateHeaderLanguage() {
   });
   const signIn = siteHeader.querySelector("[data-sign-in-label]");
   if (signIn) signIn.textContent = tx("Sign in", "登录");
+  const userLabel = siteHeader.querySelector(".user-label");
+  if (userLabel && user) {
+    const name = accountName(user.display_name, user);
+    userLabel.textContent = name;
+    userLabel.title = name;
+  }
   const logout = siteHeader.querySelector("#logout");
   if (logout && !logout.disabled) logout.textContent = tx("Sign out", "退出");
 }
@@ -311,6 +318,7 @@ async function route() {
     }
   }
   const token = ++generation;
+  const initialLanguage = getLanguage();
   cleanup?.();
   cleanup = null;
   updateCurrentLanguage = null;
@@ -377,6 +385,7 @@ async function route() {
         else if (path === "/account" || path.startsWith("/ticket/")) { void route(); return; }
         updateTitle();
       };
+      if (getLanguage() !== initialLanguage) updateCurrentLanguage();
     } else dispose?.();
   } catch (e) {
     if (token === generation) {
