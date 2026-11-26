@@ -21,8 +21,8 @@ const brands = {
 export function districtLabel(district) {
   const name = district?.name;
   const canonical = districtCodes[district?.admin_code] ?? name;
-  if (!Object.hasOwn(districts, canonical)) return name;
-  return tx(name === districts[canonical] ? canonical : name, districts[canonical]);
+  if (!Object.hasOwn(districts, canonical) || (name !== canonical && name !== districts[canonical])) return name;
+  return tx(canonical, districts[canonical]);
 }
 export function venueBrand(name) {
   return tx(Object.hasOwn(brands, name) ? brands[name] : name, name);

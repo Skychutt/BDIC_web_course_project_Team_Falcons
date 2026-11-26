@@ -1,7 +1,7 @@
 import { tx } from "./locale.js";
 import { filmTitle } from "./film-locale.js";
 import { auditoriumName } from "./venue-locale.js";
-import { esc, money, dateTime, showError } from "./ui.js";
+import { esc, money, dateTime, showError, LocalizedError } from "./ui.js";
 import { seatGrid, seatLabel } from "./seat-grid.js";
 
 export async function createCounterSales(api, user, openBooking, statusText) {
@@ -200,7 +200,7 @@ export async function createCounterSales(api, user, openBooking, statusText) {
       if (selected.has(id)) selected.delete(id);
       else if (selected.size < 12) selected.set(id, "STANDARD");
       else {
-        showError(form.querySelector("[data-error]"), new Error(tx("Select up to 12 seats.", "每单最多选择 12 个座位。")), true);
+        showError(form.querySelector("[data-error]"), new LocalizedError("Select up to 12 seats.", "每单最多选择 12 个座位。"), true);
         return;
       }
       form.querySelector("[data-error]").hidden = true;
@@ -256,6 +256,7 @@ export async function createCounterSales(api, user, openBooking, statusText) {
     if (refreshAfterFailure && form.isConnected) {
       try { await refreshSeats(form); } catch { /* The sale error stays visible until the next poll. */ }
     }
+    if (form.isConnected) form.dispatchEvent(new Event("action-finished"));
   }
   function dispose() {
     ++mapVersion;

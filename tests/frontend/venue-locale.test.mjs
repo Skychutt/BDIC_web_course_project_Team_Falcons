@@ -19,6 +19,7 @@ test("directory translations preserve edited addresses and custom auditorium nam
   assert.equal(auditoriumName("Catalogue Demo 2"), "片库演示2 号厅");
   assert.equal(auditoriumName("Blue Room"), "Blue Room");
   assert.equal(districtLabel({ admin_code: "110101", name: "Dongcheng" }), "东城区");
+  assert.equal(districtLabel({ admin_code: "110101", name: "My district" }), "My district");
   setLanguage("en");
 });
 

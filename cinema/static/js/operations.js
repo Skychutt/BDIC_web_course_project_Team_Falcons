@@ -1,6 +1,7 @@
 import { createCounterSales } from "./counter-sales.js";
 import { getLanguage, tx } from "./locale.js";
-import { filmTitle, genreName } from "./film-locale.js";
+import { accountName } from "./account-locale.js";
+import { filmSynopsis, filmTitle, genreName } from "./film-locale.js";
 import { venueName, venueAddress, venueBrand, districtLabel, auditoriumName } from "./venue-locale.js";
 import { esc, money, dateTime, showError, redrawLocalized, LocalizedError } from "./ui.js";
 
@@ -24,6 +25,7 @@ const statuses = {
 const statusText = value => Object.hasOwn(statuses, value) ? tx(...statuses[value]) : value;
 const status = (value) =>
   `<span class="badge status ${esc(value)}">${esc(statusText(value))}</span>`;
+const staffName = person => accountName(person?.display_name, person);
 const rowsOf = (value) => (Array.isArray(value) ? value : value?.items || []);
 const input = (label, name, value = "", type = "text", extra = "") =>
   `<label class="field"><span>${esc(label)}</span><input name="${esc(name)}" type="${type}" value="${esc(value ?? "")}" ${extra}></label>`;
@@ -57,6 +59,15 @@ const fen = (value) => {
 };
 const yuan = (value) => (value == null ? "" : (Number(value) / 100).toFixed(2));
 const short = (value) => String(value || "").slice(-8);
+
+// A translated catalogue value is only a display value until the administrator edits it.
+function preserveUneditedText(data, form, record, keys) {
+  for (const key of keys) {
+    if (record[key] != null && data.get(key) === form.elements.namedItem(key).defaultValue) {
+      data.set(key, record[key]);
+    }
+  }
+}
 
 /** Branch and platform workspaces. All mutations use server role/scope enforcement. */
 export async function renderOperations(ctx) {
@@ -168,7 +179,7 @@ export async function renderOperations(ctx) {
           submit.disabled = false;
           submit.textContent = old;
         }
-        if (content.contains(form) && pendingLanguage) ctx.updateLanguage();
+        if (form.isConnected) form.dispatchEvent(new Event("action-finished"));
       }
     });
   }
@@ -217,7 +228,7 @@ export async function renderOperations(ctx) {
     cinemas = rowsOf(values[0]);
     staff = rowsOf(values[1]);
   }
-  let renderPanel, bindPanel, disposePanel, pendingLanguage = false;
+  let renderPanel, bindPanel, disposePanel;
   const results = new Map();
   const loading = () => `<div class="panel"><p class="muted">${tx("Loading…", "加载中…")}</p></div>`;
   function showResult(selector, render) {
@@ -228,15 +239,17 @@ export async function renderOperations(ctx) {
   ctx.updateLanguage = () => {
     root.querySelector("[data-workspace-heading]").innerHTML = heading();
     if (!renderPanel) { content.innerHTML = loading(); return; }
-    pendingLanguage = Boolean(content.querySelector("form[data-busy]"));
-    if (pendingLanguage) return;
+    const pending = content.querySelector("form[data-busy]");
+    if (pending) {
+      pending.addEventListener("action-finished", ctx.updateLanguage, { once: true });
+      return;
+    }
     redrawLocalized(content, () => { content.innerHTML = renderPanel(); }, bindPanel);
     for (const [selector, render] of results) showResult(selector, render);
   };
   async function showTab(tab, page = 1) {
     disposePanel?.();
     disposePanel = null;
-    pendingLanguage = false;
     results.clear();
     renderPanel = null;
     currentTab = tab;
@@ -704,7 +717,7 @@ export async function renderOperations(ctx) {
     if (!r) return;
     const d = dialog(
       tx("Confirm refund", "确认退款"),
-      `<form class="stack"><p>${tx("Booking …", "订单 …")}${esc(short(r.booking_id))}${r.customer_name ? ` · ${esc(r.customer_name)}` : ""}</p><div class="metric"><span>${tx("Credit to customer balance", "退回顾客余额")}</span><strong>${money(r.amount_minor)}</strong></div><p>${tx("This refund will be credited to the customer’s balance. A completed refund cannot be paid twice.", "退款将退回到顾客余额。已完成的退款不会重复入账。")}</p>${formEnd(tx("Confirm refund", "确认退款"))}</form>`,
+      `<form class="stack"><p>${tx("Booking …", "订单 …")}${esc(short(r.booking_id))}${r.customer_name ? ` · ${esc(accountName(r.customer_name, r))}` : ""}</p><div class="metric"><span>${tx("Credit to customer balance", "退回顾客余额")}</span><strong>${money(r.amount_minor)}</strong></div><p>${tx("This refund will be credited to the customer’s balance. A completed refund cannot be paid twice.", "退款将退回到顾客余额。已完成的退款不会重复入账。")}</p>${formEnd(tx("Confirm refund", "确认退款"))}</form>`,
     );
     formAction(d.querySelector("form"), async () => {
       await request(`/staff/refunds/${id}/retry`, "POST", {});
@@ -732,8 +745,7 @@ export async function renderOperations(ctx) {
             `${esc(districtName(c.district_id))}<div class="muted">${esc(venueAddress(c.name, c.address))}</div>`,
             `<span class="badge">${c.is_active ? tx("Active", "已启用") : tx("Manager required", "待指定经理")}</span>`,
             esc(
-              staff.find((s) => String(s.id) === String(c.manager_user_id))
-                ?.display_name || tx("Not assigned", "未指派"),
+              staffName(staff.find((s) => String(s.id) === String(c.manager_user_id))) || tx("Not assigned", "未指派"),
             ),
             `${button(tx("Edit", "编辑"), "edit-cinema", c.id)} ${button(tx("Assign manager", "指定经理"), "manager", c.id, "ghost")}`,
           ]),
@@ -759,15 +771,16 @@ export async function renderOperations(ctx) {
     const c = cinemas.find((c) => String(c.id) === String(id)) || {};
     const d = dialog(
       id ? tx("Edit cinema", "编辑影院") : tx("Add cinema", "添加影院"),
-      `<form class="stack"><div class="form-grid">${input(tx("Cinema name", "影院名称"), "name", c.name, "text", 'required maxlength="120"')}${input(tx("Brand", "品牌"), "brand", c.brand, "text", 'required maxlength="80"')}${select(
+      `<form class="stack"><div class="form-grid">${input(tx("Cinema name", "影院名称"), "name", venueName(c.name), "text", 'required maxlength="120"')}${input(tx("Brand", "品牌"), "brand", venueBrand(c.brand), "text", 'required maxlength="80"')}${select(
         tx("District", "行政区"),
         "district_id",
         districts.map((v) => [v.id, districtLabel(v)]),
         c.district_id,
         "required",
-      )}</div>${input(tx("Street address", "详细地址"), "address", c.address, "text", 'required maxlength="255"')}${id ? `<details><summary>${tx("Map coordinates (optional)", "地图坐标（选填）")}</summary><p class="muted">${tx("Enter both GCJ-02 coordinates, or leave both blank. The cinema address remains available.", "请同时填写 GCJ-02 经纬度，或全部留空。未填写坐标时仍会显示影院地址。")}</p><div class="form-grid">${input(tx("Latitude", "纬度"), "latitude", c.latitude, "number", 'step="any" min="-90" max="90"')}${input(tx("Longitude", "经度"), "longitude", c.longitude, "number", 'step="any" min="-180" max="180"')}</div></details>` : alertBox(tx("The new cinema becomes active after a staff member is assigned as its manager.", "从本店员工中指定一位经理后，新影院即可启用。"))}${formEnd(tx("Save cinema", "保存影院"))}</form>`,
+      )}</div>${input(tx("Street address", "详细地址"), "address", venueAddress(c.name, c.address), "text", 'required maxlength="255"')}${id ? `<details><summary>${tx("Map coordinates (optional)", "地图坐标（选填）")}</summary><p class="muted">${tx("Enter both GCJ-02 coordinates, or leave both blank. The cinema address remains available.", "请同时填写 GCJ-02 经纬度，或全部留空。未填写坐标时仍会显示影院地址。")}</p><div class="form-grid">${input(tx("Latitude", "纬度"), "latitude", c.latitude, "number", 'step="any" min="-90" max="90"')}${input(tx("Longitude", "经度"), "longitude", c.longitude, "number", 'step="any" min="-180" max="180"')}</div></details>` : alertBox(tx("The new cinema becomes active after a staff member is assigned as its manager.", "从本店员工中指定一位经理后，新影院即可启用。"))}${formEnd(tx("Save cinema", "保存影院"))}</form>`,
     );
-    formAction(d.querySelector("form"), async (fd) => {
+    formAction(d.querySelector("form"), async (fd, form) => {
+      preserveUneditedText(fd, form, c, ["name", "brand", "address"]);
       const body = {
         name: fd.get("name"),
         brand: fd.get("brand"),
@@ -797,9 +810,10 @@ export async function renderOperations(ctx) {
     const item = districts.find((d) => String(d.id) === String(id)) || {};
     const d = dialog(
       id ? tx("Edit district", "编辑行政区") : tx("Add district", "添加行政区"),
-      `<form class="stack">${input(tx("District name", "行政区名称"), "name", item.name, "text", 'required maxlength="80"')}${input(tx("Six-digit administrative code", "六位行政区划代码"), "admin_code", item.admin_code, "text", `required pattern="1101[0-9]{2}" maxlength="6" placeholder="${tx("For example: 110105", "例如：110105")}"`)}${formEnd(tx("Save district", "保存行政区"))}</form>`,
+      `<form class="stack">${input(tx("District name", "行政区名称"), "name", districtLabel(item), "text", 'required maxlength="80"')}${input(tx("Six-digit administrative code", "六位行政区划代码"), "admin_code", item.admin_code, "text", `required pattern="1101[0-9]{2}" maxlength="6" placeholder="${tx("For example: 110105", "例如：110105")}"`)}${formEnd(tx("Save district", "保存行政区"))}</form>`,
     );
-    formAction(d.querySelector("form"), async (fd) => {
+    formAction(d.querySelector("form"), async (fd, form) => {
+      preserveUneditedText(fd, form, item, ["name"]);
       await request(
         id ? `/admin/districts/${id}` : "/admin/districts",
         id ? "PUT" : "POST",
@@ -830,7 +844,7 @@ export async function renderOperations(ctx) {
         "staff_id",
         employees.map((e) => [
           e.id,
-          `${e.display_name} · ${e.email_normalized}`,
+          `${staffName(e)} · ${e.email_normalized}`,
         ]),
         c.manager_user_id,
         "required",
@@ -878,9 +892,10 @@ export async function renderOperations(ctx) {
     const selected = (f.genres || []).map((g) => String(g.id));
     const d = dialog(
       id ? tx("Edit film", "编辑影片") : tx("Add film", "添加影片"),
-      `<form class="stack"><div class="form-grid">${input(tx("Film title", "片名"), "title", f.title, "text", 'required maxlength="200"')}${input(tx("Runtime (minutes)", "片长（分钟）"), "duration_minutes", f.duration_minutes || 120, "number", 'required min="1" max="1000"')}</div>${textarea(tx("Synopsis", "剧情简介"), "synopsis", f.synopsis || "", 'maxlength="6000"')}<fieldset><legend>${tx("Genres", "影片类型")}</legend><div class="actions">${genres.map((g) => `<label><input type="checkbox" name="genre_ids" value="${esc(g.id)}" ${selected.includes(String(g.id)) ? "checked" : ""}> ${esc(genreName(g))}</label>`).join("")}</div></fieldset><label><input type="checkbox" name="archived" ${f.archived ? "checked" : ""}> ${tx("Archive (stop ticket sales and new screenings)", "归档（停止售票和新增排片）")}</label>${alertBox(tx("Changing the runtime affects future screenings only. Published screenings and issued tickets retain their original details.", "片长修改仅适用于新排场次。已发布的场次和已出票的订单保留原信息。"))}${formEnd(tx("Save film", "保存影片"))}</form>`,
+      `<form class="stack"><div class="form-grid">${input(tx("Film title", "片名"), "title", filmTitle(f), "text", 'required maxlength="200"')}${input(tx("Runtime (minutes)", "片长（分钟）"), "duration_minutes", f.duration_minutes || 120, "number", 'required min="1" max="1000"')}</div>${textarea(tx("Synopsis", "剧情简介"), "synopsis", filmSynopsis(f) || "", 'maxlength="6000"')}<fieldset><legend>${tx("Genres", "影片类型")}</legend><div class="actions">${genres.map((g) => `<label><input type="checkbox" name="genre_ids" value="${esc(g.id)}" ${selected.includes(String(g.id)) ? "checked" : ""}> ${esc(genreName(g))}</label>`).join("")}</div></fieldset><label><input type="checkbox" name="archived" ${f.archived ? "checked" : ""}> ${tx("Archive (stop ticket sales and new screenings)", "归档（停止售票和新增排片）")}</label>${alertBox(tx("Changing the runtime affects future screenings only. Published screenings and issued tickets retain their original details.", "片长修改仅适用于新排场次。已发布的场次和已出票的订单保留原信息。"))}${formEnd(tx("Save film", "保存影片"))}</form>`,
     );
-    formAction(d.querySelector("form"), async (fd) => {
+    formAction(d.querySelector("form"), async (fd, form) => {
+      preserveUneditedText(fd, form, f, ["title", "synopsis"]);
       await request(
         id ? `/admin/films/${id}` : "/admin/films",
         id ? "PUT" : "POST",
@@ -902,9 +917,10 @@ export async function renderOperations(ctx) {
     const g = genres.find((g) => String(g.id) === String(id)) || {};
     const d = dialog(
       id ? tx("Edit genre", "编辑影片类型") : tx("Add genre", "添加影片类型"),
-      `<form class="stack">${input(tx("Genre name", "类型名称"), "name", g.name, "text", 'required maxlength="60"')}${formEnd(tx("Save genre", "保存类型"))}</form>`,
+      `<form class="stack">${input(tx("Genre name", "类型名称"), "name", genreName(g.name || ""), "text", 'required maxlength="60"')}${formEnd(tx("Save genre", "保存类型"))}</form>`,
     );
-    formAction(d.querySelector("form"), async (fd) => {
+    formAction(d.querySelector("form"), async (fd, form) => {
+      preserveUneditedText(fd, form, g, ["name"]);
       await request(
         id ? `/admin/genres/${id}` : "/admin/genres",
         id ? "PUT" : "POST",
@@ -934,11 +950,11 @@ export async function renderOperations(ctx) {
         const members = rosters.get(id);
         const isManager = person => String(person.id) === String(cinema.manager_user_id);
         members.sort((a, b) => Number(isManager(b)) - Number(isManager(a))
-          || collator.compare(a.display_name, b.display_name) || collator.compare(a.email_normalized, b.email_normalized));
+          || collator.compare(staffName(a), staffName(b)) || collator.compare(a.email_normalized, b.email_normalized));
         const roster = members.length ? table(
           [tx("Name / email", "姓名 / 邮箱"), tx("Role", "职务"), tx("Actions", "操作")],
           members.map(person => [
-            `<strong>${esc(person.display_name)}</strong><div class="muted">${esc(person.email_normalized)}</div>`,
+            `<strong>${esc(staffName(person))}</strong><div class="muted">${esc(person.email_normalized)}</div>`,
             isManager(person) ? `<span class="badge">${tx("Manager", "经理")}</span>` : tx("Staff", "员工"),
             button(tx("Transfer", "调店"), "transfer", person.id),
           ]),
@@ -992,14 +1008,14 @@ export async function renderOperations(ctx) {
         String(e.id) !== String(id),
     );
     const d = dialog(
-      tx(`Transfer staff · ${s.display_name}`, `员工调店 · ${s.display_name}`),
+      `${tx("Transfer staff", "员工调店")} · ${staffName(s)}`,
       `<form class="stack"><p>${tx("Current cinema:", "当前影院：")} ${esc(venueName(old?.name) || "")}</p>${select(
         tx("Destination cinema", "调入影院"),
         "cinema_id",
         targets.map((c) => [c.id, venueName(c.name)]),
         "",
         "required",
-      )}${isManager ? select(tx("Replacement manager at original cinema", "原门店接任经理"), "replacement_manager_id", [["", tx("Choose a replacement", "选择接任者")], ...replacements.map((e) => [e.id, e.display_name])], "", "required") : ""}${isManager ? alertBox(tx("This employee is the current manager. Choose another employee from the original cinema to take over.", "该员工是现任经理，请从原门店选择另一位员工接任。")) : ""}${formEnd(tx("Confirm transfer", "确认调店"))}</form>`,
+      )}${isManager ? select(tx("Replacement manager at original cinema", "原门店接任经理"), "replacement_manager_id", [["", tx("Choose a replacement", "选择接任者")], ...replacements.map((e) => [e.id, staffName(e)])], "", "required") : ""}${isManager ? alertBox(tx("This employee is the current manager. Choose another employee from the original cinema to take over.", "该员工是现任经理，请从原门店选择另一位员工接任。")) : ""}${formEnd(tx("Confirm transfer", "确认调店"))}</form>`,
     );
     formAction(d.querySelector("form"), async (fd) => {
       await request(`/admin/staff/${id}/cinema`, "PUT", Object.fromEntries(fd));
@@ -1017,7 +1033,7 @@ export async function renderOperations(ctx) {
         const thread = post.kind === "thread";
         return [
           `<strong>${esc(filmTitle(post.film_title))}</strong><div>${esc(post.thread_title)}</div>`,
-          `${esc(post.display_name)}<div class="muted">${dateTime(post.created_at)}</div>`,
+          `${esc(accountName(post.display_name, post))}<div class="muted">${dateTime(post.created_at)}</div>`,
           `<details><summary>${thread ? tx("Read discussion", "查看讨论") : tx("Read reply", "查看回复")}</summary><p class="community-text">${esc(post.body)}</p></details>`,
           button(thread ? tx("Remove discussion", "删除讨论") : tx("Remove reply", "删除回复"),
             thread ? "remove-thread" : "remove-reply", post.id, "ghost danger"),
