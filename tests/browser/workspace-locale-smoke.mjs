@@ -13,8 +13,8 @@ const film = { id: "2", title: "Interstellar", synopsis: "", genres: [genre], du
   review_count: 1, thread_count: 1, rating: { average: 8, count: 1 } };
 const cinema = { id: "3", name: "万达影城(CBD万达广场店)", address: "北京市朝阳区建国路93号万达广场B座3楼",
   brand: "万达影城", district_id: "4", district_name: "Chaoyang", is_active: true, manager_user_id: "7" };
-const otherCinema = { ...cinema, id: "12", name: "北苑店", manager_user_id: null };
-const emptyCinema = { ...otherCinema, id: "13", name: "西山店" };
+const otherCinema = { ...cinema, id: "12", name: "中华电影院", manager_user_id: "21" };
+const emptyCinema = { ...otherCinema, id: "13", name: "西山店", manager_user_id: null };
 const screen = { id: "5", name: "Screen 1", screen_type: "STANDARD", layouts: [{ id: "6", version_no: 1, row_count: 10 }] };
 const employee = { id: "7", display_name: "小李", role: "STAFF", staff_cinema_id: cinema.id, is_manager: true };
 let user = employee;
@@ -30,9 +30,10 @@ const fixtures = {
   "/counter/screenings": [{ id: "8", film_title: film.title, screen_name: screen.name, starts_at: "2099-01-01T12:00:00Z" }],
   "/auth/csrf": { csrf_token: "test" },
   "/admin/cinemas": [cinema, otherCinema, emptyCinema],
+  "/admin/cinemas/3": cinema,
   "/admin/staff": [
     { id: "20", display_name: "Anna", email_normalized: "anna@example.test", staff_cinema_id: cinema.id },
-    { id: "21", display_name: "小李", email_normalized: "li@example.test", staff_cinema_id: otherCinema.id },
+    { id: "21", display_name: "中华电影院 演示店长", email_normalized: "manager.zhonghua@cinema.test", staff_cinema_id: otherCinema.id },
     employee,
   ],
   "/admin/films": list([film]),
@@ -67,6 +68,12 @@ async function openAs(person, path) {
   user = person;
   await page.goto("about:blank");
   await page.goto(base + "/#" + path);
+}
+async function checkHeaderName(pattern) {
+  const label = page.locator("#site-header .user-label");
+  const name = await label.innerText();
+  assert.match(name, pattern);
+  assert.equal(await label.getAttribute("title"), name);
 }
 try {
   await page.goto(base + "/#/operations");
@@ -104,7 +111,7 @@ try {
   await text(main, "Net settlement");
   assert.equal(requests.length, reportCount);
 
-  const admin = { id: "10", display_name: "Admin", role: "PLATFORM_ADMIN", staff_cinema_id: null, is_manager: false };
+  const admin = { id: "10", display_name: "Platform Admin", email_normalized: "admin@cinema.test", role: "PLATFORM_ADMIN", staff_cinema_id: null, is_manager: false };
   await openAs(admin, "/discover");
   await text(main, "Wanda Cinema (CBD Wanda Plaza)");
   assert.match(page.url(), /#\/operations\?tab=cinemas$/);
@@ -112,7 +119,25 @@ try {
     ["cinemas", "films", "staff", "turnover", "community"]);
   assert.deepEqual(await page.locator(".wordmark").evaluateAll(links => links.map(a => a.hash)), ["#/operations", "#/operations"]);
   await page.getByRole("link", { name: "Platform console", exact: true }).waitFor();
+  await checkHeaderName(/^Platform Admin$/);
+  const managerLabel = await main.locator("tbody tr").filter({ hasText: "Zhonghua Cinema" }).locator("td").nth(3).innerText();
+  assert.match(managerLabel, /Zhonghua Cinema/);
+  assert.match(managerLabel, /manager/i);
+  assert.doesNotMatch(managerLabel, /\p{Script=Han}/u);
+  await main.locator('[data-act="edit-cinema"][data-id="3"]').click();
+  assert.equal(await dialog.getByLabel("Cinema name").inputValue(), "Wanda Cinema (CBD Wanda Plaza)");
+  await dialog.getByLabel("Street address").fill("New branch address");
+  const [savedCinema] = await Promise.all([
+    page.waitForRequest(req => req.method() === "PUT" && new URL(req.url()).pathname === "/api/admin/cinemas/3"),
+    dialog.getByRole("button", { name: "Save cinema" }).click(),
+  ]);
+  assert.equal(savedCinema.postDataJSON().name, cinema.name);
+  assert.equal(savedCinema.postDataJSON().brand, cinema.brand);
+  assert.equal(savedCinema.postDataJSON().address, "New branch address");
+  await dialog.waitFor({ state: "detached" });
   await lang("zh");
+  await checkHeaderName(/^平台管理员$/);
+  await text(main, "中华电影院 演示店长");
   await page.getByRole("link", { name: "平台控制台", exact: true }).waitFor();
   await text(main, "平台管理");
   await text(main, "朝阳区");
@@ -168,10 +193,12 @@ try {
   assert.equal(await main.locator('[data-tab="films"]').getAttribute("aria-pressed"), "true");
 
   await openAs({ ...employee, role: "CUSTOMER" }, "/reviews");
+  await checkHeaderName(/^小李$/);
   await text(main, "值得一聊的电影");
   const search = main.locator('[name="q"]');
   await search.fill("星际");
   await lang("en");
+  await checkHeaderName(/^小李$/);
   assert.equal(await search.inputValue(), "星际");
   await text(main, "Interstellar");
   await main.locator(".review-film-card").click();
@@ -195,6 +222,21 @@ try {
   await lang("zh");
   await text(main, cinema.name);
   await text(main.locator(".cinema-cover-label"), "朝阳区");
+  for (const [role, displayName, email, isManager] of [
+    ["STAFF", "Chaoyang Manager", "manager1@cinema.test", true],
+    ["STAFF", "Chaoyang Staff", "staff1@cinema.test", false],
+    ["CUSTOMER", "Demo Customer", "customer@cinema.test", false],
+  ]) {
+    await openAs({ ...employee, role, display_name: displayName, email_normalized: email, is_manager: isManager },
+      role === "STAFF" ? "/operations" : "/reviews");
+    await checkHeaderName(/^\p{Script=Han}+$/u);
+    await lang("en");
+    assert.equal(await page.locator("#site-header .user-label").innerText(), displayName);
+    await lang("zh");
+    await checkHeaderName(/^\p{Script=Han}+$/u);
+  }
+  await openAs({ id: "25", role: "CUSTOMER", email_normalized: "viewer@example.test", display_name: "Platform Admin" }, "/reviews");
+  await checkHeaderName(/^Platform Admin$/);
   assert.deepEqual(errors, []);
   console.log("PASS staff and admin tabs, dialogs, report, community views and drafts in both languages");
 } finally {
