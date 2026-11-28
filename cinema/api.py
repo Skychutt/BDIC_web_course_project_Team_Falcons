@@ -185,7 +185,10 @@ def seatmap(sid):
             result["source_booking_status"] = source["status"]
         if size is not None:
             result["adjacent_seat_ids"] = (
-                catalog.next_adjacent_seat_ids(result["seats"], size, selected_ids, zone)
+                catalog.next_adjacent_seat_ids(
+                    result["seats"], size, selected_ids, zone,
+                    restart=request.args.get("restart") == "1",
+                )
                 if result["saleable"] else []
             )
         return output(result)

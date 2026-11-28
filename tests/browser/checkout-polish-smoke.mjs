@@ -121,6 +121,62 @@ async function checkQuoteReplacedInAnotherTab() {
   }
 }
 
+async function checkLatePaymentResponse() {
+  const customer = await browser.newContext({ storageState: await context.storageState() });
+  const tab = await customer.newPage();
+  const show = fixture.ids.screenings[1];
+  const csrf = (await api(customer, "/auth/csrf")).csrf_token;
+  const wallet = async () => (await api(customer, "/me/wallet")).balance_minor;
+  try {
+    for (const rejectOldQuote of [false, true]) {
+      const map = await api(customer, `/screenings/${show}/seats`);
+      const [original, next] = map.seats.filter(s => s.state === "AVAILABLE");
+      const balance = await wallet();
+      await tab.goto(`${base}/#/seats/${show}?seat_ids=${original.id}`);
+      await tab.locator("#create-hold").click();
+      await tab.locator("#quote-form [type=submit]").click();
+      await tab.locator("#pay-now").waitFor();
+      const hold = new URLSearchParams(tab.url().split("?")[1]).get("hold_id");
+      // Hold the real response until the customer has opened a second checkout.
+      let deliver, reportStatus;
+      const gate = new Promise(resolve => { deliver = resolve; });
+      const processed = new Promise(resolve => { reportStatus = resolve; });
+      await tab.route("**/api/bookings", async route => {
+        if (rejectOldQuote) {
+          await api(customer, `/holds/${hold}/quote`, "POST", {
+            tickets: [{ seat_id: original.id, fare_type: "STUDENT" }],
+          }, csrf);
+        }
+        const response = await route.fetch();
+        reportStatus(response.status());
+        await gate;
+        await route.fulfill({ response });
+      }, { times: 1 });
+      try {
+        await tab.locator("#pay-now").click();
+        assert.equal(await processed, rejectOldQuote ? 409 : 201);
+        await tab.goto(base + "/#/account?tab=holds");
+        const newer = await api(customer, "/holds", "POST", { screening_id: show, seat_ids: [next.id] }, csrf);
+        await tab.goto(`${base}/#/seats/${show}?hold_id=${newer.hold_id}`);
+        await tab.locator("[data-fare]").selectOption("STUDENT");
+        await tab.locator("#quote-form [type=submit]").click();
+        await tab.locator("#pay-now").waitFor();
+        deliver();
+        const pendingKey = `falcons.action.${fixture.ids.accounts["customer@cinema.test"]}.pay:${hold}`;
+        await tab.waitForFunction(key => sessionStorage.getItem(key) === null, pendingKey);
+        await tab.reload();
+        await tab.locator("#quote-form").waitFor();
+        assert.equal(await tab.locator("[data-fare]").inputValue(), "STUDENT");
+        assert.equal(await tab.locator("#pay-now").count(), 1);
+        const price = map.fares.find(f => f.fare_type === "STANDARD").price_minor;
+        assert.equal(await wallet(), balance - (rejectOldQuote ? 0 : price));
+        await api(customer, `/holds/${newer.hold_id}`, "DELETE", undefined, csrf);
+      } finally { deliver(); }
+    }
+    console.log("PASS late payment success and rejection preserve a newer checkout on the same screening");
+  } finally { await customer.close(); }
+}
+
 async function checkCheckoutDeadlines() {
   const manager = await browser.newContext();
   // Earlier expiry checks advance the main context's clock. Use real time for the fee change.
@@ -645,6 +701,7 @@ try {
   await checkCheckoutDeadlines();
   await checkFareMixAfterChangingSeats();
   await checkQuoteReplacedInAnotherTab();
+  await checkLatePaymentResponse();
 } finally {
   await browser.close();
 }

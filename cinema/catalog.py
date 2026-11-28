@@ -68,12 +68,25 @@ def contiguous_blocks(seats, size):
                 yield block
 
 
-def next_adjacent_seat_ids(seats, size, selected_ids, zone=None):
+def next_adjacent_seat_ids(seats, size, selected_ids, zone=None, *, restart=False):
     selectable = (seat for seat in seats if seat["state"] == "AVAILABLE" or seat["held_by_me"])
-    blocks = sorted(contiguous_blocks(selectable, size),
-                    key=lambda block: (block[0]["row_no"], block[0]["seat_no"]))
+    blocks = list(contiguous_blocks(selectable, size))
     if not blocks:
         return []
+
+    # Use the whole auditorium, including sold seats and the space taken by aisles.
+    xs = [seat.get("map_x", seat["seat_no"]) for seat in seats]
+    ys = [seat.get("map_y", seat["row_no"]) for seat in seats]
+    center_x = (min(xs) + max(xs)) / 2
+    center_y = (min(ys) + max(ys)) / 2
+
+    def center_rank(block):
+        x = sum(s.get("map_x", s["seat_no"]) for s in block) / size
+        y = sum(s.get("map_y", s["row_no"]) for s in block) / size
+        distance = (x - center_x) ** 2 + (y - center_y) ** 2
+        return distance, block[0]["row_no"], block[0]["seat_no"]
+
+    blocks.sort(key=center_rank)
     preferred, others = [], []
     for block in blocks:
         group = preferred if zone and block[0]["zone"] == zone else others
@@ -82,7 +95,7 @@ def next_adjacent_seat_ids(seats, size, selected_ids, zone=None):
     cycle = preferred or others
     for i, option in enumerate(options):
         if selected_ids == set(option):
-            if i >= len(cycle):
+            if i >= len(cycle) or (restart and i != 0):
                 return cycle[0]
             return cycle[(i + 1) % len(cycle)]
     # Keep surviving choices after a conflict. For equal overlap, the preferred zone wins.

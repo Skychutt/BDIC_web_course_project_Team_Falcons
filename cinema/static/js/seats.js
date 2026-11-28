@@ -303,6 +303,9 @@ export async function renderSeats(ctx, sid) {
         }),
       );
   }
+  function clearHoldDraft(holdId) {
+    if (readDraft(draftKey)?.hold_id === holdId) sessionStorage.removeItem(draftKey);
+  }
   function remaining() {
     if (!state.hold) return 0;
     const expires = state.hold.expires_at;
@@ -407,12 +410,16 @@ export async function renderSeats(ctx, sid) {
       .finally(() => { holdRefresh = null; });
     return holdRefresh;
   }
+  let lastSuggestedIds = [];
   async function recommendAdjacent() {
     if (state.phase !== "choose" || !onSale()) return;
     const hash = location.hash;
     const query = new URLSearchParams({ party_size: String(state.target) });
     const zone = searchFilters.zone;
     if (zone) query.set("zone", zone);
+    // Only cycle from a previous suggestion. Search may have preselected edge seats.
+    const repeat = lastSuggestedIds.length === state.target && lastSuggestedIds.every(id => state.selected.has(id));
+    if (!repeat) query.set("restart", "1");
     for (const id of state.selected) query.append("selected_id", id);
     try {
       const next = await readSeatMap("?" + query, { signal: AbortSignal.timeout(8000) });
@@ -422,6 +429,7 @@ export async function renderSeats(ctx, sid) {
       keepAvailableSelection();
       const ids = next.adjacent_seat_ids;
       if (ids.length === state.target) {
+        lastSuggestedIds = ids;
         const sameSeats = ids.every(id => state.selected.has(id));
         state.selected = new Set(ids);
         saveSelectionUrl();
@@ -674,7 +682,7 @@ export async function renderSeats(ctx, sid) {
         const fares = previous?.length ? previous.map(ticket => ticket.fare_type) : savedFareMix();
         if (fares.some(fare => fare !== searchFare)) next.set("fare_mix", fares.join(","));
       }
-      sessionStorage.removeItem(draftKey);
+      clearHoldDraft(state.hold.id);
       navigate("#/seats/" + sid + "?" + next);
     });
     tick();
@@ -850,7 +858,7 @@ export async function renderSeats(ctx, sid) {
         state.phase = "recover";
         return checkPaymentResult();
       }
-      if (readDraft(draftKey)?.hold_id === holdId) sessionStorage.removeItem(draftKey);
+      clearHoldDraft(holdId);
       if (!alive || location.hash !== expectedHash) return;
       if (!state.source) {
         const previous = tickets();
@@ -888,7 +896,7 @@ export async function renderSeats(ctx, sid) {
     state.quote = null;
     state.error = null;
     if (result.status === "CONFIRMED") {
-      if (readDraft(draftKey)?.hold_id === state.hold.id) sessionStorage.removeItem(draftKey);
+      clearHoldDraft(state.hold.id);
       state.selected = new Set(result.seat_ids);
       state.receipt = result.receipt;
       state.phase = "complete";
@@ -920,14 +928,18 @@ export async function renderSeats(ctx, sid) {
   async function pay() {
     if (changeClosed() || discardStaleQuote(map.screening.revision_no)) return render();
     if (!state.quote) return;
+    const holdId = state.hold.id;
+    const checkoutHash = location.hash;
     save();
     try {
       state.error = null;
-      state.receipt = await api.action("pay:" + state.hold.id, "/bookings", {
+      const receipt = await api.action("pay:" + holdId, "/bookings", {
         quote_token: state.quote.quote_token,
       }, { signal: AbortSignal.timeout(12000) });
+      clearHoldDraft(holdId);
+      if (!alive || location.hash !== checkoutHash) return;
+      state.receipt = receipt;
       state.phase = "complete";
-      sessionStorage.removeItem(draftKey);
       render();
       toast(
         state.source
@@ -935,6 +947,7 @@ export async function renderSeats(ctx, sid) {
           : tx("Your tickets are confirmed.", "出票成功。"),
       );
     } catch (e) {
+      if (!alive || location.hash !== checkoutHash) return;
       state.error = e;
       if (e.code === "SALE_CLOSED") map.saleable = false;
       if (api.pending("pay:" + state.hold.id)) {

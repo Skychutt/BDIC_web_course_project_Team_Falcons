@@ -67,4 +67,24 @@ def test_recommend_again_cycles_in_preferred_zone_and_preserves_surviving_choice
     seats[-1]["state"] = "HELD"
     assert recommend(31, 32) == [31, 32]
     seats[-2]["state"] = "SOLD"
-    assert recommend(31, 32) == [11, 12]
+    assert recommend(31, 32) == [21, 22]
+
+
+def test_first_recommendation_centres_the_group_on_the_full_seat_map():
+    layout = auditorium_layout("STANDARD")
+    seats = [dict(seat, id=i, state="AVAILABLE", held_by_me=False)
+             for i, seat in enumerate(layout["seats"], 1)]
+    by_id = {seat["id"]: seat for seat in seats}
+    pair = next_adjacent_seat_ids(seats, 2, set())
+    assert [(by_id[i]["map_x"], by_id[i]["map_y"]) for i in pair] == [(10, 5), (11, 5)]
+
+    edge = {s["id"] for s in seats if s["row_no"] == 1 and s["seat_no"] <= 2}
+    assert next_adjacent_seat_ids(seats, 2, edge, restart=True) == pair
+
+    # Selling an entire half of the hall must not move the centre of the screen.
+    for seat in seats:
+        if seat["map_x"] < 10:
+            seat["state"] = "SOLD"
+    assert next_adjacent_seat_ids(seats[::-1], 2, set()) == pair
+    other = next_adjacent_seat_ids(seats, 2, set(pair))
+    assert other != pair and len(other) == 2
